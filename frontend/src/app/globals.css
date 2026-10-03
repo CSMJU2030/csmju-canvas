@@ -111,6 +111,9 @@
   --csmju-heading-to: rgb(125 42 232);
   --csmju-logo-from: rgb(0 196 204);
   --csmju-logo-to: rgb(125 42 232);
+  --csmju-search-bg: var(--csmju-color-surface);
+  --csmju-search-border: rgb(221 214 254);
+  --csmju-search-glow: rgba(167, 139, 250, 0.28);
   --csmju-sidebar-from: var(--csmju-color-canvas);
   --csmju-sidebar-to: var(--csmju-color-canvas);
 }
@@ -125,6 +128,9 @@
   --csmju-heading-to: rgb(98 132 255);
   --csmju-logo-from: rgb(255 255 255);
   --csmju-logo-to: rgb(255 255 255);
+  --csmju-search-bg: rgb(22 23 27);
+  --csmju-search-border: rgb(92 62 160);
+  --csmju-search-glow: rgba(124, 58, 237, 0.5);
   --csmju-sidebar-from: rgb(38 24 58);
   --csmju-sidebar-to: rgb(22 16 34);
 
@@ -178,6 +184,9 @@
     --csmju-heading-to: rgb(98 132 255);
     --csmju-logo-from: rgb(255 255 255);
   --csmju-logo-to: rgb(255 255 255);
+  --csmju-search-bg: rgb(22 23 27);
+  --csmju-search-border: rgb(92 62 160);
+  --csmju-search-glow: rgba(124, 58, 237, 0.5);
   --csmju-sidebar-from: rgb(38 24 58);
     --csmju-sidebar-to: rgb(22 16 34);
 
@@ -475,4 +484,47 @@
   .csmju-fade-in {
     animation: none;
   }
+}
+
+/* ช่องค้นหาแบบแสงเรืองม่วง (ภาพบรีฟ "อยากได้แบบนี้" ทั้งธีมสว่างและมืด) */
+@utility csmju-search {
+  background-color: var(--csmju-search-bg);
+  border: 1px solid var(--csmju-search-border);
+  box-shadow: 0 6px 28px var(--csmju-search-glow);
+  transition: box-shadow var(--csmju-duration-base) var(--csmju-ease-standard), border-color var(--csmju-duration-base);
+}
+.csmju-search:focus-within,
+.csmju-search.is-focused {
+  border-color: var(--csmju-color-primary);
+  box-shadow: 0 0 0 3px var(--csmju-search-glow), 0 8px 32px var(--csmju-search-glow);
+}
+
+/* ไอคอนกระดิกเบา ๆ ตอนชี้เมาส์ (แบบไอคอนของ Canva) — ใส่ csmju-wiggle ที่ไอคอนในกลุ่ม .group */
+@keyframes csmju-wiggle {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  25% {
+    transform: rotate(-10deg) scale(1.06);
+  }
+  50% {
+    transform: rotate(8deg) scale(1.06);
+  }
+  75% {
+    transform: rotate(-4deg);
+  }
+}
+.group:hover .csmju-wiggle,
+.group:focus-visible .csmju-wiggle {
+  animation: csmju-wiggle 480ms var(--csmju-ease-standard);
+}
+@media (prefers-reduced-motion: reduce) {
+  .group:hover .csmju-wiggle,
+  .group:focus-visible .csmju-wiggle {
+    animation: none;
+  }
+}
+:root[data-motion="reduce"] .csmju-wiggle {
+  animation: none !important;
 }

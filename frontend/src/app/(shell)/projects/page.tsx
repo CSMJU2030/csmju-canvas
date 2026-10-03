@@ -90,7 +90,7 @@ function Projects() {
         {view !== 'uploads' && (
           <>
             <form role="search" onSubmit={(e) => e.preventDefault()} className="mx-auto mt-6 max-w-2xl">
-              <div className="relative rounded-2xl bg-surface shadow-csmju-md focus-within:ring-2 focus-within:ring-primary">
+              <div className="csmju-search relative rounded-2xl">
                 <Search aria-hidden className="pointer-events-none absolute top-1/2 left-5 size-5 -translate-y-1/2 text-ink" />
                 <label htmlFor="proj-q" className="sr-only">ค้นหาดีไซน์และโฟลเดอร์</label>
                 <input

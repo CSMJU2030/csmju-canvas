@@ -58,7 +58,7 @@ export function HomeView({ tab }: { tab: 'home' | 'templates' }) {
         </div>
 
         <form className="mx-auto mt-5 max-w-3xl" role="search" onSubmit={(event) => event.preventDefault()}>
-          <div className={cx('relative rounded-2xl bg-surface shadow-csmju-md transition-shadow', focused && 'ring-2 ring-primary')}>
+          <div className={cx('csmju-search relative rounded-2xl', focused && 'is-focused')}>
             <Search aria-hidden className="pointer-events-none absolute top-1/2 left-5 size-5 -translate-y-1/2 text-ink" />
             <label htmlFor="home-search" className="sr-only">{tab === 'templates' ? 'ค้นหาเทมเพลต' : 'ค้นหาอะไรก็ได้'}</label>
             <input
@@ -146,7 +146,7 @@ function TypeShortcuts() {
       {shortcuts.map((s, index) => (
         <li key={s.label} className={cx('shrink-0', index === 0 && 'mr-3 border-r border-line pr-3')}>
           <button type="button" onClick={s.onClick} className="group flex w-20 flex-col items-center gap-2 rounded-xl p-1 text-csmju-caption text-ink">
-            <span className={cx('flex size-12 items-center justify-center rounded-full text-on-inverse shadow-csmju-sm transition-transform group-hover:-translate-y-0.5 group-hover:shadow-csmju-md', s.tone)}>
+            <span className={cx('csmju-wiggle flex size-12 items-center justify-center rounded-full text-on-inverse shadow-csmju-sm transition-shadow group-hover:shadow-csmju-md', s.tone)}>
               {s.icon}
             </span>
             <span className="text-center leading-tight">{s.label}</span>

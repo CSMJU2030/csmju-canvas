@@ -105,8 +105,10 @@ function Rail({ open, onToggleSecondary }: { open: boolean; onToggleSecondary: (
   const pathname = usePathname();
   const openCreate = useOpenCreate();
 
+  // z-40: ป๊อปโอเวอร์บัญชี/แจ้งเตือนลอยออกจากแถบนี้ ต้องอยู่เหนือแถบรองและแผ่นเนื้อหา
+  // ไม่งั้นมองเห็นแต่กดไม่ได้ (แถบรองกับ <main> อยู่ทีหลังใน DOM จึงทับอยู่)
   return (
-    <nav aria-label="เมนูหลัก" className="sticky top-0 hidden h-dvh w-20 shrink-0 flex-col items-center gap-1 py-3 md:flex">
+    <nav aria-label="เมนูหลัก" className="sticky top-0 z-40 hidden h-dvh w-20 shrink-0 flex-col items-center gap-1 py-3 md:flex">
       {/* ปุ่มเปิด/ปิดแถบรอง + tooltip สีเข้มใต้ปุ่มแบบ Canva ("ปิดเมนู" / "เปิดเมนู") */}
       <div className="group relative mb-2">
         <button
@@ -129,8 +131,8 @@ function Rail({ open, onToggleSecondary }: { open: boolean; onToggleSecondary: (
         </span>
       </div>
       <button type="button" onClick={() => openCreate()} className="group mb-3 flex w-16 flex-col items-center gap-1 text-csmju-caption text-ink">
-        <span className="flex size-10 items-center justify-center rounded-full bg-primary text-on-inverse shadow-csmju-md transition-transform group-hover:scale-105">
-          <Plus aria-hidden className="size-6" strokeWidth={2.5} />
+        <span className="flex size-10 items-center justify-center rounded-full bg-primary text-on-inverse shadow-csmju-md ">
+          <Plus aria-hidden className="csmju-wiggle size-6" strokeWidth={2.5} />
         </span>
         สร้าง
       </button>
@@ -146,7 +148,7 @@ function Rail({ open, onToggleSecondary }: { open: boolean; onToggleSecondary: (
                 active ? 'bg-surface text-primary shadow-csmju-sm' : 'text-body group-hover:bg-surface/70',
               )}
             >
-              <item.icon aria-hidden className="size-5" fill={active ? 'currentColor' : 'none'} fillOpacity={active ? 0.15 : 0} />
+              <item.icon aria-hidden className="csmju-wiggle size-5" fill={active ? 'currentColor' : 'none'} fillOpacity={active ? 0.15 : 0} />
             </span>
             <span className={cx(active && 'font-semibold text-primary')}>{item.label}</span>
           </Link>

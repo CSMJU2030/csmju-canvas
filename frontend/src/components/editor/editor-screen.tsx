@@ -113,7 +113,7 @@ function EditorLayout({ needsThumbnail }: { needsThumbnail: boolean }) {
                   panel === p.key ? 'bg-primary-soft text-primary' : 'text-body group-hover:bg-surface-muted',
                 )}
               >
-                <p.icon aria-hidden className="size-6" />
+                <p.icon aria-hidden className="csmju-wiggle size-6" />
               </span>
               <span className={cx(panel === p.key && 'font-semibold text-primary')}>{p.label}</span>
             </button>
