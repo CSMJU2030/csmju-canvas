@@ -9,7 +9,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useState, type ReactNode } from 'react';
 import { Pager } from '@/components/csmju/list-controls';
-import { EmptyState, ErrorState, Menu, Spinner, cx, errorMessage, useToast } from '@/components/csmju/primitives';
+import { CardGridSkeleton, EmptyState, ErrorState, Menu, Spinner, cx, errorMessage, useToast } from '@/components/csmju/primitives';
 import { DesignCard, Thumbnail } from '@/components/designs/cards';
 import { Carousel } from '@/components/designs/carousel';
 import { DesignMenu, RenameDialog } from '@/components/designs/design-menu';
@@ -391,7 +391,7 @@ function DesignsList({
       ),
   });
 
-  if (designs.isLoading) return <Spinner />;
+  if (designs.isLoading) return <CardGridSkeleton />;
   if (designs.isError) return <ErrorState message={errorMessage(designs.error)} onRetry={() => void designs.refetch()} />;
   if (designs.data!.items.length === 0) {
     const searching = Boolean(q || designType || designTypes || editedWithin);

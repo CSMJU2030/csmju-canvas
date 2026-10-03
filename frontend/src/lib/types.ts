@@ -11,6 +11,9 @@ export interface DesignSummary {
   folderId: string | null;
   sourceTemplateId: string | null;
   trashedAt: string | null;
+  tags: string[];
+  linkAccess: 'NONE' | 'VIEW' | 'EDIT';
+  access: 'OWNER' | 'EDIT' | 'VIEW';
   createdAt: string;
   updatedAt: string;
 }
@@ -73,6 +76,7 @@ export interface Preference {
   largeText: boolean;
   notifyTemplateUsed: boolean;
   notifyTrash: boolean;
+  theme: 'LIGHT' | 'DARK' | 'SYSTEM';
   updatedAt: string;
 }
 

@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '../../generated/prisma/client.js';
 import { Paginated } from '../../common/http/envelope.js';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
@@ -29,6 +29,9 @@ const SUMMARY_SELECT = {
   thumbnail: true,
   folderId: true,
   sourceTemplateId: true,
+  tags: true,
+  linkAccess: true,
+  coreUserId: true,
   trashedAt: true,
   createdAt: true,
   updatedAt: true,
@@ -79,15 +82,17 @@ export class DesignsService {
       this.prisma.design.count({ where }),
     ]);
 
-    return new Paginated(rows.map(toSummary), query.meta(total));
+    return new Paginated(rows.map((row) => toSummary(row, coreUserId)), query.meta(total));
   }
 
+  /// เจ้าของเห็นเสมอ · คนอื่นเห็นได้เมื่อเจ้าของเปิดแชร์ด้วยลิงก์และงานไม่อยู่ในถังขยะ
+  /// (ไม่มีสิทธิ์ = 404 ไม่ใช่ 403 เพื่อไม่บอกว่ามีงาน id นี้อยู่)
   async get(coreUserId: string, id: string) {
-    const row = await this.prisma.design.findFirst({ where: { id, coreUserId } });
+    const row = await this.prisma.design.findUnique({ where: { id } });
 
-    if (!row) throw new NotFoundException('ไม่พบงานนี้ อาจถูกลบไปแล้ว');
+    if (!row || accessOf(row, coreUserId) === null) throw new NotFoundException('ไม่พบงานนี้ อาจถูกลบไปแล้ว');
 
-    return { ...toSummary(row), document: row.document as Record<string, unknown> };
+    return { ...toSummary(row, coreUserId), document: row.document as Record<string, unknown> };
   }
 
   async create(coreUserId: string, dto: CreateDesignDto) {
@@ -110,7 +115,7 @@ export class DesignsService {
         },
       });
 
-      return { ...toSummary(row), document: row.document as Record<string, unknown> };
+      return { ...toSummary(row, coreUserId), document: row.document as Record<string, unknown> };
     }
 
     const document = dto.document ?? emptyDocument();
@@ -129,7 +134,7 @@ export class DesignsService {
       },
     });
 
-    return { ...toSummary(row), document: row.document as Record<string, unknown> };
+    return { ...toSummary(row, coreUserId), document: row.document as Record<string, unknown> };
   }
 
   private async createFromTemplate(coreUserId: string, dto: CreateDesignDto) {
@@ -168,13 +173,25 @@ export class DesignsService {
         .catch(() => undefined);
     }
 
-    return { ...toSummary(row), document: row.document as Record<string, unknown> };
+    return { ...toSummary(row, coreUserId), document: row.document as Record<string, unknown> };
   }
 
   async update(coreUserId: string, id: string, dto: UpdateDesignDto) {
-    const existing = await this.prisma.design.findFirst({ where: { id, coreUserId } });
+    const existing = await this.prisma.design.findUnique({ where: { id } });
+    const access = existing ? accessOf(existing, coreUserId) : null;
 
-    if (!existing) throw new NotFoundException('ไม่พบงานนี้ อาจถูกลบไปแล้ว');
+    if (!existing || access === null) throw new NotFoundException('ไม่พบงานนี้ อาจถูกลบไปแล้ว');
+
+    if (access === 'VIEW') throw new ForbiddenException('ลิงก์นี้ให้สิทธิ์ดูอย่างเดียว');
+
+    // คนที่ได้ลิงก์แบบแก้ไขได้ แก้ได้เฉพาะเนื้องาน — ชื่อ โฟลเดอร์ ถังขยะ แท็ก และการแชร์เป็นของเจ้าของ
+    if (access === 'EDIT') {
+      const ownerOnly = ['title', 'folderId', 'trashed', 'tags', 'linkAccess'] as const;
+
+      if (ownerOnly.some((key) => dto[key] !== undefined)) {
+        throw new ForbiddenException('เฉพาะเจ้าของงานเท่านั้นที่เปลี่ยนชื่อ ย้ายโฟลเดอร์ ลบ ตั้งแท็ก หรือเปลี่ยนการแชร์ได้');
+      }
+    }
 
     if (dto.document) assertDocument(dto.document);
     if (dto.folderId) await this.assertFolder(coreUserId, dto.folderId);
@@ -188,6 +205,8 @@ export class DesignsService {
         ...(dto.height !== undefined ? { height: dto.height } : {}),
         ...(dto.thumbnail !== undefined ? { thumbnail: dto.thumbnail } : {}),
         ...(dto.folderId !== undefined ? { folderId: dto.folderId } : {}),
+        ...(dto.tags !== undefined ? { tags: [...new Set(dto.tags.map((tag) => tag.trim()).filter(Boolean))] } : {}),
+        ...(dto.linkAccess !== undefined ? { linkAccess: dto.linkAccess } : {}),
         ...(dto.trashed !== undefined
           ? { trashedAt: dto.trashed ? (existing.trashedAt ?? new Date()) : null }
           : {}),
@@ -205,7 +224,7 @@ export class DesignsService {
         .catch(() => undefined);
     }
 
-    return { ...toSummary(row), document: row.document as Record<string, unknown> };
+    return { ...toSummary(row, coreUserId), document: row.document as Record<string, unknown> };
   }
 
   async remove(coreUserId: string, id: string) {
@@ -253,7 +272,18 @@ export class DesignsService {
   }
 }
 
-export function toSummary(row: SummaryRow) {
+/// สิทธิ์ของผู้เรียกต่องาน: OWNER · EDIT/VIEW (ผ่านลิงก์) · null = ไม่มีสิทธิ์
+export function accessOf(
+  row: { coreUserId: string; linkAccess: string; trashedAt: Date | null },
+  coreUserId: string,
+): 'OWNER' | 'EDIT' | 'VIEW' | null {
+  if (row.coreUserId === coreUserId) return 'OWNER';
+  if (row.trashedAt || row.linkAccess === 'NONE') return null;
+
+  return row.linkAccess === 'EDIT' ? 'EDIT' : 'VIEW';
+}
+
+export function toSummary(row: SummaryRow, coreUserId: string) {
   return {
     id: row.id,
     title: row.title,
@@ -263,6 +293,9 @@ export function toSummary(row: SummaryRow) {
     thumbnail: row.thumbnail,
     folderId: row.folderId,
     sourceTemplateId: row.sourceTemplateId,
+    tags: row.tags,
+    linkAccess: row.linkAccess,
+    access: accessOf(row, coreUserId) ?? 'VIEW',
     trashedAt: row.trashedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),

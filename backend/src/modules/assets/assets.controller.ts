@@ -52,7 +52,7 @@ export class AssetsController {
 
   @Get(':id/content')
   @ApiProduces('image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/svg+xml')
-  @ApiOperation({ summary: 'ไฟล์รูป (เฉพาะเจ้าของ · ไม่ห่อ envelope เพราะเป็นไบต์)' })
+  @ApiOperation({ summary: 'ไฟล์รูป (เจ้าของ หรือผู้ได้ลิงก์ของงานที่ใช้รูปนี้ · ไม่ห่อ envelope เพราะเป็นไบต์)' })
   async content(
     @CurrentUser() user: CoreHubUser,
     @Param('id', UUID) id: string,
@@ -69,14 +69,14 @@ export class AssetsController {
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: 'ย้ายรูปลงถังขยะ / กู้คืน' })
+  @ApiOperation({ summary: 'เปลี่ยนชื่อไฟล์ · ย้ายรูปลงถังขยะ / กู้คืน' })
   @ApiEnvelope(AssetDto)
   update(
     @CurrentUser() user: CoreHubUser,
     @Param('id', UUID) id: string,
     @Body() dto: UpdateAssetDto,
   ) {
-    return this.assets.setTrashed(user.coreUserId, id, dto.trashed);
+    return this.assets.update(user.coreUserId, id, dto);
   }
 
   @Delete(':id')

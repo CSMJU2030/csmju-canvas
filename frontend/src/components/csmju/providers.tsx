@@ -45,7 +45,21 @@ function AccessibilityPreferences() {
     root.dataset.contrast = data.highContrast ? 'high' : 'normal';
     root.dataset.text = data.largeText ? 'large' : 'normal';
     root.dataset.motion = data.reduceMotion ? 'reduce' : 'normal';
+    applyTheme(data.theme);
   }, [data]);
 
   return null;
+}
+
+/// ใช้ธีมกับทั้งหน้า และจำสำเนาไว้ให้สคริปต์ใน layout ตั้งได้ก่อนวาดเฟรมแรกครั้งหน้า
+export function applyTheme(theme: Preference['theme']) {
+  const value = theme === 'LIGHT' ? 'light' : theme === 'DARK' ? 'dark' : 'system';
+
+  document.documentElement.dataset.theme = value;
+
+  try {
+    window.localStorage.setItem('csmju-canvas:theme', value);
+  } catch {
+    // โหมดส่วนตัวบล็อก storage — ครั้งหน้าจะแวบเป็นธีมตามระบบก่อนแล้วค่อยเปลี่ยน
+  }
 }

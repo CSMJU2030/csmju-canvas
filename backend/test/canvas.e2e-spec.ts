@@ -46,6 +46,7 @@ describe('CS Canvas API (e2e)', () => {
     await prisma.folder.deleteMany({ where: { coreUserId: owners } });
     await prisma.notification.deleteMany({ where: { coreUserId: owners } });
     await prisma.preference.deleteMany({ where: { coreUserId: owners } });
+    await prisma.feedback.deleteMany({ where: { coreUserId: owners } });
     await app.close();
   });
 
@@ -199,5 +200,65 @@ describe('CS Canvas API (e2e)', () => {
     const res = await http().get('/api/v1/preferences').set('Authorization', bearer(student, 'student')).expect(200);
 
     expect(res.body.data.largeText).toBe(true);
+  });
+
+  it('แชร์ด้วยลิงก์: ดูอย่างเดียวแก้ไม่ได้ · แก้ไขได้แก้เนื้องานได้แต่เปลี่ยนชื่อไม่ได้ · รูปในงานเปิดได้', async () => {
+    const uploaded = await http().post('/api/v1/assets').set('Authorization', bearer(student, 'student')).attach('file', PNG, 'share.png').expect(201);
+    const assetId = uploaded.body.data.id as string;
+    const withImage = {
+      version: 1,
+      pages: [{ id: 'p1', background: null, elements: [{ id: 'i', type: 'image', assetId, src: `/api/v1/assets/${assetId}/content`, x: 0, y: 0, width: 10, height: 10 }] }],
+    };
+    const created = await http()
+      .post('/api/v1/designs')
+      .set('Authorization', bearer(student, 'student'))
+      .send({ title: 'แชร์', designType: 'poster', width: 100, height: 100, document: withImage })
+      .expect(201);
+    const id = created.body.data.id as string;
+
+    // ยังไม่แชร์ = คนอื่นไม่เห็นทั้งงานและรูป
+    await http().get(`/api/v1/designs/${id}`).set('Authorization', bearer(other, 'student')).expect(404);
+    await http().get(`/api/v1/assets/${assetId}/content`).set('Authorization', bearer(other, 'student')).expect(404);
+
+    await http().patch(`/api/v1/designs/${id}`).set('Authorization', bearer(student, 'student')).send({ linkAccess: 'VIEW', tags: ['งานกลุ่ม', ' งานกลุ่ม '] }).expect(200);
+
+    const viewed = await http().get(`/api/v1/designs/${id}`).set('Authorization', bearer(other, 'student')).expect(200);
+
+    expect(viewed.body.data.access).toBe('VIEW');
+    expect(viewed.body.data.tags).toEqual(['งานกลุ่ม']);
+    await http().get(`/api/v1/assets/${assetId}/content`).set('Authorization', bearer(other, 'student')).expect(200);
+    await http().patch(`/api/v1/designs/${id}`).set('Authorization', bearer(other, 'student')).send({ document: doc }).expect(403);
+
+    await http().patch(`/api/v1/designs/${id}`).set('Authorization', bearer(student, 'student')).send({ linkAccess: 'EDIT' }).expect(200);
+    await http().patch(`/api/v1/designs/${id}`).set('Authorization', bearer(other, 'student')).send({ document: withImage }).expect(200);
+    await http().patch(`/api/v1/designs/${id}`).set('Authorization', bearer(other, 'student')).send({ title: 'ยึดงาน' }).expect(403);
+
+    // งานที่แชร์ไม่ขึ้นในรายการของคนอื่น
+    const list = await http().get('/api/v1/designs').set('Authorization', bearer(other, 'student')).expect(200);
+
+    expect(list.body.data.map((d: { id: string }) => d.id)).not.toContain(id);
+  });
+
+  it('ส่งฟีดแบ็กได้ทุกคน · อ่านรายการได้เฉพาะผู้ดูแล', async () => {
+    await http().post('/api/v1/feedbacks').set('Authorization', bearer(student, 'student')).send({ kind: 'SUGGESTION', message: 'อยากได้เทมเพลตเพิ่ม' }).expect(201);
+    await http().post('/api/v1/feedbacks').set('Authorization', bearer(student, 'student')).send({ kind: 'REPORT', message: 'ลิงก์ภายนอก', link: 'https://evil.example' }).expect(400);
+    await http().get('/api/v1/feedbacks').set('Authorization', bearer(student, 'student')).expect(403);
+    await http().get('/api/v1/feedbacks').set('Authorization', bearer(`e2e-${run}-admin`, 'admin')).expect(200);
+  });
+
+  it('ไฟล์อัปโหลดค้นชื่อ กรองชนิด และเปลี่ยนชื่อได้', async () => {
+    const up = await http().post('/api/v1/assets').set('Authorization', bearer(student, 'student')).attach('file', PNG, 'โลโก้สาขา.png').expect(201);
+
+    await http().patch(`/api/v1/assets/${up.body.data.id}`).set('Authorization', bearer(student, 'student')).send({ fileName: 'โลโก้ใหม่.png' }).expect(200);
+
+    const found = await http().get(`/api/v1/assets?q=${encodeURIComponent('โลโก้ใหม่')}&mimeType=image%2Fpng`).set('Authorization', bearer(student, 'student')).expect(200);
+
+    expect(found.body.data.map((a: { fileName: string }) => a.fileName)).toContain('โลโก้ใหม่.png');
+  });
+
+  it('ธีมเก็บในการตั้งค่า', async () => {
+    const res = await http().patch('/api/v1/preferences').set('Authorization', bearer(student, 'student')).send({ theme: 'DARK' }).expect(200);
+
+    expect(res.body.data.theme).toBe('DARK');
   });
 });

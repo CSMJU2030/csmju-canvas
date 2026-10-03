@@ -25,6 +25,7 @@ import {
 /// พาทั้งหน้าไป `/auth/login?next=<path และ query ปัจจุบัน>` ด้วย `window.location`
 /// — ห้ามใช้ fetch เพราะตาม redirect ไป Core Hub ไม่ได้และไม่ได้คุกกี้
 
+import { ShellSkeleton } from '@/components/csmju/primitives';
 import { api, ApiError, setUnauthorizedHandler } from './api';
 
 /// core role ทั้ง 6 ค่า (authorization.md ข้อ 2 · standards 1.6.0+)
@@ -191,14 +192,13 @@ export function useSignOut(): () => Promise<void> {
 
 /// หน้าจอระหว่างที่ยังไม่รู้ว่าเป็นใคร
 function SessionGate({ state }: { state: Exclude<State, { status: 'ready' }> }) {
-  if (state.status === 'loading' || state.status === 'redirecting') {
+  // กำลังตรวจตัวตน = โครงหน้าจอแบบ skeleton (ส่วนใหญ่ผ่านในเสี้ยววินาที)
+  if (state.status === 'loading') return <ShellSkeleton />;
+
+  if (state.status === 'redirecting') {
     return (
       <div className="grid min-h-dvh place-items-center px-6">
-        <p className="text-csmju-body text-muted">
-          {state.status === 'loading'
-            ? 'กำลังตรวจสอบตัวตน…'
-            : 'กำลังพาไปเข้าสู่ระบบด้วยบัญชี CSMJU2030…'}
-        </p>
+        <p className="text-csmju-body text-muted">กำลังพาไปเข้าสู่ระบบด้วยบัญชี CSMJU2030…</p>
       </div>
     );
   }

@@ -429,3 +429,71 @@ export function Menu({
     </div>
   );
 }
+
+// ── Skeleton loading (ภาพบรีฟ "Skeleton loading") ─────────────────────
+
+/// ชิ้นโครงสีจางที่กระพริบเบา ๆ ระหว่างรอข้อมูล
+export function Bone({ className }: { className?: string }) {
+  return <span aria-hidden className={cx('block animate-pulse rounded-lg bg-surface-muted motion-reduce:animate-none', className)} />;
+}
+
+/// ตารางการ์ดโครงสำหรับรายการดีไซน์/เทมเพลต
+export function CardGridSkeleton({ count = 10, className }: { count?: number; className?: string }) {
+  return (
+    <div role="status" aria-label="กำลังโหลด" className={cx('grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6', className)}>
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i}>
+          <Bone className="aspect-4/3 w-full rounded-xl" />
+          <Bone className="mt-3 h-3.5 w-3/4" />
+          <Bone className="mt-2 h-3 w-1/2" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/// โครงหน้าจอทั้งหน้า (แถบซ้าย · แถบรอง · แผ่นเนื้อหา) ตอนกำลังตรวจตัวตนก่อนเข้าแอป
+export function ShellSkeleton() {
+  return (
+    <div role="status" aria-label="กำลังตรวจสอบตัวตน" className="csmju-sidebar flex min-h-dvh bg-canvas">
+      <div className="hidden w-20 shrink-0 flex-col items-center gap-5 py-4 md:flex">
+        <Bone className="size-8 rounded-full" />
+        {Array.from({ length: 6 }, (_, i) => (
+          <div key={i} className="flex flex-col items-center gap-1.5">
+            <Bone className="size-8 rounded-full" />
+            <Bone className="h-2.5 w-8" />
+          </div>
+        ))}
+        <div className="mt-auto flex flex-col items-center gap-4">
+          <Bone className="size-8 rounded-full" />
+          <Bone className="size-10 rounded-full" />
+        </div>
+      </div>
+      <div className="hidden w-64 shrink-0 flex-col gap-4 px-3 py-4 lg:flex">
+        <Bone className="h-9 w-full rounded-xl" />
+        <Bone className="h-3 w-2/3" />
+        {Array.from({ length: 5 }, (_, i) => (
+          <div key={i} className="flex items-center gap-3 px-3">
+            <Bone className="size-6 rounded-full" />
+            <Bone className={cx('h-3', i % 2 ? 'w-36' : 'w-28')} />
+          </div>
+        ))}
+      </div>
+      <div className="min-w-0 flex-1 md:py-2 md:pr-2">
+        <div className="flex min-h-dvh flex-col items-center gap-8 bg-surface px-6 pt-16 md:min-h-panel md:rounded-3xl">
+          <Bone className="h-10 w-80 max-w-full rounded-xl" />
+          <Bone className="h-14 w-full max-w-3xl rounded-2xl" />
+          <div className="flex flex-wrap justify-center gap-6">
+            {Array.from({ length: 10 }, (_, i) => (
+              <div key={i} className="flex flex-col items-center gap-2">
+                <Bone className="size-12 rounded-full" />
+                <Bone className="h-2.5 w-12" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <span className="sr-only">กำลังตรวจสอบตัวตน…</span>
+    </div>
+  );
+}

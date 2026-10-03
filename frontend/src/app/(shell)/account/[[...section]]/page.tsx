@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { notFound, useParams } from 'next/navigation';
 import { useState, type ReactNode } from 'react';
 import { Button, ErrorState, FormField, Spinner, Toggle, cx, errorMessage, inputClass, useToast } from '@/components/csmju/primitives';
+import { applyTheme } from '@/components/csmju/providers';
 import { ROLE_LABEL, useSecondaryOpen } from '@/components/shell/app-shell';
 import { ACCOUNT_SECTIONS, type AccountSectionKey } from '@/components/shell/account-sections';
 import { api } from '@/lib/csmju/api';
@@ -227,9 +228,39 @@ function PreferenceToggles({ fields }: { fields: { key: keyof Preference; label:
   );
 }
 
+function ThemeRow() {
+  const { query, save } = usePreferences();
+
+  return (
+    <div className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <label htmlFor="theme-select" className="text-csmju-body font-medium text-ink">ธีม</label>
+        <p className="text-csmju-caption text-muted">เลือกหน้าตาของ CS Canvas หรือให้เปลี่ยนตามการตั้งค่าของอุปกรณ์</p>
+      </div>
+      <select
+        id="theme-select"
+        value={query.data?.theme ?? 'SYSTEM'}
+        disabled={!query.data || save.isPending}
+        onChange={(e) => {
+          const theme = e.target.value as Preference['theme'];
+
+          applyTheme(theme);
+          save.mutate({ theme });
+        }}
+        className={cx(inputClass, 'sm:w-64')}
+      >
+        <option value="LIGHT">สว่าง</option>
+        <option value="DARK">มืด</option>
+        <option value="SYSTEM">ตามการตั้งค่าอุปกรณ์</option>
+      </select>
+    </div>
+  );
+}
+
 function AccessibilitySection() {
   return (
     <Card>
+      <ThemeRow />
       <PreferenceToggles
         fields={[
           { key: 'largeText', label: 'ข้อความขนาดใหญ่', description: 'ขยายตัวอักษรของหน้าจอทั้งระบบขึ้น 12.5%' },

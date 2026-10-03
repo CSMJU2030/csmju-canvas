@@ -16,6 +16,7 @@ export interface FontFamily {
 
 export const FONT_FAMILIES: FontFamily[] = [
   { id: 'Noto Sans Thai', label: 'Noto Sans Thai', regular: 'NotoSansThai-Variable.ttf', bold: 'NotoSansThai-Variable.ttf', style: 'sans' },
+  { id: 'Noto Sans Thai Looped', label: 'Noto Sans Thai Looped (มีหัว)', regular: 'NotoSansThaiLooped-Variable.ttf', bold: 'NotoSansThaiLooped-Variable.ttf', style: 'sans' },
   { id: 'Sarabun', label: 'สารบรรณ (Sarabun)', regular: 'Sarabun-Regular.ttf', bold: 'Sarabun-Bold.ttf', style: 'sans' },
   { id: 'IBM Plex Sans Thai', label: 'IBM Plex Sans Thai', regular: 'IBMPlexSansThai-Regular.ttf', bold: 'IBMPlexSansThai-Bold.ttf', style: 'sans' },
   { id: 'Prompt', label: 'พร้อมท์ (Prompt)', regular: 'Prompt-Regular.ttf', bold: 'Prompt-Bold.ttf', style: 'sans' },

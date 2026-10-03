@@ -1,6 +1,9 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsBoolean,
+  IsEnum,
   IsIn,
   IsInt,
   IsObject,
@@ -29,6 +32,8 @@ export const THUMBNAIL_PATTERN = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9
 export const MAX_THUMBNAIL_CHARS = 280_000;
 
 export const EDITED_WITHIN = ['day', 'week', 'month', 'year'] as const;
+export const LINK_ACCESS = ['NONE', 'VIEW', 'EDIT'] as const;
+export const MAX_TAGS = 20;
 export const DESIGN_SORTS = ['updated', 'created', 'title'] as const;
 
 export class ListDesignsQuery extends PaginationQuery {
@@ -162,6 +167,20 @@ export class UpdateDesignDto {
   @IsOptional()
   @IsBoolean()
   trashed?: boolean;
+
+  @ApiPropertyOptional({ type: [String], example: ['งานกลุ่ม', 'CS201'], description: 'แท็ก (ทั้งชุด) ไม่เกิน 20 แท็ก แท็กละไม่เกิน 30 ตัวอักษร' })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_TAGS, { message: 'แท็กได้ไม่เกิน 20 แท็ก' })
+  @IsString({ each: true })
+  @MinLength(1, { each: true, message: 'แท็กต้องไม่ว่าง' })
+  @MaxLength(30, { each: true, message: 'แท็กยาวได้ไม่เกิน 30 ตัวอักษร' })
+  tags?: string[];
+
+  @ApiPropertyOptional({ enum: LINK_ACCESS, description: 'NONE = เจ้าของเท่านั้น · VIEW/EDIT = ทุกคนที่มีลิงก์ (ต้องเข้าสู่ระบบ CSMJU2030)' })
+  @IsOptional()
+  @IsEnum(LINK_ACCESS, { message: 'linkAccess ต้องเป็น NONE, VIEW หรือ EDIT' })
+  linkAccess?: (typeof LINK_ACCESS)[number];
 }
 
 export class DesignSummaryDto {
@@ -174,6 +193,9 @@ export class DesignSummaryDto {
   @ApiPropertyOptional({ format: 'uuid', nullable: true }) folderId!: string | null;
   @ApiPropertyOptional({ format: 'uuid', nullable: true }) sourceTemplateId!: string | null;
   @ApiPropertyOptional({ nullable: true }) trashedAt!: string | null;
+  @ApiProperty({ type: [String] }) tags!: string[];
+  @ApiProperty({ enum: LINK_ACCESS }) linkAccess!: string;
+  @ApiProperty({ enum: ['OWNER', 'EDIT', 'VIEW'], description: 'สิทธิ์ของผู้เรียกต่องานนี้' }) access!: string;
   @ApiProperty() createdAt!: string;
   @ApiProperty() updatedAt!: string;
 }

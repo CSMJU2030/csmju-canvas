@@ -31,11 +31,22 @@ export class AssetsService {
   async list(coreUserId: string, query: ListAssetsQuery) {
     if (query.trashed) await this.purgeExpiredTrash(coreUserId);
 
-    const where = { coreUserId, trashedAt: query.trashed ? { not: null } : null };
+    const where = {
+      coreUserId,
+      trashedAt: query.trashed ? { not: null } : null,
+      ...(query.q ? { fileName: { contains: query.q, mode: 'insensitive' as const } } : {}),
+      ...(query.mimeType ? { mimeType: query.mimeType } : {}),
+    };
+    const orderBy =
+      query.sort === 'name'
+        ? { fileName: 'asc' as const }
+        : query.sort === 'size'
+          ? { sizeBytes: 'desc' as const }
+          : { createdAt: 'desc' as const };
     const [rows, total] = await this.prisma.$transaction([
       this.prisma.asset.findMany({
         where,
-        orderBy: { createdAt: 'desc' },
+        orderBy,
         skip: query.skip,
         take: query.take,
       }),
@@ -84,8 +95,16 @@ export class AssetsService {
     return toDto(row);
   }
 
+  /// เจ้าของเปิดรูปได้เสมอ · คนอื่นเปิดได้เมื่อรูปนั้นอยู่ในงานของเจ้าของที่เปิดแชร์ด้วยลิงก์
+  /// (ไม่งั้นคนที่ได้ลิงก์จะเห็นงานแต่รูปหายหมด)
   async content(coreUserId: string, id: string) {
-    const row = await this.find(coreUserId, id);
+    const row = await this.prisma.asset.findUnique({ where: { id } });
+
+    if (!row) throw new NotFoundException('ไม่พบรูปนี้ อาจถูกลบไปแล้ว');
+
+    if (row.coreUserId !== coreUserId && (row.trashedAt !== null || !(await this.sharedInDesign(row)))) {
+      throw new NotFoundException('ไม่พบรูปนี้ อาจถูกลบไปแล้ว');
+    }
 
     try {
       return { row, bytes: await readFile(join(this.root, row.storagePath)) };
@@ -94,14 +113,28 @@ export class AssetsService {
     }
   }
 
-  async setTrashed(coreUserId: string, id: string, trashed: boolean) {
+  async update(coreUserId: string, id: string, patch: { trashed?: boolean; fileName?: string }) {
     const row = await this.find(coreUserId, id);
     const updated = await this.prisma.asset.update({
       where: { id: row.id },
-      data: { trashedAt: trashed ? (row.trashedAt ?? new Date()) : null },
+      data: {
+        ...(patch.trashed !== undefined ? { trashedAt: patch.trashed ? (row.trashedAt ?? new Date()) : null } : {}),
+        ...(patch.fileName !== undefined ? { fileName: cleanFileName(Buffer.from(patch.fileName, 'utf8').toString('latin1')) } : {}),
+      },
     });
 
     return toDto(updated);
+  }
+
+  private async sharedInDesign(row: Asset): Promise<boolean> {
+    const hits = await this.prisma.$queryRaw<{ count: bigint }[]>`
+      SELECT COUNT(*)::bigint AS count FROM designs
+      WHERE core_user_id = ${row.coreUserId}
+        AND link_access <> 'NONE'
+        AND trashed_at IS NULL
+        AND document::text LIKE ${'%' + row.id + '%'}`;
+
+    return Number(hits[0]?.count ?? 0) > 0;
   }
 
   async remove(coreUserId: string, id: string) {

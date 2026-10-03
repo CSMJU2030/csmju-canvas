@@ -5,7 +5,7 @@ import { CloudUpload, Ellipsis, HardDrive, House, LayoutTemplate, Ruler, Search 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, type ReactNode } from 'react';
-import { EmptyState, ErrorState, Spinner, cx, errorMessage, useToast } from '@/components/csmju/primitives';
+import { CardGridSkeleton, EmptyState, ErrorState, cx, errorMessage, useToast } from '@/components/csmju/primitives';
 import { DesignCard, TemplateCard, TypeTile } from '@/components/designs/cards';
 import { Carousel } from '@/components/designs/carousel';
 import { DesignMenu } from '@/components/designs/design-menu';
@@ -168,7 +168,7 @@ function RecentDesigns() {
   return (
     <Section title="ดีไซน์ต่อ" action={<SeeAll href="/projects" />}>
       {query.isLoading ? (
-        <Spinner />
+        <CardGridSkeleton count={12} />
       ) : query.isError ? (
         <ErrorState message={errorMessage(query.error)} onRetry={() => void query.refetch()} />
       ) : query.data!.items.length === 0 ? (
@@ -370,7 +370,7 @@ function SearchResults({ query, filters, onClear }: { query: string; filters: Se
       {wantDesigns && (
         <Section title="ดีไซน์ของคุณ">
           {designs.isLoading ? (
-            <Spinner />
+            <CardGridSkeleton count={6} />
           ) : designs.isError ? (
             <ErrorState message={errorMessage(designs.error)} onRetry={() => void designs.refetch()} />
           ) : designs.data!.items.length === 0 ? (
@@ -389,7 +389,7 @@ function SearchResults({ query, filters, onClear }: { query: string; filters: Se
       {wantTemplates && (
         <Section title="เทมเพลต">
           {templates.isLoading ? (
-            <Spinner />
+            <CardGridSkeleton count={6} />
           ) : templates.isError ? (
             <ErrorState message={errorMessage(templates.error)} onRetry={() => void templates.refetch()} />
           ) : templates.data!.items.length === 0 ? (

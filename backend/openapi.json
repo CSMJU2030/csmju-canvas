@@ -971,6 +971,44 @@
             "schema": {
               "type": "boolean"
             }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "ค้นจากชื่อไฟล์",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "mimeType",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "image/png",
+                "image/jpeg",
+                "image/webp",
+                "image/gif",
+                "image/svg+xml"
+              ]
+            }
+          },
+          {
+            "name": "sort",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "created",
+              "type": "string",
+              "enum": [
+                "created",
+                "name",
+                "size"
+              ]
+            }
           }
         ],
         "responses": {
@@ -1072,7 +1110,7 @@
             "description": ""
           }
         },
-        "summary": "ไฟล์รูป (เฉพาะเจ้าของ · ไม่ห่อ envelope เพราะเป็นไบต์)",
+        "summary": "ไฟล์รูป (เจ้าของ หรือผู้ได้ลิงก์ของงานที่ใช้รูปนี้ · ไม่ห่อ envelope เพราะเป็นไบต์)",
         "tags": [
           "assets"
         ]
@@ -1126,7 +1164,7 @@
             }
           }
         },
-        "summary": "ย้ายรูปลงถังขยะ / กู้คืน",
+        "summary": "เปลี่ยนชื่อไฟล์ · ย้ายรูปลงถังขยะ / กู้คืน",
         "tags": [
           "assets"
         ]
@@ -1526,6 +1564,115 @@
           "data-exports"
         ]
       }
+    },
+    "/api/v1/feedbacks": {
+      "post": {
+        "operationId": "FeedbacksController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateFeedbackDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/FeedbackDto"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "ส่งข้อเสนอแนะหรือรายงานเนื้อหา",
+        "tags": [
+          "feedbacks"
+        ]
+      },
+      "get": {
+        "operationId": "FeedbacksController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "example": 2,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "example": 50,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "สำเร็จ พร้อมข้อมูลแบ่งหน้า",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/FeedbackDto"
+                      }
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PaginationMeta"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "ข้อเสนอแนะทั้งหมด (ผู้ดูแลระบบเท่านั้น)",
+        "tags": [
+          "feedbacks"
+        ]
+      }
     }
   },
   "info": {
@@ -1675,6 +1822,29 @@
             "type": "object",
             "nullable": true
           },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "linkAccess": {
+            "type": "string",
+            "enum": [
+              "NONE",
+              "VIEW",
+              "EDIT"
+            ]
+          },
+          "access": {
+            "type": "string",
+            "enum": [
+              "OWNER",
+              "EDIT",
+              "VIEW"
+            ],
+            "description": "สิทธิ์ของผู้เรียกต่องานนี้"
+          },
           "createdAt": {
             "type": "string"
           },
@@ -1688,6 +1858,9 @@
           "designType",
           "width",
           "height",
+          "tags",
+          "linkAccess",
+          "access",
           "createdAt",
           "updatedAt"
         ]
@@ -1730,6 +1903,29 @@
             "type": "object",
             "nullable": true
           },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "linkAccess": {
+            "type": "string",
+            "enum": [
+              "NONE",
+              "VIEW",
+              "EDIT"
+            ]
+          },
+          "access": {
+            "type": "string",
+            "enum": [
+              "OWNER",
+              "EDIT",
+              "VIEW"
+            ],
+            "description": "สิทธิ์ของผู้เรียกต่องานนี้"
+          },
           "createdAt": {
             "type": "string"
           },
@@ -1748,6 +1944,9 @@
           "designType",
           "width",
           "height",
+          "tags",
+          "linkAccess",
+          "access",
           "createdAt",
           "updatedAt",
           "document"
@@ -1825,6 +2024,26 @@
           "trashed": {
             "type": "boolean",
             "description": "true = ย้ายไปถังขยะ · false = กู้คืน"
+          },
+          "tags": {
+            "example": [
+              "งานกลุ่ม",
+              "CS201"
+            ],
+            "description": "แท็ก (ทั้งชุด) ไม่เกิน 20 แท็ก แท็กละไม่เกิน 30 ตัวอักษร",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "linkAccess": {
+            "type": "string",
+            "enum": [
+              "NONE",
+              "VIEW",
+              "EDIT"
+            ],
+            "description": "NONE = เจ้าของเท่านั้น · VIEW/EDIT = ทุกคนที่มีลิงก์ (ต้องเข้าสู่ระบบ CSMJU2030)"
           }
         }
       },
@@ -2110,11 +2329,12 @@
           "trashed": {
             "type": "boolean",
             "description": "true = ย้ายไปถังขยะ · false = กู้คืน"
+          },
+          "fileName": {
+            "type": "string",
+            "description": "เปลี่ยนชื่อไฟล์"
           }
-        },
-        "required": [
-          "trashed"
-        ]
+        }
       },
       "FolderDto": {
         "type": "object",
@@ -2179,6 +2399,14 @@
           "notifyTrash": {
             "type": "boolean"
           },
+          "theme": {
+            "type": "string",
+            "enum": [
+              "LIGHT",
+              "DARK",
+              "SYSTEM"
+            ]
+          },
           "updatedAt": {
             "type": "string"
           }
@@ -2190,6 +2418,7 @@
           "largeText",
           "notifyTemplateUsed",
           "notifyTrash",
+          "theme",
           "updatedAt"
         ]
       },
@@ -2213,6 +2442,14 @@
           },
           "notifyTrash": {
             "type": "boolean"
+          },
+          "theme": {
+            "type": "string",
+            "enum": [
+              "LIGHT",
+              "DARK",
+              "SYSTEM"
+            ]
           }
         }
       },
@@ -2289,6 +2526,64 @@
           "assets",
           "templates",
           "preferences"
+        ]
+      },
+      "FeedbackDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "SUGGESTION",
+              "REPORT"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "link": {
+            "type": "object",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "message",
+          "createdAt"
+        ]
+      },
+      "CreateFeedbackDto": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "SUGGESTION",
+              "REPORT"
+            ],
+            "description": "SUGGESTION = แนะนำการปรับปรุง · REPORT = รายงานเนื้อหา"
+          },
+          "message": {
+            "type": "string",
+            "example": "อยากให้มีเทมเพลตโปสเตอร์งานรับน้องเพิ่ม"
+          },
+          "link": {
+            "type": "string",
+            "example": "/templates?q=โปสเตอร์",
+            "description": "หน้าที่เกี่ยวข้อง (path ภายในระบบเท่านั้น)"
+          }
+        },
+        "required": [
+          "kind",
+          "message"
         ]
       }
     }

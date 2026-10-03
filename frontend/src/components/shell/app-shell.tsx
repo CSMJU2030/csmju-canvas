@@ -2,29 +2,24 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Bell, BookOpen, ChevronRight, CircleUserRound, Clock, CloudUpload, FolderOpen, House, LayoutTemplate, LogOut, PanelLeft, Plus,
-  Settings, Trash2, UserRound,
+  Bell, BookOpen, ChevronRight, Clock, CloudUpload, FolderOpen, House, LayoutTemplate, PanelLeft, Plus, Trash2,
+  UserRound,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { Suspense, createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { api } from '@/lib/csmju/api';
-import { useMe, useSignOut } from '@/lib/csmju/session';
+import { useMe } from '@/lib/csmju/session';
 import { relativeTime } from '@/lib/format';
 import type { DesignSummary, Folder, NotificationItem } from '@/lib/types';
 import { cx } from '../csmju/primitives';
 import { ACCOUNT_SECTIONS } from './account-sections';
+import { AccountPopover } from './account-popover';
+import { Avatar } from './avatar';
 import { CreateDesignProvider, useOpenCreate } from './create-dialog';
 import { HelpAssistant } from './help-assistant';
 
-export const ROLE_LABEL: Record<string, string> = {
-  student: 'นักศึกษา',
-  alumni: 'ศิษย์เก่า',
-  staff: 'บุคลากร',
-  lecturer: 'อาจารย์',
-  guest: 'ผู้เยี่ยมชม',
-  admin: 'ผู้ดูแลระบบ',
-};
+export { ROLE_LABEL } from './avatar';
 
 const NAV = [
   { href: '/', label: 'หน้าหลัก', icon: House },
@@ -60,7 +55,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <CreateDesignProvider>
       <SecondaryOpenContext.Provider value={secondaryOpen}>
-      <div className="flex min-h-dvh bg-canvas">
+      <div className="csmju-sidebar flex min-h-dvh bg-canvas">
         <Rail open={secondaryOpen} onToggleSecondary={() => setSecondaryOpen((v) => !v)} />
         {/* เลื่อนเข้า-ออกด้วยการเปลี่ยนความกว้าง + จางเข้า · ปิดแล้วใช้ inert กัน Tab เข้าไปโฟกัสของที่มองไม่เห็น */}
         <aside
@@ -78,7 +73,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               secondaryOpen ? 'translate-x-0' : '-translate-x-6',
             )}
           >
-            <Link href="/" className="csmju-gradient-text mb-4 px-3 text-csmju-h2 font-bold italic">
+            <Link href="/" className="csmju-logo mb-4 px-3 text-csmju-h1 leading-tight">
               CS Canvas
             </Link>
             {secondary === 'projects' ? <ProjectsNav /> : secondary === 'account' ? <AccountNav /> : <RecentDesignsNav />}
@@ -222,7 +217,7 @@ function NotificationsPopover() {
         )}
       </button>
       {open && (
-        <div role="dialog" aria-label="การแจ้งเตือน" className="absolute bottom-0 left-14 z-50 flex max-h-popover w-96 flex-col rounded-2xl border border-line bg-surface shadow-csmju-lg">
+        <div role="dialog" aria-label="การแจ้งเตือน" className="csmju-pop absolute bottom-0 left-14 z-50 flex max-h-popover w-96 flex-col rounded-2xl border border-line bg-surface shadow-csmju-lg">
           <div className="flex items-center justify-between border-b border-line px-4 py-3">
             <h2 className="text-csmju-body font-semibold text-ink">การแจ้งเตือน</h2>
             <button type="button" onClick={() => markAll.mutate()} className="min-h-11 px-2 text-csmju-caption font-semibold text-ink hover:text-primary">
@@ -268,65 +263,6 @@ function NotificationsPopover() {
   );
 }
 
-export function Avatar({ email, size = 'md' }: { email: string; size?: 'sm' | 'md' | 'lg' }) {
-  const initial = (email.split('@')[0] || '?').slice(0, 1).toUpperCase();
-
-  return (
-    <span
-      aria-hidden
-      className={cx(
-        'csmju-gradient-button flex shrink-0 items-center justify-center rounded-full font-semibold',
-        size === 'lg' ? 'size-14 text-csmju-h3' : size === 'sm' ? 'size-7 text-csmju-caption' : 'size-10 text-csmju-body',
-      )}
-    >
-      {initial}
-    </span>
-  );
-}
-
-function AccountPopover() {
-  const { open, setOpen, ref } = usePopover();
-  const me = useMe();
-  const signOut = useSignOut();
-  const items = [
-    { href: '/account', label: 'บัญชีของคุณ', icon: CircleUserRound },
-    { href: '/account/accessibility', label: 'การตั้งค่า', icon: Settings },
-    { href: '/help', label: 'ความช่วยเหลือและคู่มือ', icon: BookOpen },
-  ];
-
-  return (
-    <div ref={ref} className="relative">
-      <button type="button" aria-label="บัญชีของคุณ" title="บัญชีของคุณ" aria-expanded={open} onClick={() => setOpen((v) => !v)} className="rounded-full ring-offset-2 hover:ring-2 hover:ring-primary-soft-hover">
-        <Avatar email={me.email} />
-      </button>
-      {open && (
-        <div role="dialog" aria-label="บัญชี" className="absolute bottom-0 left-14 z-50 w-80 rounded-2xl border border-line bg-surface py-2 shadow-csmju-lg">
-          <p className="px-4 py-1 text-csmju-caption font-semibold text-muted">บัญชี</p>
-          <Link href="/account" onClick={() => setOpen(false)} className="mx-2 flex items-center gap-3 rounded-xl bg-surface-muted px-3 py-3 hover:bg-primary-soft">
-            <Avatar email={me.email} size="lg" />
-            <span className="min-w-0">
-              <span className="block truncate text-csmju-body font-semibold text-ink">{me.email.split('@')[0]}</span>
-              <span className="block truncate text-csmju-caption text-muted">{me.email}</span>
-              <span className="block text-csmju-caption text-primary">{ROLE_LABEL[me.coreRole] ?? me.coreRole}</span>
-            </span>
-          </Link>
-          <div className="my-2 h-px bg-line" />
-          {items.map((item) => (
-            <Link key={item.href} href={item.href} onClick={() => setOpen(false)} className="flex min-h-11 items-center gap-3 px-4 text-csmju-caption text-ink hover:bg-surface-muted">
-              <item.icon aria-hidden className="size-5" />
-              {item.label}
-            </Link>
-          ))}
-          <div className="my-2 h-px bg-line" />
-          <button type="button" onClick={() => void signOut()} className="flex min-h-11 w-full items-center gap-3 px-4 text-left text-csmju-caption text-ink hover:bg-surface-muted">
-            <LogOut aria-hidden className="size-5" />
-            ออกจากระบบ
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
 
 function SideLink({ href, label, icon, active }: { href: string; label: string; icon: ReactNode; active: boolean }) {
   return (

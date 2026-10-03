@@ -24,6 +24,25 @@ enum Layer2Role {
   ADMIN
 }
 
+/// ธีมของหน้าจอ (เมนูบัญชี → ธีม)
+enum ThemeMode {
+  LIGHT
+  DARK
+  SYSTEM
+}
+
+/// การแชร์ดีไซน์ด้วยลิงก์ — ผู้รับต้องเข้าสู่ระบบ CSMJU2030 ก่อนเสมอ (ไม่มีลิงก์สาธารณะ)
+enum LinkAccess {
+  NONE
+  VIEW
+  EDIT
+}
+
+enum FeedbackKind {
+  SUGGESTION
+  REPORT
+}
+
 enum NotificationKind {
   DESIGN_TRASHED
   TEMPLATE_USED
@@ -46,21 +65,24 @@ model Folder {
 /// งานออกแบบหนึ่งชิ้น — `document` คือ JSON state ของผืนผ้าใบ (ดู docs/design-document.md)
 /// ที่ CMS นำไป render สดได้
 model Design {
-  id               String    @id @default(uuid()) @db.Uuid
-  coreUserId       String    @map("core_user_id")
-  title            String    @db.VarChar(120)
+  id               String     @id @default(uuid()) @db.Uuid
+  coreUserId       String     @map("core_user_id")
+  title            String     @db.VarChar(120)
   /// key ของประเภทงาน เช่น presentation, poster, certificate (frontend/src/lib/design-types.ts)
-  designType       String    @map("design_type") @db.VarChar(40)
+  designType       String     @map("design_type") @db.VarChar(40)
   width            Int
   height           Int
   document         Json
   /// ภาพย่อ JPEG แบบ data URL ขนาดเล็ก (≤ 200 KB) สร้างฝั่ง client ตอนบันทึก
   thumbnail        String?
-  folderId         String?   @map("folder_id") @db.Uuid
-  sourceTemplateId String?   @map("source_template_id") @db.Uuid
-  trashedAt        DateTime? @map("trashed_at") @db.Timestamptz(3)
-  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  folderId         String?    @map("folder_id") @db.Uuid
+  sourceTemplateId String?    @map("source_template_id") @db.Uuid
+  /// แท็กที่ผู้ใช้ตั้งเอง (แผงรายละเอียด)
+  tags             String[]   @default([])
+  linkAccess       LinkAccess @default(NONE) @map("link_access")
+  trashedAt        DateTime?  @map("trashed_at") @db.Timestamptz(3)
+  createdAt        DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   folder         Folder?   @relation("FolderDesigns", fields: [folderId], references: [id], onDelete: SetNull)
   sourceTemplate Template? @relation("TemplateDesigns", fields: [sourceTemplateId], references: [id], onDelete: SetNull)
@@ -123,15 +145,30 @@ model Notification {
 
 /// การตั้งค่าของผู้ใช้ในระบบนี้ (ไม่ใช่ข้อมูลบัญชี — บัญชีเป็นของ Core Hub)
 model Preference {
-  id                  String   @id @default(uuid()) @db.Uuid
-  coreUserId          String   @unique @map("core_user_id")
-  aboutMe             String   @default("") @map("about_me") @db.VarChar(300)
-  reduceMotion        Boolean  @default(false) @map("reduce_motion")
-  highContrast        Boolean  @default(false) @map("high_contrast")
-  largeText           Boolean  @default(false) @map("large_text")
-  notifyTemplateUsed  Boolean  @default(true) @map("notify_template_used")
-  notifyTrash         Boolean  @default(true) @map("notify_trash")
-  updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id                 String    @id @default(uuid()) @db.Uuid
+  coreUserId         String    @unique @map("core_user_id")
+  aboutMe            String    @default("") @map("about_me") @db.VarChar(300)
+  reduceMotion       Boolean   @default(false) @map("reduce_motion")
+  highContrast       Boolean   @default(false) @map("high_contrast")
+  largeText          Boolean   @default(false) @map("large_text")
+  notifyTemplateUsed Boolean   @default(true) @map("notify_template_used")
+  notifyTrash        Boolean   @default(true) @map("notify_trash")
+  theme              ThemeMode @default(SYSTEM)
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@map("preferences")
+}
+
+/// ข้อเสนอแนะและการรายงานเนื้อหา (เมนูบัญชี → ความช่วยเหลือและฟีดแบ็ก) — ผู้ดูแลระบบอ่านได้
+model Feedback {
+  id         String       @id @default(uuid()) @db.Uuid
+  coreUserId String       @map("core_user_id")
+  kind       FeedbackKind
+  message    String       @db.VarChar(2000)
+  /// หน้าหรือเทมเพลตที่เกี่ยวข้อง (path ภายในระบบ)
+  link       String?      @db.VarChar(300)
+  createdAt  DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([createdAt])
+  @@map("feedbacks")
 }

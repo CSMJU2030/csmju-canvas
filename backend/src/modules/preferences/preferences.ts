@@ -1,6 +1,8 @@
 import { Body, Controller, Get, Injectable, Module, Patch } from '@nestjs/common';
 import { ApiProperty, ApiPropertyOptional, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { IsBoolean, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsBoolean, IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
+
+export const THEMES = ['LIGHT', 'DARK', 'SYSTEM'] as const;
 import { CurrentUser, type CoreHubUser } from '../../common/auth/core-user.js';
 import { ApiEnvelope } from '../../common/http/api-envelope.decorator.js';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
@@ -12,6 +14,7 @@ export class PreferenceDto {
   @ApiProperty() largeText!: boolean;
   @ApiProperty() notifyTemplateUsed!: boolean;
   @ApiProperty() notifyTrash!: boolean;
+  @ApiProperty({ enum: THEMES }) theme!: string;
   @ApiProperty() updatedAt!: string;
 }
 
@@ -22,6 +25,10 @@ export class UpdatePreferenceDto {
   @ApiPropertyOptional() @IsOptional() @IsBoolean() largeText?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() notifyTemplateUsed?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() notifyTrash?: boolean;
+  @ApiPropertyOptional({ enum: THEMES })
+  @IsOptional()
+  @IsIn(THEMES, { message: 'theme ต้องเป็น LIGHT, DARK หรือ SYSTEM' })
+  theme?: (typeof THEMES)[number];
 }
 
 @Injectable()
@@ -57,6 +64,7 @@ function toDto(row: Omit<PreferenceDto, 'updatedAt'> & { updatedAt: Date }) {
     largeText: row.largeText,
     notifyTemplateUsed: row.notifyTemplateUsed,
     notifyTrash: row.notifyTrash,
+    theme: row.theme,
     updatedAt: row.updatedAt.toISOString(),
   };
 }
