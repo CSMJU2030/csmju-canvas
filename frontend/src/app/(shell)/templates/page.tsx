@@ -25,8 +25,8 @@ const PAGE_SIZE = 20;
 function TemplatesBrowser() {
   const params = useSearchParams();
   const [q, setQ] = useState(params.get('q') ?? '');
-  const [designType, setDesignType] = useState('');
-  const [category, setCategory] = useState('');
+  const [designType, setDesignType] = useState(params.get('designType') ?? '');
+  const [category, setCategory] = useState(params.get('category') ?? '');
   const [owner, setOwner] = useState<'' | 'me' | 'others'>('');
   const [sort, setSort] = useState<'popular' | 'recent'>('popular');
   const [page, setPage] = useState(1);
@@ -57,7 +57,7 @@ function TemplatesBrowser() {
   };
 
   return (
-    <div className="px-4 py-8 md:px-8">
+    <div className="px-4 py-8 md:px-10">
       <h1 className="text-csmju-h1 font-bold text-ink">เทมเพลต</h1>
       <p className="mt-1 text-csmju-body text-muted">กดเทมเพลตเพื่อทำสำเนาเป็นงานของคุณ แก้ได้เต็มที่โดยไม่กระทบต้นฉบับ</p>
 

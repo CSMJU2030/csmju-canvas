@@ -250,14 +250,14 @@ export function Dialog({
       }}
       aria-labelledby={`${title}-title`}
       className={cx(
-        'm-auto w-11/12 rounded-2xl bg-surface p-0 text-body shadow-csmju-lg backdrop:bg-inverse/50',
+        'm-auto w-11/12 rounded-3xl bg-surface p-0 text-body shadow-csmju-lg backdrop:bg-inverse/50',
         size === 'md' && 'max-w-lg',
         size === 'lg' && 'max-w-3xl',
         size === 'xl' && 'max-w-6xl',
       )}
     >
       {open && (
-        <div className="flex max-h-[85dvh] flex-col">
+        <div className="flex max-h-dialog flex-col">
           <div className="flex items-center justify-between gap-4 border-b border-line px-5 py-3">
             <h2 id={`${title}-title`} className="text-csmju-h3 font-semibold text-ink">
               {title}

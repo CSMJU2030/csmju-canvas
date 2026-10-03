@@ -40,17 +40,17 @@ export interface DesignGroup {
 }
 
 export const DESIGN_GROUPS: DesignGroup[] = [
-  { key: 'presentation', label: 'พรีเซนเทชั่น', icon: Presentation, tone: 'bg-chart-5', available: true },
-  { key: 'social', label: 'โซเชียลมีเดีย', icon: Share2, tone: 'bg-chart-4', available: true },
-  { key: 'photo', label: 'แต่งรูป', icon: ImageIcon, tone: 'bg-chart-2', available: true },
-  { key: 'print', label: 'งานพิมพ์', icon: Printer, tone: 'bg-chart-1', available: true },
-  { key: 'document', label: 'เอกสาร', icon: FileText, tone: 'bg-chart-3', available: true },
-  { key: 'whiteboard', label: 'ไวท์บอร์ด', icon: StickyNote, tone: 'bg-chart-3', available: true },
-  { key: 'video', label: 'วิดีโอ', icon: Clapperboard, tone: 'bg-chart-6', available: false },
-  { key: 'sheet', label: 'ชีต', icon: Sheet, tone: 'bg-chart-6', available: false },
-  { key: 'code', label: 'โค้ดดิ้ง', icon: Code, tone: 'bg-chart-6', available: false },
-  { key: 'website', label: 'เว็บไซต์', icon: Monitor, tone: 'bg-chart-6', available: false },
-  { key: 'email', label: 'อีเมล', icon: Mail, tone: 'bg-chart-6', available: false },
+  { key: 'presentation', label: 'พรีเซนเทชั่น', icon: Presentation, tone: 'bg-type-orange', available: true },
+  { key: 'social', label: 'โซเชียลมีเดีย', icon: Share2, tone: 'bg-type-red', available: true },
+  { key: 'photo', label: 'แต่งรูป', icon: ImageIcon, tone: 'bg-type-blue', available: true },
+  { key: 'print', label: 'งานพิมพ์', icon: Printer, tone: 'bg-type-purple', available: true },
+  { key: 'document', label: 'เอกสาร', icon: FileText, tone: 'bg-type-teal', available: true },
+  { key: 'whiteboard', label: 'ไวท์บอร์ด', icon: StickyNote, tone: 'bg-type-green', available: true },
+  { key: 'video', label: 'วิดีโอ', icon: Clapperboard, tone: 'bg-type-pink', available: false },
+  { key: 'sheet', label: 'ชีต', icon: Sheet, tone: 'bg-type-blue', available: false },
+  { key: 'code', label: 'โค้ดดิ้ง', icon: Code, tone: 'bg-type-magenta', available: false },
+  { key: 'website', label: 'เว็บไซต์', icon: Monitor, tone: 'bg-type-indigo', available: false },
+  { key: 'email', label: 'อีเมล', icon: Mail, tone: 'bg-type-indigo', available: false },
 ];
 
 export const DESIGN_TYPES: DesignType[] = [
@@ -97,6 +97,28 @@ export const TEMPLATE_CATEGORIES = [
   { key: 'announcement', label: 'ประกาศและประชาสัมพันธ์' },
   { key: 'social', label: 'โซเชียลมีเดีย' },
 ] as const;
+
+/// ไทล์ "เลือกดูหมวดหมู่เทมเพลต" ในหน้าแรก — สีพาสเทลและภาพประกอบตามประเภทงาน
+export const BROWSE_TILES: { label: string; designType: string; tone: string }[] = [
+  { label: 'พรีเซนเทชั่น', designType: 'presentation', tone: 'bg-pastel-peach' },
+  { label: 'โพสต์ Instagram', designType: 'instagram-post', tone: 'bg-pastel-pink' },
+  { label: 'เรซูเม่', designType: 'resume', tone: 'bg-pastel-lilac' },
+  { label: 'บัตรเชิญ', designType: 'invitation', tone: 'bg-pastel-violet' },
+  { label: 'เกียรติบัตร', designType: 'certificate', tone: 'bg-pastel-butter' },
+  { label: 'โปสเตอร์', designType: 'poster', tone: 'bg-pastel-lilac' },
+  { label: 'เอกสาร', designType: 'document-a4', tone: 'bg-pastel-aqua' },
+  { label: 'ปกรายงาน', designType: 'report-cover', tone: 'bg-pastel-mint' },
+  { label: 'ใบปลิว', designType: 'flyer', tone: 'bg-pastel-pink' },
+  { label: 'อินโฟกราฟิก', designType: 'infographic', tone: 'bg-pastel-violet' },
+  { label: 'ไวท์บอร์ด', designType: 'whiteboard', tone: 'bg-pastel-mint' },
+  { label: 'นามบัตร', designType: 'business-card', tone: 'bg-pastel-sky' },
+  { label: 'สตอรี่', designType: 'story', tone: 'bg-pastel-peach' },
+  { label: 'ภาพปก YouTube', designType: 'youtube-thumbnail', tone: 'bg-pastel-butter' },
+];
+
+export function designType(key: string): DesignType | undefined {
+  return DESIGN_TYPES.find((t) => t.key === key);
+}
 
 export function categoryLabel(key: string): string {
   return TEMPLATE_CATEGORIES.find((c) => c.key === key)?.label ?? key;

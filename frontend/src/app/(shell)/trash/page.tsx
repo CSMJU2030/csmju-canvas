@@ -2,8 +2,9 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArchiveRestore, Trash2 } from 'lucide-react';
+import Link from 'next/link';
 import { useState } from 'react';
-import { Button, EmptyState, ErrorState, Spinner, cx, errorMessage, useToast } from '@/components/csmju/primitives';
+import { Button, ErrorState, Spinner, cx, errorMessage, useToast } from '@/components/csmju/primitives';
 import { Thumbnail } from '@/components/designs/cards';
 import { api, qs } from '@/lib/csmju/api';
 import { daysLeft, formatBytes } from '@/lib/format';
@@ -16,13 +17,12 @@ export default function TrashPage() {
   const [tab, setTab] = useState<Tab>('designs');
 
   return (
-    <div className="px-4 py-8 md:px-8">
+    <div className="px-4 py-8 md:px-10">
       <h1 className="text-csmju-h1 font-bold text-ink">ถังขยะ</h1>
-      <p className="mt-1 text-csmju-body text-muted">ของในถังขยะถูกลบถาวรอัตโนมัติเมื่อครบ 30 วัน กู้คืนได้ก่อนถึงกำหนด</p>
-      <div role="tablist" aria-label="ชนิดของที่ลบ" className="mt-6 flex gap-2 border-b border-line">
+      <div role="tablist" aria-label="ชนิดของที่ลบ" className="mt-6 flex gap-6">
         {(
           [
-            ['designs', 'งานออกแบบ'],
+            ['designs', 'ดีไซน์'],
             ['images', 'รูป'],
           ] as [Tab, string][]
         ).map(([key, label]) => (
@@ -33,8 +33,8 @@ export default function TrashPage() {
             aria-selected={tab === key}
             onClick={() => setTab(key)}
             className={cx(
-              '-mb-px min-h-11 border-b-2 px-4 text-csmju-body',
-              tab === key ? 'border-primary font-semibold text-primary' : 'border-transparent text-body hover:text-ink',
+              'min-h-11 border-b-2 px-1 text-csmju-caption',
+              tab === key ? 'border-primary font-semibold text-ink' : 'border-transparent text-body hover:text-ink',
             )}
           >
             {label}
@@ -77,7 +77,7 @@ function TrashedDesigns() {
 
   if (query.isLoading) return <Spinner />;
   if (query.isError) return <ErrorState message={errorMessage(query.error)} onRetry={() => void query.refetch()} />;
-  if (query.data!.items.length === 0) return <EmptyState title="ถังขยะว่าง" description="งานที่ย้ายไปถังขยะจะอยู่ที่นี่ 30 วัน" icon={<Trash2 aria-hidden className="size-8" />} />;
+  if (query.data!.items.length === 0) return <TrashEmpty what="ดีไซน์" />;
 
   return (
     <>
@@ -142,7 +142,7 @@ function TrashedImages() {
 
   if (query.isLoading) return <Spinner />;
   if (query.isError) return <ErrorState message={errorMessage(query.error)} onRetry={() => void query.refetch()} />;
-  if (query.data!.items.length === 0) return <EmptyState title="ไม่มีรูปในถังขยะ" description="รูปที่ลบจากแท็บอัปโหลดในหน้าแก้ไขจะอยู่ที่นี่ 30 วัน" />;
+  if (query.data!.items.length === 0) return <TrashEmpty what="รูป" />;
 
   return (
     <>
@@ -176,5 +176,21 @@ function TrashedImages() {
       </ul>
       <Pager page={page} totalPages={query.data!.meta.totalPages} onPage={setPage} />
     </>
+  );
+}
+
+/// ภาพว่างของถังขยะแบบ Canva: ถังสีม่วงไล่สี + ข้อความบอกระยะเวลากู้คืน
+function TrashEmpty({ what }: { what: string }) {
+  return (
+    <div className="flex flex-col items-center gap-3 py-20 text-center">
+      <span className="csmju-gradient-button flex size-28 items-center justify-center rounded-full shadow-csmju-lg">
+        <Trash2 aria-hidden className="size-14" strokeWidth={1.75} />
+      </span>
+      <p className="mt-3 text-csmju-h3 font-semibold text-ink">{what}ใดๆ ก็ตามที่คุณลบลงถังขยะจะอยู่ที่นี่</p>
+      <p className="text-csmju-caption text-body">
+        คุณมีเวลา 30 วันในการกู้คืนรายการ ก่อนที่ระบบจะลบรายการออกจากถังขยะโดยอัตโนมัติ{' '}
+        <Link href="/help/projects-trash" className="font-medium text-primary underline">ดูข้อมูลเพิ่มเติม</Link>
+      </p>
+    </div>
   );
 }

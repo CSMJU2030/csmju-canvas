@@ -95,7 +95,7 @@ export function Stage() {
     const { zoom, pan, width, height } = state;
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = cssVar('--csmju-color-canvas', 'rgb(241 245 251)');
+    ctx.fillStyle = cssVar('--csmju-color-stage', 'rgb(235 236 240)');
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // หน้า (พิกัดหน้า)

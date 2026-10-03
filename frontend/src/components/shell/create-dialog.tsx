@@ -13,7 +13,8 @@ import {
   inputClass,
   useToast,
 } from '@/components/csmju/primitives';
-import { TemplateCard } from '@/components/designs/cards';
+import { TemplateCard, TypeTile } from '@/components/designs/cards';
+import { Carousel } from '@/components/designs/carousel';
 import { api, qs } from '@/lib/csmju/api';
 import { designFromUpload, useCreateDesign } from '@/lib/create-design';
 import {
@@ -75,11 +76,15 @@ function CreateDesignDialog({
   }, [query]);
 
   const tabs: { key: Tab; label: string; icon: ReactNode; available: boolean }[] = [
-    { key: 'for-you', label: 'สำหรับคุณ', icon: <Sparkles aria-hidden className="size-5" />, available: true },
+    { key: 'for-you', label: 'สำหรับคุณ', icon: <Sparkles aria-hidden className="size-6 text-primary" />, available: true },
     ...DESIGN_GROUPS.map((g) => ({
       key: g.key as Tab,
       label: g.label,
-      icon: <g.icon aria-hidden className="size-5" />,
+      icon: (
+        <span className={cx('flex size-6 items-center justify-center rounded-md text-on-inverse', g.tone)}>
+          <g.icon aria-hidden className="size-4" />
+        </span>
+      ),
       available: g.available,
     })),
     { key: 'custom', label: 'กำหนดขนาดเอง', icon: <Ruler aria-hidden className="size-5" />, available: true },
@@ -163,35 +168,18 @@ function GroupPanel({ group, onPick, busy }: { group: DesignGroupKey; onPick: (t
   return <TypeGrid types={types} onPick={onPick} busy={busy} />;
 }
 
-/// การ์ดประเภทงาน — กรอบสัดส่วนเท่าขนาดผืนผ้าใบจริง
+/// ตารางไทล์ประเภทงาน (ภาพประกอบ + ชื่อ + ขนาด) แบบหน้าหมวดในป๊อปอัปของ Canva
 export function TypeGrid({ types, onPick, busy }: { types: DesignType[]; onPick: (t: DesignType) => void; busy: boolean }) {
   return (
-    <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-      {types.map((type) => {
-        const ratio = type.width / type.height;
-
-        return (
-          <li key={type.key}>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => onPick(type)}
-              className="flex w-full flex-col gap-2 rounded-2xl p-2 text-left hover:bg-surface-muted disabled:opacity-60"
-            >
-              <span className="flex aspect-video w-full items-center justify-center rounded-xl bg-surface-muted p-4">
-                <span
-                  className="block max-h-full max-w-full rounded-md border border-line-strong bg-surface shadow-csmju-sm"
-                  style={{ aspectRatio: String(ratio), width: ratio >= 1 ? '100%' : 'auto', height: ratio >= 1 ? 'auto' : '100%' }}
-                />
-              </span>
-              <span className="text-csmju-caption font-medium text-ink">{type.label}</span>
-              <span className="text-csmju-caption text-muted tabular-nums">
-                {type.width} × {type.height} px
-              </span>
-            </button>
-          </li>
-        );
-      })}
+    <ul className="grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-3 lg:grid-cols-4">
+      {types.map((type) => (
+        <li key={type.key}>
+          <TypeTile type={type} onClick={() => onPick(type)} disabled={busy} />
+          <span className="block text-csmju-caption text-muted tabular-nums">
+            {type.width} × {type.height} px
+          </span>
+        </li>
+      ))}
     </ul>
   );
 }
@@ -217,7 +205,13 @@ function ForYou({ onPick, busy, onClose }: { onPick: (t: DesignType) => void; bu
       <section>
         <h3 className="mb-2 text-csmju-body font-semibold text-ink">ใช้บ่อย</h3>
         {frequent.length > 0 ? (
-          <TypeGrid types={frequent.slice(0, 4)} onPick={onPick} busy={busy} />
+          <Carousel label="ประเภทที่ใช้บ่อย">
+            {frequent.map((type) => (
+              <li key={type.key} className="w-52 shrink-0 snap-start">
+                <TypeTile type={type} onClick={() => onPick(type)} disabled={busy} />
+              </li>
+            ))}
+          </Carousel>
         ) : (
           <p className="text-csmju-caption text-muted">
             {usage.isLoading ? 'กำลังโหลด…' : 'ยังไม่มีสถิติ — ประเภทที่คุณสร้างบ่อยจะขึ้นที่นี่'}
@@ -247,8 +241,14 @@ function ForYou({ onPick, busy, onClose }: { onPick: (t: DesignType) => void; bu
         )}
       </section>
       <section>
-        <h3 className="mb-2 text-csmju-body font-semibold text-ink">เริ่มจากหน้าเปล่า</h3>
-        <TypeGrid types={DESIGN_TYPES.filter((t) => ['presentation', 'poster', 'certificate', 'resume'].includes(t.key))} onPick={onPick} busy={busy} />
+        <h3 className="mb-2 text-csmju-body font-semibold text-ink">ยอดนิยม</h3>
+        <Carousel label="ประเภทยอดนิยม">
+          {DESIGN_TYPES.filter((t) => ['instagram-post', 'flyer', 'presentation', 'resume', 'poster', 'certificate', 'story', 'whiteboard'].includes(t.key)).map((type) => (
+            <li key={type.key} className="w-52 shrink-0 snap-start">
+              <TypeTile type={type} onClick={() => onPick(type)} disabled={busy} />
+            </li>
+          ))}
+        </Carousel>
       </section>
     </div>
   );

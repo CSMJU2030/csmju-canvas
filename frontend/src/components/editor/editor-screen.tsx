@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRef, useState } from 'react';
-import { Button, ErrorState, IconButton, Spinner, cx, errorMessage, useToast } from '@/components/csmju/primitives';
+import { ErrorState, IconButton, Spinner, cx, errorMessage, useToast } from '@/components/csmju/primitives';
 import { api, ApiError } from '@/lib/csmju/api';
 import { useMe } from '@/lib/csmju/session';
 import { designTypeLabel } from '@/lib/design-types';
@@ -17,6 +17,7 @@ import type { Design } from '@/lib/types';
 import { ExportDialog, PublishTemplateDialog } from './dialogs';
 import { PANELS, PanelContent, type PanelKey } from './panels';
 import { PropertiesBar } from './properties-bar';
+import { SelectionToolbar } from './selection-toolbar';
 import { Stage, clampZoom, fitToScreen } from './stage';
 import { useAutosave, type SaveStatus } from './use-autosave';
 import { useShortcuts } from './use-shortcuts';
@@ -68,7 +69,7 @@ export function EditorScreen({ id }: { id: string }) {
 function EditorLayout({ needsThumbnail }: { needsThumbnail: boolean }) {
   // จอเล็กเริ่มโดยพับแผงไว้ ให้เห็นผืนผ้าใบเต็มที่ (หน้านี้ render ฝั่ง client เท่านั้น — อยู่หลัง SessionProvider)
   const [panel, setPanel] = useState<PanelKey | null>(() =>
-    typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches ? null : 'text',
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches ? null : 'design',
   );
   const [dialog, setDialog] = useState<'export' | 'publish' | null>(null);
   const { status, retry } = useAutosave(needsThumbnail);
@@ -76,37 +77,56 @@ function EditorLayout({ needsThumbnail }: { needsThumbnail: boolean }) {
   useShortcuts();
 
   return (
-    <div className="flex h-dvh flex-col bg-canvas">
+    <div className="flex h-dvh flex-col bg-stage">
       <TopBar status={status} onRetry={retry} onExport={() => setDialog('export')} onPublish={() => setDialog('publish')} />
       <div className="flex min-h-0 flex-1">
         {/* แถบแท็บซ้าย (จอใหญ่) */}
-        <nav aria-label="เครื่องมือ" className="hidden w-20 shrink-0 flex-col items-center gap-1 border-r border-line bg-surface py-2 md:flex">
+        <nav aria-label="เครื่องมือ" className="hidden w-20 shrink-0 flex-col items-center gap-1 bg-surface py-3 md:flex">
           {PANELS.map((p) => (
             <button
               key={p.key}
               type="button"
               aria-pressed={panel === p.key}
               onClick={() => setPanel(panel === p.key ? null : p.key)}
-              className={cx(
-                'flex w-16 flex-col items-center gap-0.5 rounded-xl py-2 text-csmju-caption',
-                panel === p.key ? 'bg-primary-soft font-semibold text-primary' : 'text-body hover:bg-surface-muted',
-              )}
+              className="group flex w-16 flex-col items-center gap-1 py-1 text-csmju-caption text-ink"
             >
-              <p.icon aria-hidden className="size-6" />
-              {p.label}
+              <span
+                className={cx(
+                  'flex size-10 items-center justify-center rounded-xl transition-colors',
+                  panel === p.key ? 'bg-primary-soft text-primary' : 'text-body group-hover:bg-surface-muted',
+                )}
+              >
+                <p.icon aria-hidden className="size-6" />
+              </span>
+              <span className={cx(panel === p.key && 'font-semibold text-primary')}>{p.label}</span>
             </button>
           ))}
         </nav>
         {panel && (
-          <aside aria-label={PANELS.find((p) => p.key === panel)?.label} className="hidden w-80 shrink-0 overflow-y-auto border-r border-line bg-surface p-4 md:block">
-            <h2 className="mb-3 text-csmju-h3 font-semibold text-ink">{PANELS.find((p) => p.key === panel)?.label}</h2>
-            <PanelContent panel={panel} />
+          <aside aria-label={PANELS.find((p) => p.key === panel)?.label} className="relative hidden w-88 shrink-0 border-l border-line bg-surface md:flex md:flex-col">
+            <div className="min-h-0 flex-1 overflow-y-auto p-4">
+              <h2 className="sr-only">{PANELS.find((p) => p.key === panel)?.label}</h2>
+              <PanelContent panel={panel} />
+            </div>
+            {/* ปุ่มพับแผงตรงขอบแบบ Canva */}
+            <button
+              type="button"
+              onClick={() => setPanel(null)}
+              aria-label="พับแผงเครื่องมือ"
+              title="พับแผงเครื่องมือ"
+              className="absolute top-1/2 -right-4 z-10 flex h-24 w-4 -translate-y-1/2 items-center justify-center rounded-r-xl border border-l-0 border-line bg-surface text-muted hover:text-ink"
+            >
+              <ChevronLeft aria-hidden className="size-4" />
+            </button>
           </aside>
         )}
 
         <div className="flex min-w-0 flex-1 flex-col">
           <PropertiesBar />
-          <Stage />
+          <div className="relative flex min-h-0 flex-1 flex-col">
+            <Stage />
+            <SelectionToolbar />
+          </div>
           <ZoomBar />
         </div>
       </div>
@@ -138,30 +158,48 @@ function TopBar({
   const designType = useEditor((s) => s.designType);
 
   return (
-    <header className="flex min-h-14 items-center gap-1 border-b border-line bg-surface px-2">
-      <Link href="/" aria-label="กลับหน้าหลัก" title="กลับหน้าหลัก" className="inline-flex size-11 items-center justify-center rounded-xl text-ink hover:bg-primary-soft">
-        <ChevronLeft aria-hidden className="size-6" />
+    <header className="csmju-brandbar flex min-h-14 items-center gap-1 px-2 text-on-inverse">
+      <Link href="/" className="inline-flex min-h-11 items-center gap-1 rounded-xl px-3 text-csmju-caption font-semibold hover:bg-surface/15">
+        <ChevronLeft aria-hidden className="size-5" />
+        <span className="hidden sm:inline">หน้าแรก</span>
       </Link>
-      <TitleField />
-      <span className="hidden text-csmju-caption text-muted lg:inline">{designTypeLabel(designType)}</span>
+      <span className="hidden rounded-xl px-3 py-2 text-csmju-caption lg:inline">{designTypeLabel(designType)}</span>
+      <span aria-hidden className="mx-1 hidden h-6 w-px bg-surface/30 sm:block" />
+      <BarIcon label="ย้อนกลับ (Ctrl+Z)" disabled={!canUndo} onClick={() => useEditor.getState().undo()}>
+        <Undo2 aria-hidden className="size-5" />
+      </BarIcon>
+      <BarIcon label="ทำซ้ำ (Ctrl+Shift+Z)" disabled={!canRedo} onClick={() => useEditor.getState().redo()}>
+        <Redo2 aria-hidden className="size-5" />
+      </BarIcon>
       <SaveIndicator status={status} onRetry={onRetry} />
-      <div className="ml-auto flex items-center gap-1">
-        <IconButton label="ย้อนกลับ (Ctrl+Z)" disabled={!canUndo} onClick={() => useEditor.getState().undo()}>
-          <Undo2 aria-hidden className="size-5" />
-        </IconButton>
-        <IconButton label="ทำซ้ำ (Ctrl+Shift+Z)" disabled={!canRedo} onClick={() => useEditor.getState().redo()}>
-          <Redo2 aria-hidden className="size-5" />
-        </IconButton>
+      <div className="ml-auto flex items-center gap-2">
+        <TitleField />
         {canPublish && (
-          <Button variant="ghost" onClick={onPublish} className="hidden sm:inline-flex">
+          <button type="button" onClick={onPublish} className="hidden min-h-11 items-center gap-2 rounded-xl bg-surface/15 px-4 text-csmju-caption font-semibold hover:bg-surface/25 sm:inline-flex">
             <LayoutTemplate aria-hidden className="size-4" /> เผยแพร่เป็นเทมเพลต
-          </Button>
+          </button>
         )}
-        <Button variant="primary" onClick={onExport}>
+        <button type="button" onClick={onExport} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-surface px-4 text-csmju-caption font-semibold text-ink hover:bg-surface-muted">
           <Download aria-hidden className="size-4" /> <span className="hidden sm:inline">ดาวน์โหลด</span>
-        </Button>
+        </button>
       </div>
     </header>
+  );
+}
+
+/// ปุ่มไอคอนบนแถบไล่สี (ไอคอนขาว พื้นโปร่ง)
+function BarIcon({ label, disabled, onClick, children }: { label: string; disabled?: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      onClick={onClick}
+      className="inline-flex size-11 items-center justify-center rounded-xl hover:bg-surface/15 disabled:opacity-40"
+    >
+      {children}
+    </button>
   );
 }
 
@@ -216,7 +254,7 @@ function TitleField() {
             ref.current?.blur();
           }
         }}
-        className="min-h-11 w-36 min-w-0 rounded-xl border border-transparent bg-transparent px-2 text-csmju-body font-semibold text-ink hover:border-line focus:border-primary focus:outline-none sm:w-64"
+        className="min-h-11 w-32 min-w-0 rounded-xl border border-transparent bg-transparent px-2 text-right text-csmju-caption font-semibold text-on-inverse hover:border-surface/40 focus:border-surface focus:bg-surface/10 focus:text-left focus:outline-none sm:w-56"
       />
     </>
   );
@@ -225,14 +263,14 @@ function TitleField() {
 function SaveIndicator({ status, onRetry }: { status: SaveStatus; onRetry: () => void }) {
   if (status === 'error') {
     return (
-      <button type="button" onClick={onRetry} className="inline-flex min-h-11 items-center gap-1 rounded-xl px-2 text-csmju-caption text-danger hover:bg-danger-bg">
+      <button type="button" onClick={onRetry} className="inline-flex min-h-11 items-center gap-1 rounded-xl bg-danger px-3 text-csmju-caption text-on-inverse hover:opacity-90">
         <CloudAlert aria-hidden className="size-5" /> บันทึกไม่สำเร็จ · ลองอีกครั้ง
       </button>
     );
   }
 
   return (
-    <span role="status" className="inline-flex items-center gap-1 px-2 text-csmju-caption text-muted">
+    <span role="status" className="inline-flex items-center gap-1 px-2 text-csmju-caption text-on-inverse">
       {status === 'saved' ? <CloudCheck aria-hidden className="size-5" /> : <LoaderCircle aria-hidden className="size-4 animate-spin" />}
       <span className="hidden sm:inline">{status === 'saved' ? 'บันทึกแล้ว' : 'กำลังบันทึก…'}</span>
     </span>
@@ -261,8 +299,10 @@ function ZoomBar() {
     if (stage) fitToScreen({ width: stage.clientWidth, height: stage.clientHeight });
   };
 
+  const setZoomPercent = (percent: number) => zoomBy(clampZoom(percent / 100) / useEditor.getState().zoom);
+
   return (
-    <div className="mb-16 flex min-h-12 items-center justify-between gap-2 border-t border-line bg-surface px-2 md:mb-0">
+    <div className="mb-16 flex min-h-12 items-center justify-between gap-2 border-t border-line bg-surface px-3 md:mb-0">
       <div className="flex items-center gap-1">
         <IconButton label="หน้าก่อนหน้า" disabled={pageIndex === 0} onClick={() => useEditor.getState().setPageIndex(pageIndex - 1)}>
           <ChevronLeft aria-hidden className="size-5" />
@@ -273,13 +313,38 @@ function ZoomBar() {
         <IconButton label="หน้าถัดไป" disabled={pageIndex >= pageCount - 1} onClick={() => useEditor.getState().setPageIndex(pageIndex + 1)}>
           <ChevronLeft aria-hidden className="size-5 rotate-180" />
         </IconButton>
+        <button
+          type="button"
+          onClick={() => useEditor.getState().addPage()}
+          className="ml-1 hidden min-h-11 items-center gap-1 rounded-xl px-3 text-csmju-caption font-medium text-ink hover:bg-surface-muted sm:inline-flex"
+        >
+          + เพิ่มหน้า
+        </button>
       </div>
-      <div className="flex items-center gap-1">
-        <IconButton label="ซูมออก" onClick={() => zoomBy(1 / 1.2)}>
+      <div className="flex items-center gap-2">
+        <label htmlFor="zoom-slider" className="sr-only">ระดับการซูม</label>
+        <input
+          id="zoom-slider"
+          type="range"
+          min={10}
+          max={400}
+          step={1}
+          value={Math.round(zoom * 100)}
+          onChange={(event) => setZoomPercent(Number(event.target.value))}
+          className="hidden w-36 accent-primary sm:block"
+        />
+        <button
+          type="button"
+          onClick={fit}
+          title="พอดีจอ"
+          className="min-h-11 min-w-16 rounded-xl px-2 text-csmju-caption font-medium text-ink tabular-nums hover:bg-surface-muted"
+        >
+          {Math.round(zoom * 100)}%
+        </button>
+        <IconButton label="ซูมออก" onClick={() => zoomBy(1 / 1.2)} className="sm:hidden">
           <ZoomOut aria-hidden className="size-5" />
         </IconButton>
-        <span className="w-14 text-center text-csmju-caption text-ink tabular-nums">{Math.round(zoom * 100)}%</span>
-        <IconButton label="ซูมเข้า" onClick={() => zoomBy(1.2)}>
+        <IconButton label="ซูมเข้า" onClick={() => zoomBy(1.2)} className="sm:hidden">
           <ZoomIn aria-hidden className="size-5" />
         </IconButton>
         <IconButton label="พอดีจอ" onClick={fit}>
@@ -296,7 +361,7 @@ function MobileSheet({ panel, onPanel }: { panel: PanelKey | null; onPanel: (pan
       {panel && (
         <section
           aria-label={PANELS.find((p) => p.key === panel)?.label}
-          className="fixed inset-x-0 bottom-16 z-30 max-h-[55dvh] overflow-y-auto rounded-t-3xl border-t border-line bg-surface p-4 shadow-csmju-lg"
+          className="fixed inset-x-0 bottom-16 z-30 max-h-sheet overflow-y-auto rounded-t-3xl border-t border-line bg-surface p-4 shadow-csmju-lg"
         >
           <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-line-strong" aria-hidden />
           <div className="mb-3 flex items-center justify-between">

@@ -12,29 +12,33 @@
 @import "tailwindcss";
 
 :root {
-  /* Brand */
-  --csmju-color-primary: rgb(0 76 153);
-  --csmju-color-primary-hover: rgb(0 61 122);
-  --csmju-color-primary-active: rgb(0 46 92);
-  --csmju-color-primary-soft: rgb(230 242 255);
-  --csmju-color-primary-soft-hover: rgb(211 231 252);
-  --csmju-color-focus-ring: rgb(147 197 253);
+  /* Brand — ม่วง-ฟ้าแบบ Canva ตามที่ PL ตัดสิน (4 ต.ค. 2569) เบี่ยงจากน้ำเงินองค์กร rgb(0 76 153)
+     ชื่อ token ยังเป็นชุดเดียวกับ design-system เพื่อสลับกลับได้ในไฟล์นี้ไฟล์เดียว */
+  --csmju-color-primary: rgb(125 42 232);
+  --csmju-color-primary-hover: rgb(106 31 206);
+  --csmju-color-primary-active: rgb(88 24 176);
+  --csmju-color-primary-soft: rgb(240 233 253);
+  --csmju-color-primary-soft-hover: rgb(228 216 252);
+  --csmju-color-focus-ring: rgb(167 139 250);
+  --csmju-color-accent: rgb(0 196 204);
+  --csmju-color-accent-soft: rgb(220 247 248);
 
   /* พื้นผิว */
-  --csmju-color-canvas: rgb(241 245 251);
+  --csmju-color-canvas: rgb(246 243 253);
+  --csmju-color-stage: rgb(235 236 240);
   --csmju-color-surface: rgb(255 255 255);
   --csmju-color-surface-muted: rgb(248 250 252);
   --csmju-color-surface-inverse: rgb(15 23 42);
 
   /* ข้อความ */
-  --csmju-color-text: rgb(15 23 42);
-  --csmju-color-text-body: rgb(51 65 85);
-  --csmju-color-text-muted: rgb(100 116 139);
+  --csmju-color-text: rgb(13 18 22);
+  --csmju-color-text-body: rgb(38 44 52);
+  --csmju-color-text-muted: rgb(89 96 112);
   --csmju-color-text-inverse: rgb(248 250 252);
 
   /* เส้นขอบ */
-  --csmju-color-border: rgb(226 232 240);
-  --csmju-color-border-strong: rgb(203 213 225);
+  --csmju-color-border: rgb(228 228 235);
+  --csmju-color-border-strong: rgb(205 205 215);
 
   /* สถานะ */
   --csmju-color-success-text: rgb(21 128 61);
@@ -46,13 +50,34 @@
   --csmju-color-danger-text: rgb(185 28 28);
   --csmju-color-danger-bg: rgb(254 226 226);
   --csmju-color-danger-border: rgb(252 165 165);
-  --csmju-color-info-text: rgb(0 76 153);
-  --csmju-color-info-bg: rgb(230 242 255);
-  --csmju-color-info-border: rgb(147 197 253);
+  --csmju-color-info-text: rgb(88 24 176);
+  --csmju-color-info-bg: rgb(240 233 253);
+  --csmju-color-info-border: rgb(196 181 253);
+
+  /* พาสเทลของไทล์หมวดหมู่ (แบบ Canva) */
+  --csmju-pastel-peach: rgb(255 228 214);
+  --csmju-pastel-pink: rgb(252 225 238);
+  --csmju-pastel-lilac: rgb(237 225 253);
+  --csmju-pastel-violet: rgb(226 222 254);
+  --csmju-pastel-sky: rgb(219 236 254);
+  --csmju-pastel-mint: rgb(213 245 232);
+  --csmju-pastel-aqua: rgb(212 245 247);
+  --csmju-pastel-butter: rgb(254 245 207);
+
+  /* สีไอคอนประเภทงาน (วงกลมสีในแถวทางลัด) */
+  --csmju-type-orange: rgb(255 107 53);
+  --csmju-type-red: rgb(240 64 80);
+  --csmju-type-pink: rgb(233 72 196);
+  --csmju-type-purple: rgb(139 61 255);
+  --csmju-type-teal: rgb(19 165 155);
+  --csmju-type-green: rgb(22 163 74);
+  --csmju-type-blue: rgb(37 99 235);
+  --csmju-type-indigo: rgb(79 70 229);
+  --csmju-type-magenta: rgb(192 38 211);
 
   /* Elevation */
   --csmju-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
-  --csmju-shadow-md: 0 4px 20px rgba(0, 76, 153, 0.08);
+  --csmju-shadow-md: 0 4px 20px rgba(64, 37, 140, 0.08);
   --csmju-shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.12);
 
   /* Motion */
@@ -62,8 +87,8 @@
   --csmju-ease-standard: cubic-bezier(0.2, 0, 0, 1);
 
   /* Chart palette — ใช้เป็นสีไอคอนประเภทงานด้วย (ห้ามสลับลำดับ) */
-  --csmju-chart-1: rgb(0 76 153);
-  --csmju-chart-2: rgb(14 165 233);
+  --csmju-chart-1: rgb(125 42 232);
+  --csmju-chart-2: rgb(0 196 204);
   --csmju-chart-3: rgb(20 184 166);
   --csmju-chart-4: rgb(139 92 246);
   --csmju-chart-5: rgb(245 158 11);
@@ -101,6 +126,26 @@
   --color-primary-active: var(--csmju-color-primary-active);
   --color-primary-soft: var(--csmju-color-primary-soft);
   --color-primary-soft-hover: var(--csmju-color-primary-soft-hover);
+  --color-accent: var(--csmju-color-accent);
+  --color-accent-soft: var(--csmju-color-accent-soft);
+  --color-stage: var(--csmju-color-stage);
+  --color-pastel-peach: var(--csmju-pastel-peach);
+  --color-pastel-pink: var(--csmju-pastel-pink);
+  --color-pastel-lilac: var(--csmju-pastel-lilac);
+  --color-pastel-violet: var(--csmju-pastel-violet);
+  --color-pastel-sky: var(--csmju-pastel-sky);
+  --color-pastel-mint: var(--csmju-pastel-mint);
+  --color-pastel-aqua: var(--csmju-pastel-aqua);
+  --color-pastel-butter: var(--csmju-pastel-butter);
+  --color-type-orange: var(--csmju-type-orange);
+  --color-type-red: var(--csmju-type-red);
+  --color-type-pink: var(--csmju-type-pink);
+  --color-type-purple: var(--csmju-type-purple);
+  --color-type-teal: var(--csmju-type-teal);
+  --color-type-green: var(--csmju-type-green);
+  --color-type-blue: var(--csmju-type-blue);
+  --color-type-indigo: var(--csmju-type-indigo);
+  --color-type-magenta: var(--csmju-type-magenta);
   --color-focus: var(--csmju-color-focus-ring);
   --color-canvas: var(--csmju-color-canvas);
   --color-surface: var(--csmju-color-surface);
@@ -169,14 +214,38 @@
 }
 
 @layer components {
-  /* พื้นหลังไล่สีของหัวหน้าแรก — ใช้ token ล้วน */
+  /* พื้นหลังไล่สีของหัวหน้า (ฟ้าอมเขียว → ม่วงอ่อน → จางเป็นขาว) แบบหน้าแรกของ Canva */
   .csmju-hero {
-    background-image: linear-gradient(
-      120deg,
-      var(--csmju-color-info-bg) 0%,
-      var(--csmju-color-surface) 45%,
-      var(--csmju-color-primary-soft-hover) 100%
-    );
+    background-image:
+      linear-gradient(to bottom, transparent 55%, var(--csmju-color-surface) 100%),
+      linear-gradient(100deg, rgb(158 226 235) 0%, rgb(214 226 252) 45%, rgb(214 196 250) 80%, rgb(196 168 248) 100%);
+  }
+
+  /* แถบบนของหน้าแก้ไข: ฟ้าอมเขียว → ม่วง */
+  .csmju-brandbar {
+    background-image: linear-gradient(90deg, rgb(0 196 204) 0%, rgb(84 104 236) 55%, rgb(125 42 232) 100%);
+  }
+
+  /* ตัวอักษรไล่สีของหัวข้อหลัก */
+  .csmju-gradient-text {
+    background-image: linear-gradient(90deg, rgb(60 76 230) 0%, rgb(125 42 232) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* ปุ่มหลักไล่สีแบบปุ่ม "สร้าง" ของ Canva */
+  .csmju-gradient-button {
+    background-image: linear-gradient(135deg, rgb(0 196 204) 0%, rgb(125 42 232) 100%);
+    color: var(--csmju-color-text-inverse);
+  }
+
+  /* ซ่อนแถบเลื่อนของแถวการ์ดแนวนอน (ยังเลื่อนด้วยนิ้ว/ทัชแพด/ปุ่มลูกศรได้) */
+  .csmju-scroll-x {
+    scrollbar-width: none;
+  }
+  .csmju-scroll-x::-webkit-scrollbar {
+    display: none;
   }
 
   /* ลายตารางหมากรุกแสดงพื้นที่โปร่งใสรอบผืนผ้าใบ */
@@ -190,4 +259,18 @@
     background-size: 16px 16px;
     background-position: 0 0, 0 8px, 8px -8px, -8px 0;
   }
+}
+
+/* ขนาดเฉพาะของเลย์เอาต์ — ตั้งชื่อเป็น utility แทน arbitrary value ในหน้า (UI-02) */
+@utility max-h-popover {
+  max-height: 70dvh;
+}
+@utility max-h-sheet {
+  max-height: 55dvh;
+}
+@utility max-h-dialog {
+  max-height: 85dvh;
+}
+@utility min-h-panel {
+  min-height: calc(100dvh - 1rem);
 }

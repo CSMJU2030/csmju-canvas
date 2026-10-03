@@ -2,8 +2,8 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  ArrowDown, ArrowUp, Circle, Copy, Eye, EyeOff, Image as ImageIcon, Lock, LockOpen, Minus, MoveRight,
-  Plus, Square, Star, Trash2, Triangle, Type, Upload,
+  ArrowDown, ArrowUp, Circle, CloudUpload, Copy, Eye, EyeOff, Files, Layers, LayoutTemplate, Lock, LockOpen,
+  Minus, MoveRight, Plus, Search, Shapes, Square, Star, Trash2, Triangle, Type, Upload,
 } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { Button, EmptyState, ErrorState, IconButton, Spinner, cx, errorMessage, inputClass, useToast } from '@/components/csmju/primitives';
@@ -14,27 +14,32 @@ import { renderPageToCanvas } from '@/lib/editor/render';
 import { currentPage, useEditor } from '@/lib/editor/store';
 import type { ShapeKind } from '@/lib/editor/types';
 import { formatBytes } from '@/lib/format';
-import type { Asset } from '@/lib/types';
+import { TemplateCard } from '@/components/designs/cards';
+import { designTypeLabel } from '@/lib/design-types';
+import { fitTemplate } from '@/lib/editor/fit-template';
+import { normalizeDocument } from '@/lib/editor/types';
+import type { Asset, Template, TemplateSummary } from '@/lib/types';
 
-export type PanelKey = 'text' | 'shapes' | 'icons' | 'uploads' | 'layers' | 'pages';
+export type PanelKey = 'design' | 'elements' | 'text' | 'uploads' | 'layers' | 'pages';
 
+/// แท็บเครื่องมือด้านซ้ายเรียงแบบ Canva: ออกแบบ · องค์ประกอบ · ข้อความ · อัปโหลด · เลเยอร์ · หน้า
 export const PANELS: { key: PanelKey; label: string; icon: React.ComponentType<{ className?: string; 'aria-hidden'?: boolean }> }[] = [
+  { key: 'design', label: 'ออกแบบ', icon: LayoutTemplate },
+  { key: 'elements', label: 'องค์ประกอบ', icon: Shapes },
   { key: 'text', label: 'ข้อความ', icon: Type },
-  { key: 'shapes', label: 'รูปทรง', icon: Square },
-  { key: 'icons', label: 'ไอคอน', icon: Star },
-  { key: 'uploads', label: 'อัปโหลด', icon: Upload },
-  { key: 'layers', label: 'เลเยอร์', icon: Copy },
-  { key: 'pages', label: 'หน้า', icon: ImageIcon },
+  { key: 'uploads', label: 'อัปโหลด', icon: CloudUpload },
+  { key: 'layers', label: 'เลเยอร์', icon: Layers },
+  { key: 'pages', label: 'หน้า', icon: Files },
 ];
 
 export function PanelContent({ panel }: { panel: PanelKey }) {
   switch (panel) {
+    case 'design':
+      return <DesignPanel />;
+    case 'elements':
+      return <ElementsPanel />;
     case 'text':
       return <TextPanel />;
-    case 'shapes':
-      return <ShapesPanel />;
-    case 'icons':
-      return <IconsPanel />;
     case 'uploads':
       return <UploadsPanel />;
     case 'layers':
@@ -62,17 +67,124 @@ function TextPanel() {
 
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-csmju-caption text-muted">กดเพื่อเพิ่มกล่องข้อความ แล้วดับเบิลคลิกที่ผืนผ้าใบเพื่อพิมพ์</p>
+      <button type="button" onClick={() => add([createText(page, 'body')])} className="min-h-11 rounded-xl bg-primary px-4 text-csmju-caption font-semibold text-on-inverse hover:bg-primary-hover">
+        <Type aria-hidden className="mr-2 inline size-4" />เพิ่มกล่องข้อความ
+      </button>
+      <h3 className="mt-3 text-csmju-body font-semibold text-ink">สไตล์ข้อความเริ่มต้น</h3>
       {presets.map((preset) => (
         <button
           key={preset.key}
           type="button"
           onClick={() => add([createText(page, preset.key)])}
-          className={cx('min-h-14 rounded-xl border border-line px-4 py-3 text-left text-ink hover:bg-surface-muted', preset.className)}
+          className={cx('min-h-14 rounded-xl border border-line-strong px-4 py-3 text-left text-ink hover:border-primary hover:bg-primary-soft', preset.className)}
         >
           {textPresetLabel(preset.key)}
         </button>
       ))}
+    </div>
+  );
+}
+
+/// ช่องค้นหาบนสุดของแผง (แบบ Canva)
+function PanelSearch({ id, label, value, onChange }: { id: string; label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="relative mb-4">
+      <Search aria-hidden className="pointer-events-none absolute top-1/2 left-3 size-5 -translate-y-1/2 text-muted" />
+      <label htmlFor={id} className="sr-only">{label}</label>
+      <input id={id} value={value} onChange={(e) => onChange(e.target.value)} placeholder={label} className={cx(inputClass, 'rounded-xl bg-surface-muted pl-10')} />
+    </div>
+  );
+}
+
+function PanelHeading({ children }: { children: React.ReactNode }) {
+  return <h3 className="mb-2 text-csmju-body font-semibold text-ink">{children}</h3>;
+}
+
+function ElementsPanel() {
+  const [q, setQ] = useState('');
+
+  return (
+    <div>
+      <PanelSearch id="elements-search" label="ค้นหาองค์ประกอบ เช่น ดาว หนังสือ" value={q} onChange={setQ} />
+      {!q.trim() && (
+        <section className="mb-6">
+          <PanelHeading>รูปทรงและเส้น</PanelHeading>
+          <ShapesPanel />
+        </section>
+      )}
+      <section>
+        <PanelHeading>ไอคอน</PanelHeading>
+        <IconsPanel query={q} />
+      </section>
+    </div>
+  );
+}
+
+/// แผง "ออกแบบ": เทมเพลตที่ใช้กับงานนี้ได้ทันที (ประเภทเดียวกันขึ้นก่อน)
+function DesignPanel() {
+  const designType = useEditor((s) => s.designType);
+  const [q, setQ] = useState('');
+  const toast = useToast();
+  const sameType = useQuery({
+    queryKey: ['templates', 'editor', designType],
+    queryFn: () => api.list<TemplateSummary>(`/templates${qs({ designType, limit: 20 })}`),
+  });
+  const all = useQuery({
+    queryKey: ['templates', 'editor-all', q.trim()],
+    queryFn: () => api.list<TemplateSummary>(`/templates${qs({ q: q.trim(), sort: 'popular', limit: 30 })}`),
+  });
+
+  const apply = async (template: TemplateSummary) => {
+    if (!window.confirm(`ใช้เทมเพลต “${template.title}” แทนงานทั้งหมดในหน้านี้? (ย้อนกลับได้ด้วย Ctrl+Z)`)) return;
+
+    try {
+      const full = await api.get<Template>(`/templates/${template.id}`);
+      const state = useEditor.getState();
+      const doc = fitTemplate(normalizeDocument(full.document), { width: full.width, height: full.height }, { width: state.width, height: state.height });
+
+      state.replaceDocument(doc);
+      toast(`ใช้เทมเพลต “${template.title}” แล้ว`);
+    } catch (error) {
+      toast(errorMessage(error), 'error');
+    }
+  };
+
+  const others = (all.data?.items ?? []).filter((t) => q.trim() || t.designType !== designType);
+
+  return (
+    <div>
+      <PanelSearch id="design-search" label="ค้นหาเทมเพลต" value={q} onChange={setQ} />
+      {!q.trim() && (sameType.data?.items.length ?? 0) > 0 && (
+        <section className="mb-6">
+          <PanelHeading>สำหรับ{designTypeLabel(designType).replace(/\s*\(.*\)$/, '')}</PanelHeading>
+          <ul className="grid grid-cols-2 gap-3">
+            {sameType.data!.items.map((t) => (
+              <li key={t.id}>
+                <TemplateCard template={t} onUse={() => void apply(t)} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      <section>
+        <PanelHeading>{q.trim() ? 'ผลการค้นหา' : 'เทมเพลตทั้งหมด'}</PanelHeading>
+        {all.isLoading ? (
+          <Spinner />
+        ) : all.isError ? (
+          <ErrorState message={errorMessage(all.error)} onRetry={() => void all.refetch()} />
+        ) : others.length === 0 ? (
+          <p className="text-csmju-caption text-muted">ไม่พบเทมเพลต</p>
+        ) : (
+          <ul className="grid grid-cols-2 gap-3">
+            {others.map((t) => (
+              <li key={t.id}>
+                <TemplateCard template={t} onUse={() => void apply(t)} />
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="mt-3 text-csmju-caption text-muted">เทมเพลตต่างขนาดจะถูกย่อ/ขยายให้พอดีผืนผ้าใบนี้</p>
+      </section>
     </div>
   );
 }
@@ -96,7 +208,7 @@ function ShapesPanel() {
           <button
             type="button"
             onClick={() => add([createShape(page, shape.kind)])}
-            className="flex aspect-square w-full flex-col items-center justify-center gap-1 rounded-xl border border-line text-csmju-caption text-ink hover:bg-surface-muted"
+            className="flex aspect-square w-full flex-col items-center justify-center gap-1 rounded-xl bg-surface-muted text-csmju-caption text-ink hover:bg-primary-soft"
           >
             {shape.icon}
             {shape.label}
@@ -107,20 +219,17 @@ function ShapesPanel() {
   );
 }
 
-function IconsPanel() {
+function IconsPanel({ query }: { query: string }) {
   const page = usePageSize();
   const add = useEditor((s) => s.addElements);
-  const [q, setQ] = useState('');
   const filtered = useMemo(() => {
-    const term = q.trim().toLowerCase();
+    const term = query.trim().toLowerCase();
 
     return term ? ICONS.filter((icon) => icon.label.includes(term) || icon.name.includes(term)) : ICONS;
-  }, [q]);
+  }, [query]);
 
   return (
     <div className="flex flex-col gap-3">
-      <label htmlFor="icon-search" className="sr-only">ค้นหาไอคอน</label>
-      <input id="icon-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="ค้นหาไอคอน เช่น ดาว หนังสือ" className={inputClass} />
       {filtered.length === 0 ? (
         <p className="text-csmju-caption text-muted">ไม่พบไอคอน</p>
       ) : (

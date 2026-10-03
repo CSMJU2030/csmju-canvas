@@ -61,6 +61,8 @@ export interface EditorState extends EditorMeta {
   alignSelected(edge: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom'): void;
 
   setBackground(color: string | null): void;
+  /// แทนทั้งงานด้วยเอกสารใหม่ (ใช้เทมเพลตจากแผง "ออกแบบ") — ย้อนกลับได้ด้วย undo
+  replaceDocument(doc: DesignDocument): void;
   addPage(): void;
   duplicatePage(index: number): void;
   deletePage(index: number): void;
@@ -361,6 +363,10 @@ export const useEditor = create<EditorState>((set, get) => {
 
     setBackground(color) {
       mutatePage((page) => ({ ...page, background: color }));
+    },
+
+    replaceDocument(doc) {
+      commit(doc, { pageIndex: 0, selection: [], editingTextId: null });
     },
 
     addPage() {

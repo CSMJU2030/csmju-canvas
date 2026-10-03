@@ -77,7 +77,7 @@ export function HelpAssistant() {
           ref={panel}
           role="dialog"
           aria-label="ผู้ช่วยค้นหา"
-          className="fixed right-4 bottom-36 z-30 flex max-h-[70dvh] w-11/12 max-w-md flex-col rounded-2xl border border-line bg-surface shadow-csmju-lg md:bottom-24"
+          className="fixed right-4 bottom-36 z-30 flex max-h-popover w-11/12 max-w-md flex-col rounded-2xl border border-line bg-surface shadow-csmju-lg md:bottom-24"
         >
           <div className="border-b border-line p-4">
             <p className="text-csmju-body font-semibold text-ink">ผู้ช่วย CS Canvas</p>

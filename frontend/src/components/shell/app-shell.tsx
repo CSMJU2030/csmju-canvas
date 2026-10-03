@@ -1,23 +1,21 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
-import { Bell, CirclePlus, FolderOpen, House, LayoutTemplate, LogOut, Trash2, UserRound } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  Bell, BookOpen, CircleUserRound, Clock, FolderOpen, House, LayoutTemplate, LogOut, PanelLeft, Plus,
+  Settings, Trash2, UserRound,
+} from 'lucide-react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
-import type { ReactNode } from 'react';
+import { usePathname } from 'next/navigation';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { api } from '@/lib/csmju/api';
 import { useMe, useSignOut } from '@/lib/csmju/session';
-import type { NotificationItem } from '@/lib/types';
-import { Menu, cx } from '../csmju/primitives';
+import { relativeTime } from '@/lib/format';
+import type { Folder, NotificationItem } from '@/lib/types';
+import { cx } from '../csmju/primitives';
+import { ACCOUNT_SECTIONS } from './account-sections';
 import { CreateDesignProvider, useOpenCreate } from './create-dialog';
 import { HelpAssistant } from './help-assistant';
-
-const NAV = [
-  { href: '/', label: 'หน้าหลัก', icon: House },
-  { href: '/projects', label: 'โปรเจกต์', icon: FolderOpen },
-  { href: '/templates', label: 'เทมเพลต', icon: LayoutTemplate },
-  { href: '/trash', label: 'ถังขยะ', icon: Trash2 },
-];
 
 export const ROLE_LABEL: Record<string, string> = {
   student: 'นักศึกษา',
@@ -28,14 +26,43 @@ export const ROLE_LABEL: Record<string, string> = {
   admin: 'ผู้ดูแลระบบ',
 };
 
-/// โครงหน้าจอหลัก: แถบซ้าย (จอใหญ่) / แถบล่าง (มือถือ) + พื้นที่เนื้อหา + ปุ่มผู้ช่วย ?
+const NAV = [
+  { href: '/', label: 'หน้าหลัก', icon: House },
+  { href: '/projects', label: 'โปรเจกต์', icon: FolderOpen },
+  { href: '/templates', label: 'เทมเพลต', icon: LayoutTemplate },
+  { href: '/help', label: 'คู่มือ', icon: BookOpen },
+];
+
+function isActive(pathname: string, href: string) {
+  return href === '/' ? pathname === '/' : pathname.startsWith(href);
+}
+
+/// โครงหน้าจอแบบ Canva: แถบไอคอนซ้าย (พื้นม่วงอ่อน) + แถบรองตามหน้า + แผ่นเนื้อหาสีขาวขอบมน
 export function AppShell({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+  const [secondaryOpen, setSecondaryOpen] = useState(true);
+  const secondary = pathname.startsWith('/projects') || pathname.startsWith('/trash')
+    ? 'projects'
+    : pathname.startsWith('/account')
+      ? 'account'
+      : null;
+
   return (
     <CreateDesignProvider>
-      <div className="flex min-h-dvh">
-        <Rail />
-        <main id="main" className="min-w-0 flex-1 pb-24 md:p-2 md:pb-2">
-          <div className="min-h-full rounded-none bg-surface md:min-h-[calc(100dvh-1rem)] md:rounded-3xl md:shadow-csmju-md">{children}</div>
+      <div className="flex min-h-dvh bg-canvas">
+        <Rail onToggleSecondary={secondary ? () => setSecondaryOpen((v) => !v) : undefined} />
+        {secondary && secondaryOpen && (
+          <aside aria-label="เมนูรอง" className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col px-3 py-4 lg:flex">
+            <Link href="/" className="csmju-gradient-text mb-4 px-3 text-csmju-h2 font-bold italic">
+              CS Canvas
+            </Link>
+            {secondary === 'projects' ? <ProjectsNav /> : <AccountNav />}
+          </aside>
+        )}
+        <main id="main" className="min-w-0 flex-1 pb-24 md:py-2 md:pr-2 md:pb-2">
+          <div className="relative min-h-dvh overflow-hidden bg-surface md:min-h-panel md:rounded-3xl md:shadow-csmju-md">
+            {children}
+          </div>
         </main>
         <MobileBar />
         <HelpAssistant />
@@ -44,121 +71,289 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 }
 
-function useUnreadCount() {
-  const { data } = useQuery({
+function useUnread() {
+  return useQuery({
     queryKey: ['notifications', 'unread'],
     queryFn: () => api.list<NotificationItem>('/notifications?unread=true&limit=1'),
     refetchInterval: 60_000,
-  });
-
-  return data?.meta.total ?? 0;
+  }).data?.meta.total ?? 0;
 }
 
-function isActive(pathname: string, href: string) {
-  return href === '/' ? pathname === '/' : pathname.startsWith(href);
-}
-
-function Rail() {
+function Rail({ onToggleSecondary }: { onToggleSecondary?: () => void }) {
   const pathname = usePathname();
   const openCreate = useOpenCreate();
-  const unread = useUnreadCount();
 
   return (
     <nav aria-label="เมนูหลัก" className="sticky top-0 hidden h-dvh w-20 shrink-0 flex-col items-center gap-1 py-3 md:flex">
-      <RailButton label="สร้าง" onClick={() => openCreate()}>
-        <CirclePlus aria-hidden className="size-7 text-primary" />
-      </RailButton>
-      <div className="my-2 h-px w-10 bg-line" />
-      {NAV.map((item) => (
-        <RailLink key={item.href} href={item.href} label={item.label} active={isActive(pathname, item.href)}>
-          <item.icon aria-hidden className="size-6" />
-        </RailLink>
-      ))}
-      <div className="mt-auto flex flex-col items-center gap-1">
-        <RailLink href="/notifications" label="แจ้งเตือน" active={isActive(pathname, '/notifications')} badge={unread}>
-          <Bell aria-hidden className="size-6" />
-        </RailLink>
-        <AccountMenu />
+      <button
+        type="button"
+        onClick={onToggleSecondary}
+        disabled={!onToggleSecondary}
+        aria-label="แสดง/ซ่อนเมนูรอง"
+        title="แสดง/ซ่อนเมนูรอง"
+        className="mb-2 inline-flex size-11 items-center justify-center rounded-xl text-body hover:bg-primary-soft disabled:opacity-30"
+      >
+        <PanelLeft aria-hidden className="size-5" />
+      </button>
+      <button type="button" onClick={() => openCreate()} className="group mb-3 flex w-16 flex-col items-center gap-1 text-csmju-caption text-ink">
+        <span className="flex size-10 items-center justify-center rounded-full bg-primary text-on-inverse shadow-csmju-md transition-transform group-hover:scale-105">
+          <Plus aria-hidden className="size-6" strokeWidth={2.5} />
+        </span>
+        สร้าง
+      </button>
+      {NAV.map((item) => {
+        const active = isActive(pathname, item.href);
+
+        return (
+          <Link key={item.href} href={item.href} aria-current={active ? 'page' : undefined} className="group flex w-16 flex-col items-center gap-1 py-1 text-csmju-caption text-ink">
+            <span
+              className={cx(
+                'flex size-10 items-center justify-center rounded-xl transition-colors',
+                active ? 'bg-surface text-primary shadow-csmju-sm' : 'text-body group-hover:bg-surface/70',
+              )}
+            >
+              <item.icon aria-hidden className="size-5" fill={active ? 'currentColor' : 'none'} fillOpacity={active ? 0.15 : 0} />
+            </span>
+            <span className={cx(active && 'font-semibold text-primary')}>{item.label}</span>
+          </Link>
+        );
+      })}
+      <div className="mt-auto flex flex-col items-center gap-3">
+        <NotificationsPopover />
+        <AccountPopover />
       </div>
     </nav>
   );
 }
 
-function RailLink({
-  href,
-  label,
-  active,
-  badge = 0,
-  children,
-}: {
-  href: string;
-  label: string;
-  active: boolean;
-  badge?: number;
-  children: ReactNode;
-}) {
+/// ป๊อปโอเวอร์ที่ลอยออกจากแถบซ้าย (แจ้งเตือน · บัญชี) — ปิดเมื่อคลิกข้างนอกหรือ Esc
+function usePopover() {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const close = (event: PointerEvent) => {
+      if (!ref.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => event.key === 'Escape' && setOpen(false);
+
+    document.addEventListener('pointerdown', close);
+    document.addEventListener('keydown', onKey);
+
+    return () => {
+      document.removeEventListener('pointerdown', close);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  return { open, setOpen, ref };
+}
+
+function NotificationsPopover() {
+  const { open, setOpen, ref } = usePopover();
+  const unread = useUnread();
+  const queryClient = useQueryClient();
+  const list = useQuery({
+    queryKey: ['notifications', 'popover'],
+    queryFn: () => api.list<NotificationItem>('/notifications?limit=8'),
+    enabled: open,
+  });
+  const markAll = useMutation({
+    mutationFn: () => api.patch('/notifications', { read: true }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+  });
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        aria-label={unread ? `การแจ้งเตือน (${unread} รายการที่ยังไม่อ่าน)` : 'การแจ้งเตือน'}
+        title="การแจ้งเตือน"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className={cx('relative inline-flex size-11 items-center justify-center rounded-xl text-body hover:bg-surface/70', open && 'bg-primary-soft text-primary')}
+      >
+        <Bell aria-hidden className="size-5" />
+        {unread > 0 && (
+          <span className="absolute -top-0.5 -right-0.5 min-w-5 rounded-full bg-danger px-1 text-center text-csmju-caption leading-5 text-on-inverse tabular-nums">
+            {unread > 9 ? '9+' : unread}
+          </span>
+        )}
+      </button>
+      {open && (
+        <div role="dialog" aria-label="การแจ้งเตือน" className="absolute bottom-0 left-14 z-50 flex max-h-popover w-96 flex-col rounded-2xl border border-line bg-surface shadow-csmju-lg">
+          <div className="flex items-center justify-between border-b border-line px-4 py-3">
+            <h2 className="text-csmju-body font-semibold text-ink">การแจ้งเตือน</h2>
+            <button type="button" onClick={() => markAll.mutate()} className="min-h-11 px-2 text-csmju-caption font-semibold text-ink hover:text-primary">
+              อ่านทั้งหมดแล้ว
+            </button>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {list.isLoading ? (
+              <p className="p-4 text-csmju-caption text-muted">กำลังโหลด…</p>
+            ) : (list.data?.items.length ?? 0) === 0 ? (
+              <div className="flex flex-col items-center gap-2 px-6 py-10 text-center">
+                <span className="flex size-14 items-center justify-center rounded-full bg-primary-soft text-primary">
+                  <Bell aria-hidden className="size-7" />
+                </span>
+                <p className="text-csmju-body font-semibold text-ink">ยังไม่มีการแจ้งเตือน</p>
+                <p className="text-csmju-caption text-muted">เช่น เมื่อมีคนใช้เทมเพลตของคุณ</p>
+              </div>
+            ) : (
+              <ul>
+                {list.data!.items.map((n) => (
+                  <li key={n.id} className="border-b border-line last:border-b-0">
+                    <Link href={n.link ?? '/notifications'} onClick={() => setOpen(false)} className="flex gap-3 px-4 py-3 hover:bg-surface-muted">
+                      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary">
+                        {n.kind === 'TEMPLATE_USED' ? <LayoutTemplate aria-hidden className="size-5" /> : <Trash2 aria-hidden className="size-5" />}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-csmju-caption text-ink">{n.title}</span>
+                        <span className="block text-csmju-caption text-muted">{relativeTime(n.createdAt)}</span>
+                      </span>
+                      {!n.readAt && <span aria-label="ยังไม่อ่าน" className="mt-2 size-2.5 shrink-0 rounded-full bg-danger" />}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <Link href="/notifications" onClick={() => setOpen(false)} className="border-t border-line px-4 py-3 text-center text-csmju-caption font-semibold text-primary hover:bg-surface-muted">
+            ดูการแจ้งเตือนทั้งหมด
+          </Link>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function Avatar({ email, size = 'md' }: { email: string; size?: 'md' | 'lg' }) {
+  const initial = (email.split('@')[0] || '?').slice(0, 1).toUpperCase();
+
+  return (
+    <span
+      aria-hidden
+      className={cx(
+        'csmju-gradient-button flex shrink-0 items-center justify-center rounded-full font-semibold',
+        size === 'lg' ? 'size-14 text-csmju-h3' : 'size-10 text-csmju-body',
+      )}
+    >
+      {initial}
+    </span>
+  );
+}
+
+function AccountPopover() {
+  const { open, setOpen, ref } = usePopover();
+  const me = useMe();
+  const signOut = useSignOut();
+  const items = [
+    { href: '/account', label: 'บัญชีของคุณ', icon: CircleUserRound },
+    { href: '/account/accessibility', label: 'การตั้งค่า', icon: Settings },
+    { href: '/help', label: 'ความช่วยเหลือและคู่มือ', icon: BookOpen },
+  ];
+
+  return (
+    <div ref={ref} className="relative">
+      <button type="button" aria-label="บัญชีของคุณ" title="บัญชีของคุณ" aria-expanded={open} onClick={() => setOpen((v) => !v)} className="rounded-full ring-offset-2 hover:ring-2 hover:ring-primary-soft-hover">
+        <Avatar email={me.email} />
+      </button>
+      {open && (
+        <div role="dialog" aria-label="บัญชี" className="absolute bottom-0 left-14 z-50 w-80 rounded-2xl border border-line bg-surface py-2 shadow-csmju-lg">
+          <p className="px-4 py-1 text-csmju-caption font-semibold text-muted">บัญชี</p>
+          <Link href="/account" onClick={() => setOpen(false)} className="mx-2 flex items-center gap-3 rounded-xl bg-surface-muted px-3 py-3 hover:bg-primary-soft">
+            <Avatar email={me.email} size="lg" />
+            <span className="min-w-0">
+              <span className="block truncate text-csmju-body font-semibold text-ink">{me.email.split('@')[0]}</span>
+              <span className="block truncate text-csmju-caption text-muted">{me.email}</span>
+              <span className="block text-csmju-caption text-primary">{ROLE_LABEL[me.coreRole] ?? me.coreRole}</span>
+            </span>
+          </Link>
+          <div className="my-2 h-px bg-line" />
+          {items.map((item) => (
+            <Link key={item.href} href={item.href} onClick={() => setOpen(false)} className="flex min-h-11 items-center gap-3 px-4 text-csmju-caption text-ink hover:bg-surface-muted">
+              <item.icon aria-hidden className="size-5" />
+              {item.label}
+            </Link>
+          ))}
+          <div className="my-2 h-px bg-line" />
+          <button type="button" onClick={() => void signOut()} className="flex min-h-11 w-full items-center gap-3 px-4 text-left text-csmju-caption text-ink hover:bg-surface-muted">
+            <LogOut aria-hidden className="size-5" />
+            ออกจากระบบ
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SideLink({ href, label, icon, active }: { href: string; label: string; icon: ReactNode; active: boolean }) {
   return (
     <Link
       href={href}
       aria-current={active ? 'page' : undefined}
       className={cx(
-        'relative flex w-16 flex-col items-center gap-0.5 rounded-xl py-2 text-csmju-caption',
-        active ? 'bg-primary-soft font-semibold text-primary' : 'text-body hover:bg-surface',
+        'flex min-h-11 items-center gap-3 rounded-xl px-3 text-csmju-caption',
+        active ? 'bg-primary-soft-hover font-semibold text-primary' : 'text-ink hover:bg-surface/70',
       )}
     >
-      {children}
-      <span>{label}</span>
-      {badge > 0 && (
-        <span className="absolute top-1 right-2 min-w-5 rounded-full bg-danger px-1 text-center text-csmju-caption leading-5 text-on-inverse tabular-nums">
-          {badge > 99 ? '99+' : badge}
-          <span className="sr-only"> รายการที่ยังไม่อ่าน</span>
-        </span>
-      )}
+      {icon}
+      <span className="truncate">{label}</span>
     </Link>
   );
 }
 
-function RailButton({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) {
+function ProjectsNav() {
+  const pathname = usePathname();
+  const folders = useQuery({ queryKey: ['folders'], queryFn: () => api.list<Folder>('/folders?limit=100') });
+
   return (
-    <button type="button" onClick={onClick} className="flex w-16 flex-col items-center gap-0.5 rounded-xl py-2 text-csmju-caption text-body hover:bg-surface">
-      {children}
-      <span>{label}</span>
-    </button>
+    <div className="flex min-h-0 flex-1 flex-col">
+      <nav aria-label="โปรเจกต์" className="flex flex-col gap-0.5">
+        <SideLink href="/projects" label="โปรเจกต์ทั้งหมด" icon={<FolderOpen aria-hidden className="size-5" />} active={pathname === '/projects'} />
+        <SideLink href="/projects?sort=updated" label="ล่าสุด" icon={<Clock aria-hidden className="size-5" />} active={false} />
+      </nav>
+      {(folders.data?.items.length ?? 0) > 0 && (
+        <>
+          <p className="mt-5 mb-1 px-3 text-csmju-caption font-semibold text-muted">โฟลเดอร์</p>
+          <nav aria-label="โฟลเดอร์" className="flex min-h-0 flex-col gap-0.5 overflow-y-auto">
+            {folders.data!.items.map((folder) => (
+              <SideLink key={folder.id} href={`/projects?folder=${folder.id}`} label={folder.name} icon={<FolderOpen aria-hidden className="size-5 text-muted" />} active={false} />
+            ))}
+          </nav>
+        </>
+      )}
+      <div className="mt-auto">
+        <SideLink href="/trash" label="ถังขยะ" icon={<Trash2 aria-hidden className="size-5" />} active={pathname.startsWith('/trash')} />
+      </div>
+    </div>
   );
 }
 
-function AccountMenu() {
-  const me = useMe();
-  const signOut = useSignOut();
-  const router = useRouter();
-  const initial = (me.email.split('@')[0] || '?').slice(0, 1).toUpperCase();
+function AccountNav() {
+  const pathname = usePathname();
 
   return (
-    <Menu
-      label="บัญชีของคุณ"
-      align="left"
-      triggerClassName="size-12 rounded-full bg-primary text-on-inverse text-csmju-body font-semibold shadow-none hover:bg-primary-hover"
-      trigger={<span aria-hidden>{initial}</span>}
-      items={[
-        {
-          label: `${me.email} · ${ROLE_LABEL[me.coreRole] ?? me.coreRole}`,
-          icon: <UserRound aria-hidden className="size-4" />,
-          onSelect: () => router.push('/account'),
-        },
-        { label: 'ออกจากระบบ', icon: <LogOut aria-hidden className="size-4" />, onSelect: () => void signOut() },
-      ]}
-    />
+    <nav aria-label="หัวข้อบัญชี" className="flex flex-col gap-0.5">
+      {ACCOUNT_SECTIONS.map((s) => {
+        const href = s.key === 'profile' ? '/account' : `/account/${s.key}`;
+
+        return <SideLink key={s.key} href={href} label={s.label} icon={<s.icon aria-hidden className="size-5" />} active={pathname === href} />;
+      })}
+    </nav>
   );
 }
 
 function MobileBar() {
   const pathname = usePathname();
   const openCreate = useOpenCreate();
-  const unread = useUnreadCount();
+  const unread = useUnread();
   const items = [
-    NAV[0],
-    NAV[1],
-    { href: '#create', label: 'สร้าง', icon: CirclePlus },
+    { href: '/', label: 'หน้าหลัก', icon: House },
+    { href: '/projects', label: 'โปรเจกต์', icon: FolderOpen },
+    { href: '#create', label: 'สร้าง', icon: Plus },
     { href: '/notifications', label: 'แจ้งเตือน', icon: Bell },
     { href: '/account', label: 'บัญชี', icon: UserRound },
   ];
@@ -167,8 +362,10 @@ function MobileBar() {
     <nav aria-label="เมนูหลัก (มือถือ)" className="fixed inset-x-0 bottom-0 z-30 flex border-t border-line bg-surface md:hidden">
       {items.map((item) =>
         item.href === '#create' ? (
-          <button key={item.href} type="button" onClick={() => openCreate()} className="flex min-h-16 flex-1 flex-col items-center justify-center text-csmju-caption text-primary">
-            <item.icon aria-hidden className="size-7" />
+          <button key={item.href} type="button" onClick={() => openCreate()} className="flex min-h-16 flex-1 flex-col items-center justify-center gap-0.5 text-csmju-caption text-ink">
+            <span className="flex size-9 items-center justify-center rounded-full bg-primary text-on-inverse">
+              <item.icon aria-hidden className="size-5" strokeWidth={2.5} />
+            </span>
             {item.label}
           </button>
         ) : (
@@ -176,10 +373,7 @@ function MobileBar() {
             key={item.href}
             href={item.href}
             aria-current={isActive(pathname, item.href) ? 'page' : undefined}
-            className={cx(
-              'relative flex min-h-16 flex-1 flex-col items-center justify-center text-csmju-caption',
-              isActive(pathname, item.href) ? 'font-semibold text-primary' : 'text-body',
-            )}
+            className={cx('relative flex min-h-16 flex-1 flex-col items-center justify-center text-csmju-caption', isActive(pathname, item.href) ? 'font-semibold text-primary' : 'text-body')}
           >
             <item.icon aria-hidden className="size-6" />
             {item.label}

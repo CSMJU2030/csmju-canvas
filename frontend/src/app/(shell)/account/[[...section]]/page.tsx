@@ -1,15 +1,13 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  Accessibility, AppWindow, Download, ExternalLink, HardDrive, KeyRound, Mail, ShieldCheck, Trash2,
-  UserRound, UsersRound,
-} from 'lucide-react';
+import { Download, ExternalLink, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { notFound, useParams } from 'next/navigation';
 import { useState, type ReactNode } from 'react';
 import { Button, ErrorState, FormField, Spinner, Toggle, cx, errorMessage, inputClass, useToast } from '@/components/csmju/primitives';
 import { ROLE_LABEL } from '@/components/shell/app-shell';
+import { ACCOUNT_SECTIONS, type AccountSectionKey } from '@/components/shell/account-sections';
 import { api } from '@/lib/csmju/api';
 import { useMe, useSignOut } from '@/lib/csmju/session';
 import { formatBytes } from '@/lib/format';
@@ -17,18 +15,9 @@ import type { Preference, Quota } from '@/lib/types';
 
 const CORE_HUB_WEB_URL = (process.env.NEXT_PUBLIC_CORE_HUB_WEB_URL ?? 'https://csmju2030.jowave.com').replace(/\/+$/, '');
 
-const SECTIONS = [
-  { key: 'profile', label: 'ประวัติของคุณ', icon: UserRound },
-  { key: 'security', label: 'บัญชีและความปลอดภัย', icon: KeyRound },
-  { key: 'accessibility', label: 'การเข้าถึง', icon: Accessibility },
-  { key: 'messages', label: 'การตั้งค่าข้อความ', icon: Mail },
-  { key: 'privacy', label: 'การควบคุมความเป็นส่วนตัว', icon: ShieldCheck },
-  { key: 'storage', label: 'ข้อมูลและพื้นที่จัดเก็บ', icon: HardDrive },
-  { key: 'team', label: 'ทีมของคุณ', icon: UsersRound },
-  { key: 'apps', label: 'แอปของคุณ', icon: AppWindow },
-] as const;
+const SECTIONS = ACCOUNT_SECTIONS;
 
-type SectionKey = (typeof SECTIONS)[number]['key'];
+type SectionKey = AccountSectionKey;
 
 export default function AccountPage() {
   const params = useParams<{ section?: string[] }>();
@@ -38,15 +27,16 @@ export default function AccountPage() {
   if (!section || (params.section?.length ?? 0) > 1) notFound();
 
   return (
-    <div className="flex flex-col md:flex-row">
-      <nav aria-label="หัวข้อบัญชี" className="flex shrink-0 gap-1 overflow-x-auto border-b border-line p-3 md:w-72 md:flex-col md:border-r md:border-b-0 md:p-4">
+    <div>
+      {/* จอเล็ก-กลาง: แท็บแนวนอน · จอใหญ่ใช้เมนูรองของ AppShell */}
+      <nav aria-label="หัวข้อบัญชี" className="csmju-scroll-x flex gap-1 overflow-x-auto border-b border-line px-3 py-2 lg:hidden">
         {SECTIONS.map((s) => (
           <Link
             key={s.key}
             href={s.key === 'profile' ? '/account' : `/account/${s.key}`}
             aria-current={s.key === key ? 'page' : undefined}
             className={cx(
-              'flex min-h-11 shrink-0 items-center gap-3 rounded-xl px-3 text-csmju-caption',
+              'flex min-h-11 shrink-0 items-center gap-2 rounded-xl px-3 text-csmju-caption',
               s.key === key ? 'bg-primary-soft font-semibold text-primary' : 'text-ink hover:bg-surface-muted',
             )}
           >
@@ -55,18 +45,18 @@ export default function AccountPage() {
           </Link>
         ))}
       </nav>
-      <div className="min-w-0 flex-1 px-4 py-8 md:px-10">
-        <div className="mx-auto max-w-2xl">
-          <h1 className="mb-6 text-csmju-h1 font-bold text-ink">{section.label}</h1>
-          {key === 'profile' && <ProfileSection />}
-          {key === 'security' && <SecuritySection />}
-          {key === 'accessibility' && <AccessibilitySection />}
-          {key === 'messages' && <MessagesSection />}
-          {key === 'privacy' && <PrivacySection />}
-          {key === 'storage' && <StorageSection />}
-          {key === 'team' && <TeamSection />}
-          {key === 'apps' && <AppsSection />}
-        </div>
+      <div className="csmju-hero px-4 pt-14 pb-10 text-center md:px-10">
+        <h1 className="text-csmju-h1 font-bold text-ink">{section.label}</h1>
+      </div>
+      <div className="mx-auto max-w-3xl px-4 pb-16 md:px-6">
+        {key === 'profile' && <ProfileSection />}
+        {key === 'security' && <SecuritySection />}
+        {key === 'accessibility' && <AccessibilitySection />}
+        {key === 'messages' && <MessagesSection />}
+        {key === 'privacy' && <PrivacySection />}
+        {key === 'storage' && <StorageSection />}
+        {key === 'team' && <TeamSection />}
+        {key === 'apps' && <AppsSection />}
       </div>
     </div>
   );
@@ -74,9 +64,9 @@ export default function AccountPage() {
 
 function Card({ title, children }: { title?: string; children: ReactNode }) {
   return (
-    <section className="mb-6 rounded-2xl border border-line p-5">
-      {title && <h2 className="mb-3 text-csmju-h3 font-semibold text-ink">{title}</h2>}
-      {children}
+    <section className="mb-8">
+      {title && <h2 className="mb-3 text-csmju-h3 font-bold text-ink">{title}</h2>}
+      <div className="rounded-2xl border border-line px-5 py-4">{children}</div>
     </section>
   );
 }

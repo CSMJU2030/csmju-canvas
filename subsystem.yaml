@@ -66,6 +66,9 @@ api:
 ui:
   design_system_version: null # ยังติดตั้ง @csmju2030/design-system ไม่ได้ (ต้องมี PAT read:packages) · ใช้ token ชื่อเดียวกันใน globals.css
   tailwind: "4"
+  # หน้าตาแบบ Canva สีม่วง rgb(125 42 232) + ฟ้าอมเขียว rgb(0 196 204) ตามที่ PL ตัดสิน 4 ต.ค. 2569
+  # เบี่ยงจากน้ำเงินองค์กร rgb(0 76 153) · ยังเป็น token ใน globals.css ไฟล์เดียว สลับกลับได้ทันที
+  theme_deviation: canva_like_by_pl_decision
   app_shell: false # วาดแถบซ้ายเอง (components/shell/app-shell.tsx) ระหว่างรอติดตั้ง CsmjuAppShell
 
 modules:

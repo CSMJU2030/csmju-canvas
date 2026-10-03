@@ -2,7 +2,8 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ellipsis, Folder as FolderIcon, FolderPlus, Search } from 'lucide-react';
-import { useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useState } from 'react';
 import { Button, EmptyState, ErrorState, Menu, Spinner, cx, errorMessage, inputClass, useToast } from '@/components/csmju/primitives';
 import { DesignCard } from '@/components/designs/cards';
 import { DesignMenu, RenameDialog } from '@/components/designs/design-menu';
@@ -15,7 +16,18 @@ import { Pager, SelectBox } from '@/components/csmju/list-controls';
 const PAGE_SIZE = 20;
 
 export default function ProjectsPage() {
-  const [folderId, setFolderId] = useState<string | null>(null);
+  return (
+    <Suspense fallback={<Spinner />}>
+      <Projects />
+    </Suspense>
+  );
+}
+
+function Projects() {
+  const params = useSearchParams();
+  const router = useRouter();
+  const folderId = params.get('folder');
+  const setFolderId = (id: string | null) => router.replace(id ? `/projects?folder=${id}` : '/projects');
   const [q, setQ] = useState('');
   const [designType, setDesignType] = useState('');
   const [sort, setSort] = useState<'updated' | 'created' | 'title'>('updated');
@@ -57,7 +69,7 @@ export default function ProjectsPage() {
   const activeFolder = folders.data?.items.find((f) => f.id === folderId);
 
   return (
-    <div className="px-4 py-8 md:px-8">
+    <div className="px-4 py-8 md:px-10">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-csmju-h1 font-bold text-ink">โปรเจกต์</h1>
         <div className="flex gap-2">
