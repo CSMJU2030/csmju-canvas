@@ -285,7 +285,7 @@ function RecentDesignsNav() {
   const pathname = usePathname();
   const recent = useQuery({
     queryKey: ['designs', 'recent-nav'],
-    queryFn: () => api.list<DesignSummary>('/designs?limit=30&sort=updated'),
+    queryFn: () => api.list<DesignSummary>('/designs?limit=6&sort=updated'),
   });
 
   return (
@@ -317,6 +317,11 @@ function RecentDesignsNav() {
               <span className="truncate">{design.title}</span>
             </Link>
           ))
+        )}
+        {(recent.data?.meta.total ?? 0) > 6 && (
+          <Link href="/projects?view=recent" className="flex min-h-11 items-center justify-center rounded-xl text-csmju-caption font-semibold text-primary hover:bg-surface/70">
+            ดูทั้งหมด
+          </Link>
         )}
       </nav>
       <div className="mt-2 border-t border-line pt-2">

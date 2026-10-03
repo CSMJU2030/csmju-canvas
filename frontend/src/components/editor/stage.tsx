@@ -300,7 +300,7 @@ export function Stage() {
       return;
     }
 
-    if (event.button === 1 || spaceDown.current) {
+    if (event.button === 1 || spaceDown.current || state.access === 'VIEW') {
       gesture.current = { kind: 'pan', start: { x: event.clientX, y: event.clientY }, pan: state.pan };
       setCursor('grabbing');
       return;
@@ -540,7 +540,7 @@ export function Stage() {
   const onDoubleClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
     const hit = topElementAt(toPage(event.clientX, event.clientY));
 
-    if (hit?.type === 'text' && !hit.locked) {
+    if (hit?.type === 'text' && !hit.locked && useEditor.getState().access !== 'VIEW') {
       const state = useEditor.getState();
 
       state.select([hit.id]);

@@ -28,7 +28,7 @@ export function useAutosave(needsThumbnail = false) {
       const state = useEditor.getState();
       const revision = state.revision;
 
-      if (revision === savedRevision.current || !state.designId) return;
+      if (revision === savedRevision.current || !state.designId || state.access === 'VIEW') return;
 
       saving.current = true;
       setStatus('saving');

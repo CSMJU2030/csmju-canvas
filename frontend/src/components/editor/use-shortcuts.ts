@@ -11,6 +11,9 @@ export function useShortcuts() {
       if (isTyping(event.target)) return;
 
       const state = useEditor.getState();
+
+      // ลิงก์แบบดูได้ — ไม่มีคีย์ลัดที่แก้งาน
+      if (state.access === 'VIEW') return;
       const mod = event.ctrlKey || event.metaKey;
       const key = event.key.toLowerCase();
 

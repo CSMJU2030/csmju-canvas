@@ -1,19 +1,50 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Copy, Ellipsis, FolderInput, PenLine, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { Copy, Download, Ellipsis, ExternalLink, FolderInput, Info, LayoutTemplate, Link2, PenLine, Trash2, UserPlus } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { api } from '@/lib/csmju/api';
+import { useMe } from '@/lib/csmju/session';
 import { useCreateDesign } from '@/lib/create-design';
-import type { DesignSummary, Folder } from '@/lib/types';
-import { Button, Dialog, FormField, Menu, errorMessage, inputClass, useToast } from '../csmju/primitives';
+import { TEMPLATE_CATEGORIES } from '@/lib/design-types';
+import { exportPages } from '@/lib/editor/export';
+import { normalizeDocument } from '@/lib/editor/types';
+import type { Design, DesignSummary, Folder } from '@/lib/types';
+import { Button, Dialog, FormField, cx, errorMessage, inputClass, useToast } from '../csmju/primitives';
+import { DetailsPanel, ShareDialog, copyDesignLink } from './design-actions';
 
-/// เมนู "…" บนการ์ดงาน: เปลี่ยนชื่อ · ทำสำเนา · ย้ายโฟลเดอร์ · ย้ายไปถังขยะ
+/// เมนู "…" บนการ์ดดีไซน์แบบ Canva (ภาพบรีฟ "Home แบบใหม่ 1")
+///
+/// หัวเมนูมีชื่องาน + ปุ่มดินสอเปลี่ยนชื่อ · รายการที่ระบบนี้ไม่มีจริง (พิมพ์ผ่านร้าน · โหมดออฟไลน์)
+/// ไม่แสดง เพื่อไม่ให้มีปุ่มที่กดแล้วไม่ทำอะไร
 export function DesignMenu({ design }: { design: DesignSummary }) {
   const queryClient = useQueryClient();
   const toast = useToast();
-  const [dialog, setDialog] = useState<'rename' | 'folder' | null>(null);
+  const me = useMe();
+  const [open, setOpen] = useState(false);
+  const [dialog, setDialog] = useState<'rename' | 'folder' | 'details' | 'share' | 'publish' | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
   const create = useCreateDesign();
+  const isOwner = design.access === 'OWNER';
+  const canPublish = me.subsystemRole === 'EDITOR' || me.subsystemRole === 'ADMIN';
+
+  useEffect(() => {
+    if (!open) return;
+
+    const close = (event: PointerEvent) => {
+      if (!ref.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => event.key === 'Escape' && setOpen(false);
+
+    document.addEventListener('pointerdown', close);
+    document.addEventListener('keydown', onKey);
+
+    return () => {
+      document.removeEventListener('pointerdown', close);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
 
   const update = useMutation({
     mutationFn: (body: Record<string, unknown>) => api.patch<DesignSummary>(`/designs/${design.id}`, body),
@@ -26,49 +57,200 @@ export function DesignMenu({ design }: { design: DesignSummary }) {
     onError: (error) => toast(errorMessage(error), 'error'),
   });
 
+  const download = async () => {
+    try {
+      const full = await api.get<Design>(`/designs/${design.id}`);
+      const doc = normalizeDocument(full.document);
+
+      await exportPages(doc, { width: full.width, height: full.height }, full.title, {
+        format: 'png',
+        scale: 1,
+        transparent: false,
+        quality: 0.92,
+        pageIndexes: doc.pages.map((_, i) => i),
+      });
+      toast(`ดาวน์โหลด “${full.title}” แล้ว`);
+    } catch (error) {
+      toast(errorMessage(error), 'error');
+    }
+  };
+
+  const run = (fn: () => void) => () => {
+    setOpen(false);
+    fn();
+  };
+
+  const item = 'flex min-h-11 w-full items-center gap-3 px-4 text-left text-csmju-caption text-ink hover:bg-surface-muted';
+
   return (
-    <>
-      <Menu
-        label={`ตัวเลือกของ ${design.title}`}
-        trigger={<Ellipsis aria-hidden className="size-5" />}
-        items={[
-          { label: 'เปลี่ยนชื่อ', icon: <PenLine aria-hidden className="size-4" />, onSelect: () => setDialog('rename') },
-          {
-            label: 'ทำสำเนา',
-            icon: <Copy aria-hidden className="size-4" />,
-            onSelect: () =>
-              create.mutate(
-                { title: `สำเนาของ ${design.title}`.slice(0, 120), copyFromDesignId: design.id },
-                { onError: (error) => toast(errorMessage(error), 'error') },
-              ),
-          },
-          { label: 'ย้ายไปโฟลเดอร์', icon: <FolderInput aria-hidden className="size-4" />, onSelect: () => setDialog('folder') },
-          {
-            label: 'ย้ายไปถังขยะ',
-            icon: <Trash2 aria-hidden className="size-4" />,
-            danger: true,
-            onSelect: () =>
-              update.mutate({ trashed: true }, { onSuccess: () => toast(`ย้าย “${design.title}” ไปถังขยะแล้ว`) }),
-          },
-        ]}
-      />
-      {dialog === 'rename' && (
-        <RenameDialog
-          initial={design.title}
-          busy={update.isPending}
-          onClose={() => setDialog(null)}
-          onSave={(title) => update.mutate({ title })}
-        />
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        aria-label={`ตัวเลือกของ ${design.title}`}
+        title="ตัวเลือก"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          setOpen((v) => !v);
+        }}
+        className={cx('inline-flex size-9 items-center justify-center rounded-lg text-on-inverse shadow-csmju-sm', open ? 'bg-primary' : 'bg-primary/90 hover:bg-primary')}
+      >
+        <Ellipsis aria-hidden className="size-5" />
+      </button>
+      {open && (
+        <div role="menu" aria-label={`ตัวเลือกของ ${design.title}`} className="csmju-pop absolute top-full right-0 z-40 mt-1 max-h-popover w-72 overflow-y-auto rounded-2xl border border-line bg-surface py-1 shadow-csmju-lg" onClick={(e) => e.stopPropagation()}>
+          <div className="border-b border-line px-4 py-3">
+            <div className="flex items-center gap-2">
+              <p className="truncate text-csmju-body font-semibold text-ink">{design.title}</p>
+              {isOwner && (
+                <button type="button" aria-label="เปลี่ยนชื่อ" title="เปลี่ยนชื่อ" onClick={run(() => setDialog('rename'))} className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-ink hover:bg-surface-muted">
+                  <PenLine aria-hidden className="size-4" />
+                </button>
+              )}
+            </div>
+            <p className="text-csmju-caption text-muted">
+              {isOwner ? `โดย ${me.email.split('@')[0]}` : 'แชร์ด้วยลิงก์'} • {design.linkAccess === 'NONE' ? 'เฉพาะคุณ' : 'ทุกคนที่มีลิงก์'}
+            </p>
+          </div>
+          <div className="py-1">
+            <button type="button" role="menuitem" className={item} onClick={run(() => window.open(`/design/${design.id}`, '_blank', 'noopener'))}>
+              <ExternalLink aria-hidden className="size-5" /> เปิดในแท็บใหม่
+            </button>
+            <button type="button" role="menuitem" className={item} onClick={run(() => setDialog('details'))}>
+              <Info aria-hidden className="size-5" /> รายละเอียด
+            </button>
+            {canPublish && (
+              <button type="button" role="menuitem" className={item} onClick={run(() => setDialog('publish'))}>
+                <LayoutTemplate aria-hidden className="size-5" /> บันทึกเป็นเทมเพลต
+              </button>
+            )}
+          </div>
+          <div className="border-t border-line py-1">
+            <button
+              type="button"
+              role="menuitem"
+              className={item}
+              onClick={run(() =>
+                create.mutate({ title: `สำเนาของ ${design.title}`.slice(0, 120), copyFromDesignId: design.id }, { onError: (error) => toast(errorMessage(error), 'error') }),
+              )}
+            >
+              <Copy aria-hidden className="size-5" /> ทำสำเนา
+            </button>
+            <button type="button" role="menuitem" className={item} onClick={run(() => void download())}>
+              <Download aria-hidden className="size-5" /> ดาวน์โหลด (PNG)
+            </button>
+          </div>
+          {isOwner && (
+            <div className="border-t border-line py-1">
+              <button type="button" role="menuitem" className={item} onClick={run(() => setDialog('folder'))}>
+                <FolderInput aria-hidden className="size-5" /> ย้ายโฟลเดอร์
+              </button>
+              <button type="button" role="menuitem" className={item} onClick={run(() => setDialog('share'))}>
+                <UserPlus aria-hidden className="size-5" /> แชร์
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className={item}
+                onClick={run(() =>
+                  void copyDesignLink(design.id)
+                    .then(() => toast(design.linkAccess === 'NONE' ? 'คัดลอกลิงก์แล้ว — ตอนนี้เปิดได้เฉพาะคุณ (เปิดแชร์ได้ที่เมนูแชร์)' : 'คัดลอกลิงก์แล้ว'))
+                    .catch(() => toast('คัดลอกไม่สำเร็จ', 'error')),
+                )}
+              >
+                <Link2 aria-hidden className="size-5" /> คัดลอกลิงก์
+              </button>
+            </div>
+          )}
+          {isOwner && (
+            <div className="border-t border-line py-1">
+              <button
+                type="button"
+                role="menuitem"
+                className={item}
+                onClick={run(() => update.mutate({ trashed: true }, { onSuccess: () => toast(`ย้าย “${design.title}” ไปถังขยะแล้ว`) }))}
+              >
+                <Trash2 aria-hidden className="size-5" /> ย้ายไปที่ถังขยะ
+              </button>
+            </div>
+          )}
+        </div>
       )}
-      {dialog === 'folder' && (
-        <MoveToFolderDialog
-          current={design.folderId}
-          busy={update.isPending}
-          onClose={() => setDialog(null)}
-          onSave={(folderId) => update.mutate({ folderId })}
-        />
-      )}
-    </>
+      {/* portal ไปที่ body — ตัวห่อเมนูบนการ์ดจางเป็น 0 ตอนเมาส์ไม่ได้ชี้ ถ้าไม่ย้ายออก แผงจะมองไม่เห็น */}
+      {dialog &&
+        createPortal(
+          <>
+            {dialog === 'rename' && <RenameDialog initial={design.title} busy={update.isPending} onClose={() => setDialog(null)} onSave={(title) => update.mutate({ title })} />}
+            {dialog === 'folder' && <MoveToFolderDialog current={design.folderId} busy={update.isPending} onClose={() => setDialog(null)} onSave={(folderId) => update.mutate({ folderId })} />}
+            {dialog === 'details' && <DetailsPanel design={design} onClose={() => setDialog(null)} onShare={() => setDialog('share')} />}
+            {dialog === 'share' && <ShareDialog design={design} onClose={() => setDialog(null)} />}
+            {dialog === 'publish' && <PublishFromDesignDialog design={design} onClose={() => setDialog(null)} />}
+          </>,
+          document.body,
+        )}
+    </div>
+  );
+}
+
+/// บันทึกดีไซน์เป็นเทมเพลตจากหน้าแรก/โปรเจกต์ (อาจารย์ บุคลากร ผู้ดูแล)
+function PublishFromDesignDialog({ design, onClose }: { design: DesignSummary; onClose: () => void }) {
+  const [title, setTitle] = useState(design.title);
+  const [category, setCategory] = useState<string>(TEMPLATE_CATEGORIES[0].key);
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const publish = useMutation({
+    mutationFn: async () => {
+      const full = await api.get<Design>(`/designs/${design.id}`);
+
+      return api.post('/templates', {
+        title: title.trim(),
+        designType: full.designType,
+        category,
+        width: full.width,
+        height: full.height,
+        document: full.document,
+        ...(full.thumbnail ? { thumbnail: full.thumbnail } : {}),
+      });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['templates'] });
+      toast('บันทึกเป็นเทมเพลตแล้ว ทุกคนในระบบเห็นและใช้ได้');
+      onClose();
+    },
+    onError: (error) => toast(errorMessage(error), 'error'),
+  });
+
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title="บันทึกเป็นเทมเพลต"
+      footer={
+        <>
+          <Button onClick={onClose}>ยกเลิก</Button>
+          <Button variant="primary" disabled={!title.trim()} loading={publish.isPending} onClick={() => publish.mutate()}>
+            บันทึก
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        <FormField label="ชื่อเทมเพลต">
+          {(props) => <input {...props} maxLength={120} value={title} onChange={(e) => setTitle(e.target.value)} className={inputClass} />}
+        </FormField>
+        <FormField label="หมวดหมู่">
+          {(props) => (
+            <select {...props} value={category} onChange={(e) => setCategory(e.target.value)} className={inputClass}>
+              {TEMPLATE_CATEGORIES.map((c) => (
+                <option key={c.key} value={c.key}>{c.label}</option>
+              ))}
+            </select>
+          )}
+        </FormField>
+      </div>
+    </Dialog>
   );
 }
 

@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  Copy, Eye, UserPlus,
   ChevronLeft, CloudAlert, CloudCheck, Download, LayoutTemplate, LoaderCircle, Maximize, Redo2, Undo2,
   ZoomIn, ZoomOut,
 } from 'lucide-react';
@@ -14,6 +15,8 @@ import { designTypeLabel } from '@/lib/design-types';
 import { useEditor } from '@/lib/editor/store';
 import { normalizeDocument } from '@/lib/editor/types';
 import type { Design } from '@/lib/types';
+import { useCreateDesign } from '@/lib/create-design';
+import { ShareDialog } from '@/components/designs/design-actions';
 import { ExportDialog, PublishTemplateDialog } from './dialogs';
 import { PANELS, PanelContent, type PanelKey } from './panels';
 import { PropertiesBar } from './properties-bar';
@@ -31,7 +34,7 @@ export function EditorScreen({ id }: { id: string }) {
       const d = await api.get<Design>(`/designs/${id}`);
 
       useEditor.getState().load(
-        { designId: d.id, title: d.title, designType: d.designType, width: d.width, height: d.height },
+        { designId: d.id, title: d.title, designType: d.designType, width: d.width, height: d.height, access: d.access, linkAccess: d.linkAccess },
         normalizeDocument(d.document),
       );
 
@@ -71,14 +74,28 @@ function EditorLayout({ needsThumbnail }: { needsThumbnail: boolean }) {
   const [panel, setPanel] = useState<PanelKey | null>(() =>
     typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches ? null : 'design',
   );
-  const [dialog, setDialog] = useState<'export' | 'publish' | null>(null);
-  const { status, retry } = useAutosave(needsThumbnail);
+  const [dialog, setDialog] = useState<'export' | 'publish' | 'share' | null>(null);
+  const readOnly = useEditor((s) => s.access === 'VIEW');
+  const { status, retry } = useAutosave(needsThumbnail && !readOnly);
 
   useShortcuts();
 
+  if (readOnly) {
+    return (
+      <div className="flex h-dvh flex-col bg-stage">
+        <TopBar status="saved" readOnly onRetry={retry} onExport={() => setDialog('export')} onPublish={() => setDialog('publish')} onShare={() => setDialog('share')} />
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          <Stage />
+        </div>
+        <ZoomBar />
+        <ExportDialog open={dialog === 'export'} onClose={() => setDialog(null)} />
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-dvh flex-col bg-stage">
-      <TopBar status={status} onRetry={retry} onExport={() => setDialog('export')} onPublish={() => setDialog('publish')} />
+      <TopBar status={status} onRetry={retry} onExport={() => setDialog('export')} onPublish={() => setDialog('publish')} onShare={() => setDialog('share')} />
       <div className="flex min-h-0 flex-1">
         {/* แถบแท็บซ้าย (จอใหญ่) */}
         <nav aria-label="เครื่องมือ" className="hidden w-20 shrink-0 flex-col items-center gap-1 bg-surface py-3 md:flex">
@@ -136,23 +153,53 @@ function EditorLayout({ needsThumbnail }: { needsThumbnail: boolean }) {
 
       <ExportDialog open={dialog === 'export'} onClose={() => setDialog(null)} />
       {dialog === 'publish' && <PublishTemplateDialog open onClose={() => setDialog(null)} />}
+      {dialog === 'share' && <EditorShareDialog onClose={() => setDialog(null)} />}
     </div>
+  );
+}
+
+/// แชร์จากหน้าแก้ไข — อัปเดตสถานะการแชร์ใน store ด้วยเมื่อปิด
+function EditorShareDialog({ onClose }: { onClose: () => void }) {
+  const designId = useEditor((s) => s.designId);
+  const title = useEditor((s) => s.title);
+  const linkAccess = useEditor((s) => s.linkAccess);
+  const queryClient = useQueryClient();
+
+  return (
+    <ShareDialog
+      design={{ id: designId, title, linkAccess }}
+      onClose={() => {
+        void queryClient.fetchQuery({ queryKey: ['design-share', designId], queryFn: () => api.get<Design>(`/designs/${designId}`) }).then((d) =>
+          useEditor.setState({ linkAccess: d.linkAccess }),
+        );
+        onClose();
+      }}
+    />
   );
 }
 
 function TopBar({
   status,
+  readOnly = false,
   onRetry,
   onExport,
   onPublish,
+  onShare,
 }: {
   status: SaveStatus;
+  readOnly?: boolean;
   onRetry: () => void;
   onExport: () => void;
   onPublish: () => void;
+  onShare: () => void;
 }) {
   const me = useMe();
-  const canPublish = me.subsystemRole === 'EDITOR' || me.subsystemRole === 'ADMIN';
+  const access = useEditor((s) => s.access);
+  const designId = useEditor((s) => s.designId);
+  const title = useEditor((s) => s.title);
+  const create = useCreateDesign();
+  const toast = useToast();
+  const canPublish = !readOnly && (me.subsystemRole === 'EDITOR' || me.subsystemRole === 'ADMIN');
   const canUndo = useEditor((s) => s.past.length > 0);
   const canRedo = useEditor((s) => s.future.length > 0);
   const designType = useEditor((s) => s.designType);
@@ -165,15 +212,39 @@ function TopBar({
       </Link>
       <span className="hidden rounded-xl px-3 py-2 text-csmju-caption lg:inline">{designTypeLabel(designType)}</span>
       <span aria-hidden className="mx-1 hidden h-6 w-px bg-surface/30 sm:block" />
-      <BarIcon label="ย้อนกลับ (Ctrl+Z)" disabled={!canUndo} onClick={() => useEditor.getState().undo()}>
-        <Undo2 aria-hidden className="size-5" />
-      </BarIcon>
-      <BarIcon label="ทำซ้ำ (Ctrl+Shift+Z)" disabled={!canRedo} onClick={() => useEditor.getState().redo()}>
-        <Redo2 aria-hidden className="size-5" />
-      </BarIcon>
-      <SaveIndicator status={status} onRetry={onRetry} />
+      {readOnly ? (
+        <span className="inline-flex min-h-9 items-center gap-1 rounded-full bg-surface/20 px-3 text-csmju-caption font-semibold">
+          <Eye aria-hidden className="size-4" /> ดูอย่างเดียว
+        </span>
+      ) : (
+        <>
+          <BarIcon label="ย้อนกลับ (Ctrl+Z)" disabled={!canUndo} onClick={() => useEditor.getState().undo()}>
+            <Undo2 aria-hidden className="size-5" />
+          </BarIcon>
+          <BarIcon label="ทำซ้ำ (Ctrl+Shift+Z)" disabled={!canRedo} onClick={() => useEditor.getState().redo()}>
+            <Redo2 aria-hidden className="size-5" />
+          </BarIcon>
+          <SaveIndicator status={status} onRetry={onRetry} />
+        </>
+      )}
       <div className="ml-auto flex items-center gap-2">
-        <TitleField />
+        {access === 'OWNER' ? <TitleField /> : <span className="max-w-56 truncate px-2 text-csmju-caption font-semibold">{title}</span>}
+        {access !== 'OWNER' && (
+          <button
+            type="button"
+            onClick={() =>
+              create.mutate({ title: `สำเนาของ ${title}`.slice(0, 120), copyFromDesignId: designId }, { onError: (error) => toast(errorMessage(error), 'error') })
+            }
+            className="hidden min-h-11 items-center gap-2 rounded-xl bg-surface/15 px-4 text-csmju-caption font-semibold hover:bg-surface/25 sm:inline-flex"
+          >
+            <Copy aria-hidden className="size-4" /> ทำสำเนาเป็นของฉัน
+          </button>
+        )}
+        {access === 'OWNER' && (
+          <button type="button" onClick={onShare} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-surface/15 px-4 text-csmju-caption font-semibold hover:bg-surface/25">
+            <UserPlus aria-hidden className="size-4" /> <span className="hidden sm:inline">แชร์</span>
+          </button>
+        )}
         {canPublish && (
           <button type="button" onClick={onPublish} className="hidden min-h-11 items-center gap-2 rounded-xl bg-surface/15 px-4 text-csmju-caption font-semibold hover:bg-surface/25 sm:inline-flex">
             <LayoutTemplate aria-hidden className="size-4" /> เผยแพร่เป็นเทมเพลต

@@ -82,7 +82,7 @@ export function DesignCard({ design, menu, href }: { design: DesignSummary; menu
       ) : (
         <div>{body}</div>
       )}
-      {menu && <div className="absolute top-2 right-2 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">{menu}</div>}
+      {menu && <div className="absolute top-2 right-2 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 md:has-aria-expanded:opacity-100">{menu}</div>}
     </div>
   );
 }

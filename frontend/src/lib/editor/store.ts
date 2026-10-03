@@ -16,6 +16,9 @@ export interface EditorMeta {
   designId: string;
   title: string;
   designType: string;
+  /// สิทธิ์ของผู้เปิด: OWNER · EDIT (ลิงก์แก้ไขได้) · VIEW (ลิงก์ดูได้ = ห้ามแก้ทุกอย่าง)
+  access: 'OWNER' | 'EDIT' | 'VIEW';
+  linkAccess: 'NONE' | 'VIEW' | 'EDIT';
   width: number;
   height: number;
 }
@@ -133,6 +136,8 @@ export const useEditor = create<EditorState>((set, get) => {
     designId: '',
     title: '',
     designType: '',
+    access: 'OWNER',
+    linkAccess: 'NONE',
     width: 1080,
     height: 1080,
     doc: { version: 1, pages: [blankPage()] },
