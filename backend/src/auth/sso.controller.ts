@@ -38,8 +38,8 @@ import {
 /// path ที่ log แทน URL จริง — query ของ callback มี access token อยู่
 const CALLBACK_PATH = '/auth/callback';
 
-/// หน้าที่พาไปเมื่อไม่มี `next` ที่ใช้ได้ (หน้าแรกพาไป /feed อยู่แล้ว)
-const DEFAULT_LANDING = '/feed';
+/// หน้าที่พาไปเมื่อไม่มี `next` ที่ใช้ได้ — หน้าแรกของ CS Canvas (ค่าเดิมจาก nexus คือ /feed)
+const DEFAULT_LANDING = '/';
 
 /// สิ่งที่เบราว์เซอร์เห็นเมื่อ state ไม่ผ่าน (auth-contract.md ข้อ 5.1)
 /// — ทางกลับเข้าระบบ ไม่ใช่ JSON ดิบ · ลิงก์เริ่มการเข้าสู่ระบบรอบใหม่

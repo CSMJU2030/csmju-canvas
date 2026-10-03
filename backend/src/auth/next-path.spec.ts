@@ -10,7 +10,7 @@ import {
 
 /// กฎของ `next` ตาม auth-contract.md ข้อ 5.2 — กัน open redirect
 describe('safeNextPath', () => {
-  it.each(['/feed', '/reels?id=1', '/profile/user-002#posts', '/'])(
+  it.each(['/projects', '/templates?q=1', '/design/abc#page-2', '/'])(
     'ยอม path ภายใน %s',
     (value) => {
       expect(safeNextPath(value)).toBe(value);
@@ -21,14 +21,14 @@ describe('safeNextPath', () => {
     ['ไม่ใช่ string', 42],
     ['ว่าง', ''],
     ['ยาวเกิน 512', `/${'a'.repeat(512)}`],
-    ['ไม่ขึ้นต้นด้วย /', 'feed'],
+    ['ไม่ขึ้นต้นด้วย /', 'projects'],
     ['URL เต็ม', 'https://evil.example.com/'],
     ['//host', '//evil.example.com'],
     ['/\\host', '/\\evil.example.com'],
-    ['อักขระควบคุม', '/feed\nSet-Cookie: x'],
-    ['DEL', '/feed\u007f'],
+    ['อักขระควบคุม', '/projects\nSet-Cookie: x'],
+    ['DEL', '/projects\u007f'],
     ['/auth', '/auth'],
-    ['/auth/login', '/auth/login?next=/feed'],
+    ['/auth/login', '/auth/login?next=/projects'],
     ['/AUTH ตัวใหญ่', '/AUTH/callback'],
     ['/%61uth เข้ารหัส', '/%61uth/login'],
     ['% ที่ถอดรหัสไม่ได้', '/%E0%A4%A'],
@@ -53,7 +53,7 @@ describe('คุกกี้ state (auth-contract.md ข้อ 5.2)', () => {
   });
 
   it('คุกกี้ HttpOnly · Lax · Path=/auth/callback · อายุไม่เกิน 600 วินาที', () => {
-    const cookie = buildStateCookie('s', 'abc', '/feed', false);
+    const cookie = buildStateCookie('s', 'abc', '/projects', false);
 
     expect(cookie).toMatch(/^s=abc\.[A-Za-z0-9_-]+; /);
     expect(cookie).toContain('Path=/auth/callback');
@@ -61,7 +61,7 @@ describe('คุกกี้ state (auth-contract.md ข้อ 5.2)', () => {
     expect(cookie).toContain('SameSite=Lax');
     expect(cookie).toContain('Max-Age=600');
     expect(cookie).not.toContain('Secure');
-    expect(buildStateCookie('s', 'abc', '/feed', true)).toContain('Secure');
+    expect(buildStateCookie('s', 'abc', '/projects', true)).toContain('Secure');
   });
 
   it('อ่านกลับได้ทั้ง state และหน้าที่จะกลับไป', () => {
