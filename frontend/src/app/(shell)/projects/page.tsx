@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowDownUp, ChevronDown, ChevronLeft, CloudUpload, Ellipsis, Folder as FolderIcon, FolderPlus, LayoutGrid,
-  List, Plus, Search, Trash2,
+  List, Plus, Search,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -14,11 +14,12 @@ import { DesignCard, Thumbnail } from '@/components/designs/cards';
 import { Carousel } from '@/components/designs/carousel';
 import { DesignMenu, RenameDialog } from '@/components/designs/design-menu';
 import { EDITED_OPTIONS, FilterPopover } from '@/components/home/search-filters';
+import { UploadsView } from '@/components/projects/uploads-view';
 import { useOpenCreate } from '@/components/shell/create-dialog';
 import { api, qs } from '@/lib/csmju/api';
 import { DESIGN_GROUPS, DESIGN_TYPES, designTypeLabel } from '@/lib/design-types';
 import { formatBytes, relativeTime } from '@/lib/format';
-import type { Asset, DesignSummary, Folder, Quota } from '@/lib/types';
+import type { DesignSummary, Folder, Quota } from '@/lib/types';
 
 const PAGE_SIZE = 30;
 
@@ -74,6 +75,8 @@ function Projects() {
   const groupTypes = group ? DESIGN_TYPES.filter((t) => t.group === group).map((t) => t.key).join(',') : '';
   const listKey = `${folderId}|${view}|${q.trim()}|${designType}|${groupTypes}|${editedWithin}|${sort}`;
 
+  if (view === 'uploads') return <UploadsView focusAssetId={params.get('asset')} />;
+
   return (
     <div>
       <section className="csmju-hero relative px-4 pt-14 pb-6 text-center md:px-10">
@@ -120,9 +123,7 @@ function Projects() {
       </section>
 
       <div className="px-4 pb-12 md:px-10">
-        {view === 'uploads' ? (
-          <UploadsView />
-        ) : (
+        {(
           <>
             <Toolbar sort={sort} onSort={setSort} layout={layout} onLayout={setLayout} onNewFolder={() => setNewFolder(true)} />
             {!filtering && !folderId && view !== 'recent' && <RecentRow />}
@@ -453,72 +454,5 @@ function DesignsList({
       )}
       <Pager page={page} totalPages={designs.data!.meta.totalPages} onPage={setPage} />
     </>
-  );
-}
-
-/// โฟลเดอร์ "อัปโหลด": รูปทั้งหมดที่ผู้ใช้อัปโหลด (ไม่รวมถังขยะ)
-function UploadsView() {
-  const [page, setPage] = useState(1);
-  const queryClient = useQueryClient();
-  const toast = useToast();
-  const openCreate = useOpenCreate();
-  const assets = useQuery({
-    queryKey: ['assets', 'projects', page],
-    queryFn: () => api.list<Asset>(`/assets${qs({ page, limit: 40 })}`),
-  });
-  const trash = useMutation({
-    mutationFn: (id: string) => api.patch(`/assets/${id}`, { trashed: true }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['assets'] });
-      void queryClient.invalidateQueries({ queryKey: ['quotas'] });
-      toast('ย้ายรูปไปถังขยะแล้ว');
-    },
-    onError: (error) => toast(errorMessage(error), 'error'),
-  });
-
-  return (
-    <div className="pt-6">
-      {assets.isLoading ? (
-        <Spinner />
-      ) : assets.isError ? (
-        <ErrorState message={errorMessage(assets.error)} onRetry={() => void assets.refetch()} />
-      ) : assets.data!.items.length === 0 ? (
-        <EmptyState
-          title="ยังไม่มีไฟล์อัปโหลด"
-          description="รูปที่อัปโหลดในหน้าแก้ไขหรือจากปุ่มสร้างจะเก็บไว้ที่นี่"
-          icon={<CloudUpload aria-hidden className="size-8" />}
-          action={
-            <button type="button" onClick={() => openCreate('upload')} className="min-h-11 rounded-xl bg-primary px-5 text-csmju-caption font-semibold text-on-inverse hover:bg-primary-hover">
-              อัปโหลดรูป
-            </button>
-          }
-        />
-      ) : (
-        <>
-          <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
-            {assets.data!.items.map((asset) => (
-              <li key={asset.id} className="group relative">
-                <span className="csmju-checker flex aspect-square items-center justify-center overflow-hidden rounded-xl">
-                  {/* eslint-disable-next-line @next/next/no-img-element -- รูปผ่าน API ที่ต้องมี session */}
-                  <img src={asset.contentUrl} alt={asset.fileName} loading="lazy" className="max-h-full max-w-full object-contain" />
-                </span>
-                <p className="mt-2 truncate text-csmju-caption font-semibold text-ink" title={asset.fileName}>{asset.fileName}</p>
-                <p className="text-csmju-caption text-muted">{formatBytes(asset.sizeBytes)} • {relativeTime(asset.createdAt)}</p>
-                <button
-                  type="button"
-                  onClick={() => trash.mutate(asset.id)}
-                  aria-label={`ย้าย ${asset.fileName} ไปถังขยะ`}
-                  title="ย้ายไปถังขยะ"
-                  className="absolute top-2 right-2 inline-flex size-11 items-center justify-center rounded-xl bg-surface/90 text-danger shadow-csmju-sm md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100"
-                >
-                  <Trash2 aria-hidden className="size-4" />
-                </button>
-              </li>
-            ))}
-          </ul>
-          <Pager page={page} totalPages={assets.data!.meta.totalPages} onPage={setPage} />
-        </>
-      )}
-    </div>
   );
 }

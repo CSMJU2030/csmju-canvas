@@ -11,7 +11,7 @@ import { Suspense, createContext, useContext, useEffect, useRef, useState, type 
 import { api } from '@/lib/csmju/api';
 import { useMe } from '@/lib/csmju/session';
 import { relativeTime } from '@/lib/format';
-import type { DesignSummary, Folder, NotificationItem } from '@/lib/types';
+import type { Asset, DesignSummary, Folder, NotificationItem } from '@/lib/types';
 import { cx } from '../csmju/primitives';
 import { ACCOUNT_SECTIONS } from './account-sections';
 import { AccountPopover } from './account-popover';
@@ -373,7 +373,7 @@ function ProjectsNavInner() {
         </div>
         {expanded && (
           <div className="ml-6 flex min-h-0 flex-col gap-0.5 overflow-y-auto">
-            <SideLink href="/projects?view=uploads" label="อัปโหลด" icon={<CloudUpload aria-hidden className="size-5 text-muted" />} active={onProjects && view === 'uploads'} />
+            <UploadsTree active={onProjects && view === 'uploads'} focus={params.get('asset')} />
             {folders.data?.items.map((f) => (
               <SideLink key={f.id} href={`/projects?folder=${f.id}`} label={f.name} icon={<FolderOpen aria-hidden className="size-5 text-muted" />} active={onProjects && folder === f.id} />
             ))}
@@ -383,6 +383,60 @@ function ProjectsNavInner() {
       <div className="mt-auto border-t border-line pt-2">
         <SideLink href="/trash" label="ถังขยะ" icon={<Trash2 aria-hidden className="size-5" />} active={pathname.startsWith('/trash')} />
       </div>
+    </div>
+  );
+}
+
+/// "อัปโหลด" ในแถบรองกางดูไฟล์ล่าสุดได้ (ภาพบรีฟ "อัพโหลดแบบใหม่") — กดไฟล์เพื่อเปิดรายละเอียด
+function UploadsTree({ active, focus }: { active: boolean; focus: string | null }) {
+  const [open, setOpen] = useState(false);
+  const files = useQuery({
+    queryKey: ['assets', 'sidebar'],
+    queryFn: () => api.list<Asset>('/assets?limit=30'),
+    enabled: open,
+  });
+
+  return (
+    <div>
+      <div className="flex items-center">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          aria-label={open ? 'ซ่อนไฟล์อัปโหลด' : 'แสดงไฟล์อัปโหลด'}
+          className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-surface/70"
+        >
+          <ChevronRight aria-hidden className={cx('size-4 transition-transform', open && 'rotate-90')} />
+        </button>
+        <div className="min-w-0 flex-1">
+          <SideLink href="/projects?view=uploads" label="อัปโหลด" icon={<CloudUpload aria-hidden className="size-5 text-muted" />} active={active && !focus} />
+        </div>
+      </div>
+      {open && (
+        <div className="csmju-fade-in ml-6 flex flex-col gap-0.5">
+          {files.isLoading ? (
+            <p className="px-3 py-2 text-csmju-caption text-muted">กำลังโหลด…</p>
+          ) : (files.data?.items.length ?? 0) === 0 ? (
+            <p className="px-3 py-2 text-csmju-caption text-muted">ยังไม่มีไฟล์</p>
+          ) : (
+            files.data!.items.map((file) => (
+              <Link
+                key={file.id}
+                href={`/projects?view=uploads&asset=${file.id}`}
+                title={file.fileName}
+                aria-current={focus === file.id ? 'page' : undefined}
+                className={cx('flex min-h-11 items-center gap-3 rounded-xl px-3 text-csmju-caption hover:bg-surface/70', focus === file.id ? 'bg-primary-soft-hover font-semibold text-primary' : 'text-ink')}
+              >
+                <span className="flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface">
+                  {/* eslint-disable-next-line @next/next/no-img-element -- รูปผ่าน API ที่ต้องมี session */}
+                  <img src={file.contentUrl} alt="" loading="lazy" className="size-full object-cover" />
+                </span>
+                <span className="truncate">{file.fileName}</span>
+              </Link>
+            ))
+          )}
+        </div>
+      )}
     </div>
   );
 }

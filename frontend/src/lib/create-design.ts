@@ -74,3 +74,32 @@ export async function designFromUpload(file: File): Promise<NewDesignInput> {
     document: doc,
   };
 }
+
+/// "แก้ไขรูปภาพ" จากโฟลเดอร์อัปโหลด — สร้างงานแต่งรูปขนาดเท่ารูปเดิมโดยไม่ต้องอัปโหลดซ้ำ
+export async function designFromAsset(asset: Asset): Promise<NewDesignInput> {
+  const size = await new Promise<{ width: number; height: number }>((resolve, reject) => {
+    const img = new Image();
+
+    img.onload = () => resolve({ width: img.naturalWidth || 1080, height: img.naturalHeight || 1080 });
+    img.onerror = () => reject(new Error('เปิดรูปนี้ไม่ได้'));
+    img.src = asset.contentUrl;
+  });
+  const scale = Math.min(1, MAX_SIDE / Math.max(size.width, size.height));
+  const width = Math.max(16, Math.round(size.width * scale));
+  const height = Math.max(16, Math.round(size.height * scale));
+  const doc = blankDocument();
+  const image = createImage(
+    { width, height },
+    { src: asset.contentUrl, assetId: asset.id, naturalWidth: width, naturalHeight: height, name: asset.fileName },
+  );
+
+  doc.pages[0].elements.push({ ...image, x: 0, y: 0, width, height });
+
+  return {
+    title: asset.fileName.replace(/\.[^.]+$/, '') || 'งานแต่งรูป',
+    designType: 'photo-edit',
+    width,
+    height,
+    document: doc,
+  };
+}
