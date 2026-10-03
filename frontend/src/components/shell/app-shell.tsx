@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Suspense, createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { api } from '@/lib/csmju/api';
 import { useMe, useSignOut } from '@/lib/csmju/session';
 import { relativeTime } from '@/lib/format';
@@ -38,6 +38,13 @@ function isActive(pathname: string, href: string) {
 }
 
 /// โครงหน้าจอแบบ Canva: แถบไอคอนซ้าย (พื้นม่วงอ่อน) + แถบรองตามหน้า + แผ่นเนื้อหาสีขาวขอบมน
+/// หน้าลูกใช้รู้ว่าแถบรองเปิดอยู่ไหม (หน้าบัญชีแสดงแท็บแนวนอนแทนเมื่อแถบปิด)
+const SecondaryOpenContext = createContext(false);
+
+export function useSecondaryOpen() {
+  return useContext(SecondaryOpenContext);
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const secondary: SecondaryKind =
@@ -46,23 +53,37 @@ export function AppShell({ children }: { children: ReactNode }) {
       : pathname.startsWith('/account')
         ? 'account'
         : 'recent';
-  // หน้าแรก/เทมเพลต/คู่มือเริ่มแบบปิด (เหมือน Canva) · โปรเจกต์และบัญชีเริ่มแบบเปิด
-  // ผู้ใช้กดปุ่มมุมซ้ายบนแล้วจำค่าแยกตามชนิดของแถบรองไว้ระหว่างเปลี่ยนหน้า
-  const [override, setOverride] = useState<Partial<Record<SecondaryKind, boolean>>>({});
-  const secondaryOpen = override[secondary] ?? secondary !== 'recent';
+  // แถบรองเปิดเฉพาะเมื่อผู้ใช้กดปุ่มเมนูมุมซ้ายบนเท่านั้น (กดไอคอนในแถบซ้ายไม่ทำให้เด้งขึ้นเอง)
+  // ค่าเดียวใช้ทุกหน้า — เปิดไว้แล้วเปลี่ยนหน้าก็ยังเปิดอยู่ แค่เนื้อหาในแถบเปลี่ยนตามหน้า
+  const [secondaryOpen, setSecondaryOpen] = useState(false);
 
   return (
     <CreateDesignProvider>
+      <SecondaryOpenContext.Provider value={secondaryOpen}>
       <div className="flex min-h-dvh bg-canvas">
-        <Rail open={secondaryOpen} onToggleSecondary={() => setOverride((o) => ({ ...o, [secondary]: !secondaryOpen }))} />
-        {secondaryOpen && (
-          <aside aria-label="เมนูรอง" className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col px-3 py-4 lg:flex">
+        <Rail open={secondaryOpen} onToggleSecondary={() => setSecondaryOpen((v) => !v)} />
+        {/* เลื่อนเข้า-ออกด้วยการเปลี่ยนความกว้าง + จางเข้า · ปิดแล้วใช้ inert กัน Tab เข้าไปโฟกัสของที่มองไม่เห็น */}
+        <aside
+          aria-label="เมนูรอง"
+          aria-hidden={!secondaryOpen}
+          inert={!secondaryOpen}
+          className={cx(
+            'sticky top-0 hidden h-dvh shrink-0 overflow-hidden transition-all duration-300 ease-out motion-reduce:transition-none lg:block',
+            secondaryOpen ? 'w-64 opacity-100' : 'w-0 opacity-0',
+          )}
+        >
+          <div
+            className={cx(
+              'flex h-full w-64 flex-col px-3 py-4 transition-transform duration-300 ease-out motion-reduce:transition-none',
+              secondaryOpen ? 'translate-x-0' : '-translate-x-6',
+            )}
+          >
             <Link href="/" className="csmju-gradient-text mb-4 px-3 text-csmju-h2 font-bold italic">
               CS Canvas
             </Link>
             {secondary === 'projects' ? <ProjectsNav /> : secondary === 'account' ? <AccountNav /> : <RecentDesignsNav />}
-          </aside>
-        )}
+          </div>
+        </aside>
         <main id="main" className="min-w-0 flex-1 pb-24 md:py-2 md:pr-2 md:pb-2">
           <div className="relative min-h-dvh overflow-hidden bg-surface md:min-h-panel md:rounded-3xl md:shadow-csmju-md">
             {children}
@@ -71,6 +92,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <MobileBar />
         <HelpAssistant />
       </div>
+      </SecondaryOpenContext.Provider>
     </CreateDesignProvider>
   );
 }

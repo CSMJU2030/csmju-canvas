@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { notFound, useParams } from 'next/navigation';
 import { useState, type ReactNode } from 'react';
 import { Button, ErrorState, FormField, Spinner, Toggle, cx, errorMessage, inputClass, useToast } from '@/components/csmju/primitives';
-import { ROLE_LABEL } from '@/components/shell/app-shell';
+import { ROLE_LABEL, useSecondaryOpen } from '@/components/shell/app-shell';
 import { ACCOUNT_SECTIONS, type AccountSectionKey } from '@/components/shell/account-sections';
 import { api } from '@/lib/csmju/api';
 import { useMe, useSignOut } from '@/lib/csmju/session';
@@ -24,12 +24,14 @@ export default function AccountPage() {
   const key = (params.section?.[0] ?? 'profile') as SectionKey;
   const section = SECTIONS.find((s) => s.key === key);
 
+  const secondaryOpen = useSecondaryOpen();
+
   if (!section || (params.section?.length ?? 0) > 1) notFound();
 
   return (
     <div>
-      {/* จอเล็ก-กลาง: แท็บแนวนอน · จอใหญ่ใช้เมนูรองของ AppShell */}
-      <nav aria-label="หัวข้อบัญชี" className="csmju-scroll-x flex gap-1 overflow-x-auto border-b border-line px-3 py-2 lg:hidden">
+      {/* แท็บแนวนอน — ซ่อนบนจอใหญ่เมื่อเปิดเมนูรองของ AppShell (ซึ่งแสดงหัวข้อชุดเดียวกัน) */}
+      <nav aria-label="หัวข้อบัญชี" className={cx('csmju-scroll-x flex gap-1 overflow-x-auto border-b border-line px-3 py-2', secondaryOpen && 'lg:hidden')}>
         {SECTIONS.map((s) => (
           <Link
             key={s.key}
