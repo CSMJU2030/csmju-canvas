@@ -11,7 +11,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { api } from '@/lib/csmju/api';
 import { useMe, useSignOut } from '@/lib/csmju/session';
 import { relativeTime } from '@/lib/format';
-import type { Folder, NotificationItem } from '@/lib/types';
+import type { DesignSummary, Folder, NotificationItem } from '@/lib/types';
 import { cx } from '../csmju/primitives';
 import { ACCOUNT_SECTIONS } from './account-sections';
 import { CreateDesignProvider, useOpenCreate } from './create-dialog';
@@ -40,23 +40,27 @@ function isActive(pathname: string, href: string) {
 /// โครงหน้าจอแบบ Canva: แถบไอคอนซ้าย (พื้นม่วงอ่อน) + แถบรองตามหน้า + แผ่นเนื้อหาสีขาวขอบมน
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const [secondaryOpen, setSecondaryOpen] = useState(true);
-  const secondary = pathname.startsWith('/projects') || pathname.startsWith('/trash')
-    ? 'projects'
-    : pathname.startsWith('/account')
-      ? 'account'
-      : null;
+  const secondary: SecondaryKind =
+    pathname.startsWith('/projects') || pathname.startsWith('/trash')
+      ? 'projects'
+      : pathname.startsWith('/account')
+        ? 'account'
+        : 'recent';
+  // หน้าแรก/เทมเพลต/คู่มือเริ่มแบบปิด (เหมือน Canva) · โปรเจกต์และบัญชีเริ่มแบบเปิด
+  // ผู้ใช้กดปุ่มมุมซ้ายบนแล้วจำค่าแยกตามชนิดของแถบรองไว้ระหว่างเปลี่ยนหน้า
+  const [override, setOverride] = useState<Partial<Record<SecondaryKind, boolean>>>({});
+  const secondaryOpen = override[secondary] ?? secondary !== 'recent';
 
   return (
     <CreateDesignProvider>
       <div className="flex min-h-dvh bg-canvas">
-        <Rail onToggleSecondary={secondary ? () => setSecondaryOpen((v) => !v) : undefined} />
-        {secondary && secondaryOpen && (
+        <Rail open={secondaryOpen} onToggleSecondary={() => setOverride((o) => ({ ...o, [secondary]: !secondaryOpen }))} />
+        {secondaryOpen && (
           <aside aria-label="เมนูรอง" className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col px-3 py-4 lg:flex">
             <Link href="/" className="csmju-gradient-text mb-4 px-3 text-csmju-h2 font-bold italic">
               CS Canvas
             </Link>
-            {secondary === 'projects' ? <ProjectsNav /> : <AccountNav />}
+            {secondary === 'projects' ? <ProjectsNav /> : secondary === 'account' ? <AccountNav /> : <RecentDesignsNav />}
           </aside>
         )}
         <main id="main" className="min-w-0 flex-1 pb-24 md:py-2 md:pr-2 md:pb-2">
@@ -79,22 +83,35 @@ function useUnread() {
   }).data?.meta.total ?? 0;
 }
 
-function Rail({ onToggleSecondary }: { onToggleSecondary?: () => void }) {
+type SecondaryKind = 'recent' | 'projects' | 'account';
+
+function Rail({ open, onToggleSecondary }: { open: boolean; onToggleSecondary: () => void }) {
   const pathname = usePathname();
   const openCreate = useOpenCreate();
 
   return (
     <nav aria-label="เมนูหลัก" className="sticky top-0 hidden h-dvh w-20 shrink-0 flex-col items-center gap-1 py-3 md:flex">
-      <button
-        type="button"
-        onClick={onToggleSecondary}
-        disabled={!onToggleSecondary}
-        aria-label="แสดง/ซ่อนเมนูรอง"
-        title="แสดง/ซ่อนเมนูรอง"
-        className="mb-2 inline-flex size-11 items-center justify-center rounded-xl text-body hover:bg-primary-soft disabled:opacity-30"
-      >
-        <PanelLeft aria-hidden className="size-5" />
-      </button>
+      {/* ปุ่มเปิด/ปิดแถบรอง + tooltip สีเข้มใต้ปุ่มแบบ Canva ("ปิดเมนู" / "เปิดเมนู") */}
+      <div className="group relative mb-2">
+        <button
+          type="button"
+          onClick={onToggleSecondary}
+          aria-label={open ? 'ปิดเมนู' : 'เปิดเมนู'}
+          aria-expanded={open}
+          className={cx(
+            'inline-flex size-11 items-center justify-center rounded-xl text-body hover:bg-primary-soft',
+            open && 'bg-primary-soft text-primary',
+          )}
+        >
+          <PanelLeft aria-hidden className="size-5" />
+        </button>
+        <span
+          role="tooltip"
+          className="pointer-events-none absolute top-full left-1/2 z-50 mt-1 -translate-x-1/2 rounded-lg bg-inverse px-2.5 py-1 text-csmju-caption whitespace-nowrap text-on-inverse opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100"
+        >
+          {open ? 'ปิดเมนู' : 'เปิดเมนู'}
+        </span>
+      </div>
       <button type="button" onClick={() => openCreate()} className="group mb-3 flex w-16 flex-col items-center gap-1 text-csmju-caption text-ink">
         <span className="flex size-10 items-center justify-center rounded-full bg-primary text-on-inverse shadow-csmju-md transition-transform group-hover:scale-105">
           <Plus aria-hidden className="size-6" strokeWidth={2.5} />
@@ -302,6 +319,52 @@ function SideLink({ href, label, icon, active }: { href: string; label: string; 
       {icon}
       <span className="truncate">{label}</span>
     </Link>
+  );
+}
+
+/// แถบรองของหน้าแรก: "ดีไซน์ล่าสุด" พร้อมภาพย่อเล็ก (เลื่อนได้) + ถังขยะด้านล่าง
+function RecentDesignsNav() {
+  const pathname = usePathname();
+  const recent = useQuery({
+    queryKey: ['designs', 'recent-nav'],
+    queryFn: () => api.list<DesignSummary>('/designs?limit=30&sort=updated'),
+  });
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <p className="mb-1 px-3 text-csmju-caption font-semibold text-muted">ดีไซน์ล่าสุด</p>
+      <nav aria-label="ดีไซน์ล่าสุด" className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto pr-1">
+        {recent.isLoading ? (
+          <p className="px-3 py-2 text-csmju-caption text-muted">กำลังโหลด…</p>
+        ) : recent.isError ? (
+          <p className="px-3 py-2 text-csmju-caption text-danger">โหลดดีไซน์ล่าสุดไม่สำเร็จ</p>
+        ) : (recent.data?.items.length ?? 0) === 0 ? (
+          <p className="px-3 py-2 text-csmju-caption text-muted">ยังไม่มีดีไซน์ — ดีไซน์ที่คุณเปิดแก้จะขึ้นที่นี่</p>
+        ) : (
+          recent.data!.items.map((design) => (
+            <Link
+              key={design.id}
+              href={`/design/${design.id}`}
+              title={design.title}
+              className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-csmju-caption text-ink hover:bg-surface/70"
+            >
+              <span className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-md bg-surface shadow-csmju-sm">
+                {design.thumbnail ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- ภาพย่อเป็น data URL จากฐานข้อมูล
+                  <img src={design.thumbnail} alt="" className="max-h-full max-w-full object-contain" />
+                ) : (
+                  <LayoutTemplate aria-hidden className="size-4 text-muted" />
+                )}
+              </span>
+              <span className="truncate">{design.title}</span>
+            </Link>
+          ))
+        )}
+      </nav>
+      <div className="mt-2 border-t border-line pt-2">
+        <SideLink href="/trash" label="ถังขยะ" icon={<Trash2 aria-hidden className="size-5" />} active={pathname.startsWith('/trash')} />
+      </div>
+    </div>
   );
 }
 
