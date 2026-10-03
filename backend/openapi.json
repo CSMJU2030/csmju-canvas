@@ -1,0 +1,2286 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/api/v1/notifications": {
+      "get": {
+        "operationId": "NotificationsController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "example": 2,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "example": 50,
+              "type": "number"
+            }
+          },
+          {
+            "name": "unread",
+            "required": false,
+            "in": "query",
+            "description": "true = เฉพาะที่ยังไม่อ่าน",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "สำเร็จ พร้อมข้อมูลแบ่งหน้า",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/NotificationDto"
+                      }
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PaginationMeta"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "การแจ้งเตือนของฉัน (ใหม่สุดก่อน)",
+        "tags": [
+          "notifications"
+        ]
+      },
+      "patch": {
+        "operationId": "NotificationsController_markAll",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateNotificationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/BulkUpdateResultDto"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "ทำเครื่องหมายว่าอ่านแล้วทั้งหมด",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/v1/notifications/{id}": {
+      "patch": {
+        "operationId": "NotificationsController_mark",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateNotificationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/NotificationDto"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "อ่านแล้ว / ยังไม่อ่าน",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/v1/me": {
+      "get": {
+        "operationId": "MeController_me",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "ตัวตนของผู้ใช้ปัจจุบันจาก token ที่ตรวจแล้ว",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/health": {
+      "get": {
+        "operationId": "HealthController_check",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "ตรวจสถานะระบบย่อยและการเชื่อมต่อฐานข้อมูล",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/api/v1/designs": {
+      "get": {
+        "operationId": "DesignsController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "example": 2,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "example": 50,
+              "type": "number"
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "ค้นจากชื่องาน",
+            "schema": {
+              "example": "โปสเตอร์",
+              "type": "string"
+            }
+          },
+          {
+            "name": "designType",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "poster",
+              "type": "string"
+            }
+          },
+          {
+            "name": "folderId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "trashed",
+            "required": false,
+            "in": "query",
+            "description": "true = งานในถังขยะ",
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "editedWithin",
+            "required": false,
+            "in": "query",
+            "description": "แก้ไขล่าสุดภายในช่วงนี้",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "day",
+                "week",
+                "month",
+                "year"
+              ]
+            }
+          },
+          {
+            "name": "sort",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "updated",
+              "type": "string",
+              "enum": [
+                "updated",
+                "created",
+                "title"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "สำเร็จ พร้อมข้อมูลแบ่งหน้า",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/DesignSummaryDto"
+                      }
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PaginationMeta"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "งานของฉัน (ค้นหา กรองประเภท โฟลเดอร์ ช่วงวันที่แก้ หรือถังขยะ)",
+        "tags": [
+          "designs"
+        ]
+      },
+      "post": {
+        "operationId": "DesignsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDesignDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/DesignDto"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "สร้างงานใหม่ (หน้าเปล่า · จากเทมเพลต · หรือทำสำเนางานเดิม)",
+        "tags": [
+          "designs"
+        ]
+      }
+    },
+    "/api/v1/designs/{id}": {
+      "get": {
+        "operationId": "DesignsController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/DesignDto"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "งานหนึ่งชิ้นพร้อม JSON state (CMS ใช้ render สด)",
+        "tags": [
+          "designs"
+        ]
+      },
+      "patch": {
+        "operationId": "DesignsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateDesignDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/DesignDto"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "บันทึกงาน · เปลี่ยนชื่อ · ย้ายโฟลเดอร์ · ย้ายลง/กู้คืนจากถังขยะ",
+        "tags": [
+          "designs"
+        ]
+      },
+      "delete": {
+        "operationId": "DesignsController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/DeletedDto"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "ลบถาวร (เฉพาะงานที่อยู่ในถังขยะ)",
+        "tags": [
+          "designs"
+        ]
+      }
+    },
+    "/api/v1/design-type-usages": {
+      "get": {
+        "operationId": "DesignTypeUsagesController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "example": 2,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "example": 50,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "สำเร็จ พร้อมข้อมูลแบ่งหน้า",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/DesignTypeUsageDto"
+                      }
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PaginationMeta"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "ประเภทงานที่ฉันใช้บ่อย (นับจากงานจริง)",
+        "tags": [
+          "designs"
+        ]
+      }
+    },
+    "/api/v1/templates": {
+      "get": {
+        "operationId": "TemplatesController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "example": 2,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "example": 50,
+              "type": "number"
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "เกียรติบัตร",
+              "type": "string"
+            }
+          },
+          {
+            "name": "designType",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "certificate",
+              "type": "string"
+            }
+          },
+          {
+            "name": "category",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "education",
+              "type": "string"
+            }
+          },
+          {
+            "name": "owner",
+            "required": false,
+            "in": "query",
+            "description": "me = ที่ฉันเผยแพร่ · others = ของคนอื่น",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "me",
+                "others"
+              ]
+            }
+          },
+          {
+            "name": "sort",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "popular",
+              "type": "string",
+              "enum": [
+                "popular",
+                "recent"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "สำเร็จ พร้อมข้อมูลแบ่งหน้า",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/TemplateSummaryDto"
+                      }
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PaginationMeta"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "เทมเพลตทั้งหมด (ยอดนิยม · ล่าสุด · กรองประเภท/หมวด/เจ้าของ)",
+        "tags": [
+          "templates"
+        ]
+      },
+      "post": {
+        "operationId": "TemplatesController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTemplateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/TemplateDto"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "นักศึกษาและผู้เยี่ยมชมเผยแพร่เทมเพลตไม่ได้",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "error"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "example": "NOT_FOUND"
+                        },
+                        "message": {
+                          "type": "string",
+                          "example": "ไม่พบคลิปนี้ อาจถูกลบไปแล้ว"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "เผยแพร่งานเป็นเทมเพลต (อาจารย์ บุคลากร และผู้ดูแลเท่านั้น)",
+        "tags": [
+          "templates"
+        ]
+      }
+    },
+    "/api/v1/templates/{id}": {
+      "get": {
+        "operationId": "TemplatesController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/TemplateDto"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "เทมเพลตหนึ่งชิ้นพร้อม JSON state",
+        "tags": [
+          "templates"
+        ]
+      },
+      "patch": {
+        "operationId": "TemplatesController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTemplateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/TemplateDto"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "แก้ชื่อ คำอธิบาย หรือหมวดของเทมเพลต",
+        "tags": [
+          "templates"
+        ]
+      },
+      "delete": {
+        "operationId": "TemplatesController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/DeletedDto"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "เลิกเผยแพร่เทมเพลต",
+        "tags": [
+          "templates"
+        ]
+      }
+    },
+    "/api/v1/assets": {
+      "get": {
+        "operationId": "AssetsController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "example": 2,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "example": 50,
+              "type": "number"
+            }
+          },
+          {
+            "name": "trashed",
+            "required": false,
+            "in": "query",
+            "description": "true = รูปในถังขยะ",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "สำเร็จ พร้อมข้อมูลแบ่งหน้า",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AssetDto"
+                      }
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PaginationMeta"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "รูปที่ฉันอัปโหลด (หรือรูปในถังขยะ)",
+        "tags": [
+          "assets"
+        ]
+      },
+      "post": {
+        "operationId": "AssetsController_upload",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadAssetDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/AssetDto"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "อัปโหลดรูปไว้ใช้ในงาน",
+        "tags": [
+          "assets"
+        ]
+      }
+    },
+    "/api/v1/assets/{id}/content": {
+      "get": {
+        "operationId": "AssetsController_content",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "ไฟล์รูป (เฉพาะเจ้าของ · ไม่ห่อ envelope เพราะเป็นไบต์)",
+        "tags": [
+          "assets"
+        ]
+      }
+    },
+    "/api/v1/assets/{id}": {
+      "patch": {
+        "operationId": "AssetsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAssetDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/AssetDto"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "ย้ายรูปลงถังขยะ / กู้คืน",
+        "tags": [
+          "assets"
+        ]
+      },
+      "delete": {
+        "operationId": "AssetsController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/DeletedDto"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "ลบรูปถาวร (เฉพาะที่อยู่ในถังขยะ)",
+        "tags": [
+          "assets"
+        ]
+      }
+    },
+    "/api/v1/folders": {
+      "get": {
+        "operationId": "FoldersController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "example": 2,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "example": 50,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "สำเร็จ พร้อมข้อมูลแบ่งหน้า",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/FolderDto"
+                      }
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PaginationMeta"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "โฟลเดอร์ในหน้าโปรเจกต์ของฉัน",
+        "tags": [
+          "folders"
+        ]
+      },
+      "post": {
+        "operationId": "FoldersController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FolderBodyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/FolderDto"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "สร้างโฟลเดอร์",
+        "tags": [
+          "folders"
+        ]
+      }
+    },
+    "/api/v1/folders/{id}": {
+      "patch": {
+        "operationId": "FoldersController_rename",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FolderBodyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/FolderDto"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "เปลี่ยนชื่อโฟลเดอร์",
+        "tags": [
+          "folders"
+        ]
+      },
+      "delete": {
+        "operationId": "FoldersController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/DeletedDto"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "ลบโฟลเดอร์ (งานข้างในยังอยู่)",
+        "tags": [
+          "folders"
+        ]
+      }
+    },
+    "/api/v1/preferences": {
+      "get": {
+        "operationId": "PreferencesController_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/PreferenceDto"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "การตั้งค่าของฉัน (การเข้าถึง · การแจ้งเตือน · เกี่ยวกับฉัน)",
+        "tags": [
+          "preferences"
+        ]
+      },
+      "patch": {
+        "operationId": "PreferencesController_update",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePreferenceDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/PreferenceDto"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "แก้การตั้งค่าของฉัน",
+        "tags": [
+          "preferences"
+        ]
+      }
+    },
+    "/api/v1/quotas": {
+      "get": {
+        "operationId": "QuotasController_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/QuotaDto"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "พื้นที่เก็บไฟล์ของฉัน",
+        "tags": [
+          "quotas"
+        ]
+      }
+    },
+    "/api/v1/data-exports": {
+      "get": {
+        "operationId": "DataExportsController_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/DataExportDto"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "ดาวน์โหลดข้อมูลทั้งหมดของฉันเป็น JSON",
+        "tags": [
+          "data-exports"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "CS Canvas — csmju-canvas",
+    "description": "ระบบย่อยภายใต้ CSMJU2030 · ตัวตนมาจาก JWT ของ Core Hub ที่ระบบนี้ตรวจลายเซ็นเองด้วย JWKS ทุก request (RS256 · iss=core-hub · aud=csmju2030 · kid=core-hub-2026) ส่ง token มาได้สองทาง: Authorization: Bearer หรือคุกกี้ csmju_canvas_access_token (ตั้งโดย /auth/callback)",
+    "version": "1.0.0",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [],
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http"
+      },
+      "cookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "csmju_canvas_access_token"
+      }
+    },
+    "schemas": {
+      "NotificationDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "DESIGN_TRASHED",
+              "TEMPLATE_USED"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "link": {
+            "type": "object",
+            "nullable": true
+          },
+          "readAt": {
+            "type": "object",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "createdAt"
+        ]
+      },
+      "PaginationMeta": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "number",
+            "example": 2480
+          },
+          "page": {
+            "type": "number",
+            "example": 2
+          },
+          "limit": {
+            "type": "number",
+            "example": 50
+          },
+          "totalPages": {
+            "type": "number",
+            "example": 50
+          }
+        },
+        "required": [
+          "total",
+          "page",
+          "limit",
+          "totalPages"
+        ]
+      },
+      "BulkUpdateResultDto": {
+        "type": "object",
+        "properties": {
+          "updated": {
+            "type": "number",
+            "example": 3
+          }
+        },
+        "required": [
+          "updated"
+        ]
+      },
+      "UpdateNotificationDto": {
+        "type": "object",
+        "properties": {
+          "read": {
+            "type": "boolean",
+            "description": "true = อ่านแล้ว · false = ทำเป็นยังไม่อ่าน"
+          }
+        },
+        "required": [
+          "read"
+        ]
+      },
+      "DesignSummaryDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "designType": {
+            "type": "string",
+            "example": "poster"
+          },
+          "width": {
+            "type": "number"
+          },
+          "height": {
+            "type": "number"
+          },
+          "thumbnail": {
+            "type": "object",
+            "nullable": true
+          },
+          "folderId": {
+            "type": "object",
+            "format": "uuid",
+            "nullable": true
+          },
+          "sourceTemplateId": {
+            "type": "object",
+            "format": "uuid",
+            "nullable": true
+          },
+          "trashedAt": {
+            "type": "object",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "designType",
+          "width",
+          "height",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "DesignDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "designType": {
+            "type": "string",
+            "example": "poster"
+          },
+          "width": {
+            "type": "number"
+          },
+          "height": {
+            "type": "number"
+          },
+          "thumbnail": {
+            "type": "object",
+            "nullable": true
+          },
+          "folderId": {
+            "type": "object",
+            "format": "uuid",
+            "nullable": true
+          },
+          "sourceTemplateId": {
+            "type": "object",
+            "format": "uuid",
+            "nullable": true
+          },
+          "trashedAt": {
+            "type": "object",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "document": {
+            "type": "object",
+            "description": "JSON state ของผืนผ้าใบ",
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "designType",
+          "width",
+          "height",
+          "createdAt",
+          "updatedAt",
+          "document"
+        ]
+      },
+      "CreateDesignDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "example": "โปสเตอร์งานสัปดาห์วิทยาศาสตร์"
+          },
+          "designType": {
+            "type": "string",
+            "example": "poster",
+            "description": "ไม่ต้องส่งถ้าสร้างจากเทมเพลต"
+          },
+          "width": {
+            "type": "number",
+            "example": 1080
+          },
+          "height": {
+            "type": "number",
+            "example": 1350
+          },
+          "document": {
+            "type": "object",
+            "description": "JSON state ของผืนผ้าใบ · ไม่ส่ง = หน้าเปล่า"
+          },
+          "templateId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "สร้างเป็นสำเนาของเทมเพลตนี้"
+          },
+          "copyFromDesignId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ทำสำเนาจากงานของตัวเอง"
+          },
+          "folderId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "title"
+        ]
+      },
+      "UpdateDesignDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "document": {
+            "type": "object",
+            "description": "JSON state ของผืนผ้าใบทั้งก้อน"
+          },
+          "width": {
+            "type": "number"
+          },
+          "height": {
+            "type": "number"
+          },
+          "thumbnail": {
+            "type": "string",
+            "description": "data URL ของภาพย่อ"
+          },
+          "folderId": {
+            "type": "object",
+            "format": "uuid",
+            "nullable": true,
+            "description": "null = เอาออกจากโฟลเดอร์"
+          },
+          "trashed": {
+            "type": "boolean",
+            "description": "true = ย้ายไปถังขยะ · false = กู้คืน"
+          }
+        }
+      },
+      "DeletedDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "deleted": {
+            "type": "boolean",
+            "example": true
+          }
+        },
+        "required": [
+          "id",
+          "deleted"
+        ]
+      },
+      "DesignTypeUsageDto": {
+        "type": "object",
+        "properties": {
+          "designType": {
+            "type": "string",
+            "example": "presentation"
+          },
+          "count": {
+            "type": "number",
+            "example": 4
+          },
+          "lastUsedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "designType",
+          "count",
+          "lastUsedAt"
+        ]
+      },
+      "TemplateSummaryDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "designType": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "width": {
+            "type": "number"
+          },
+          "height": {
+            "type": "number"
+          },
+          "thumbnail": {
+            "type": "object",
+            "nullable": true
+          },
+          "usageCount": {
+            "type": "number"
+          },
+          "isBuiltIn": {
+            "type": "boolean",
+            "description": "true = เทมเพลตตั้งต้นของทีม CS Canvas"
+          },
+          "isMine": {
+            "type": "boolean",
+            "description": "ผู้เรียกเป็นคนเผยแพร่เอง"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "description",
+          "designType",
+          "category",
+          "width",
+          "height",
+          "usageCount",
+          "isBuiltIn",
+          "isMine",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "TemplateDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "designType": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "width": {
+            "type": "number"
+          },
+          "height": {
+            "type": "number"
+          },
+          "thumbnail": {
+            "type": "object",
+            "nullable": true
+          },
+          "usageCount": {
+            "type": "number"
+          },
+          "isBuiltIn": {
+            "type": "boolean",
+            "description": "true = เทมเพลตตั้งต้นของทีม CS Canvas"
+          },
+          "isMine": {
+            "type": "boolean",
+            "description": "ผู้เรียกเป็นคนเผยแพร่เอง"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "document": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "description",
+          "designType",
+          "category",
+          "width",
+          "height",
+          "usageCount",
+          "isBuiltIn",
+          "isMine",
+          "createdAt",
+          "updatedAt",
+          "document"
+        ]
+      },
+      "CreateTemplateDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "example": "เกียรติบัตรงานแข่งขันโปรแกรม"
+          },
+          "description": {
+            "type": "string",
+            "example": "แก้ชื่อผู้รับและวันที่ได้ทันที"
+          },
+          "designType": {
+            "type": "string",
+            "example": "certificate"
+          },
+          "category": {
+            "type": "string",
+            "example": "education"
+          },
+          "width": {
+            "type": "number",
+            "example": 1754
+          },
+          "height": {
+            "type": "number",
+            "example": 1240
+          },
+          "document": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "thumbnail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "designType",
+          "category",
+          "width",
+          "height",
+          "document"
+        ]
+      },
+      "UpdateTemplateDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          }
+        }
+      },
+      "AssetDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "fileName": {
+            "type": "string"
+          },
+          "mimeType": {
+            "type": "string",
+            "example": "image/png"
+          },
+          "sizeBytes": {
+            "type": "number"
+          },
+          "contentUrl": {
+            "type": "string",
+            "example": "/api/v1/assets/…/content"
+          },
+          "trashedAt": {
+            "type": "object",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "fileName",
+          "mimeType",
+          "sizeBytes",
+          "contentUrl",
+          "createdAt"
+        ]
+      },
+      "UploadAssetDto": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "description": "PNG · JPEG · WebP · GIF · SVG ไม่เกิน 10 MB"
+          }
+        },
+        "required": [
+          "file"
+        ]
+      },
+      "UpdateAssetDto": {
+        "type": "object",
+        "properties": {
+          "trashed": {
+            "type": "boolean",
+            "description": "true = ย้ายไปถังขยะ · false = กู้คืน"
+          }
+        },
+        "required": [
+          "trashed"
+        ]
+      },
+      "FolderDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "designCount": {
+            "type": "number",
+            "description": "จำนวนงานที่ยังไม่อยู่ในถังขยะ"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "designCount",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "FolderBodyDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "งานวิชา CS201"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "PreferenceDto": {
+        "type": "object",
+        "properties": {
+          "aboutMe": {
+            "type": "string",
+            "description": "ข้อความแนะนำตัวในระบบนี้"
+          },
+          "reduceMotion": {
+            "type": "boolean"
+          },
+          "highContrast": {
+            "type": "boolean"
+          },
+          "largeText": {
+            "type": "boolean"
+          },
+          "notifyTemplateUsed": {
+            "type": "boolean"
+          },
+          "notifyTrash": {
+            "type": "boolean"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "aboutMe",
+          "reduceMotion",
+          "highContrast",
+          "largeText",
+          "notifyTemplateUsed",
+          "notifyTrash",
+          "updatedAt"
+        ]
+      },
+      "UpdatePreferenceDto": {
+        "type": "object",
+        "properties": {
+          "aboutMe": {
+            "type": "string"
+          },
+          "reduceMotion": {
+            "type": "boolean"
+          },
+          "highContrast": {
+            "type": "boolean"
+          },
+          "largeText": {
+            "type": "boolean"
+          },
+          "notifyTemplateUsed": {
+            "type": "boolean"
+          },
+          "notifyTrash": {
+            "type": "boolean"
+          }
+        }
+      },
+      "QuotaDto": {
+        "type": "object",
+        "properties": {
+          "usedBytes": {
+            "type": "number",
+            "description": "ไบต์ที่ใช้ไป (รูปทั้งหมดรวมถังขยะ)"
+          },
+          "quotaBytes": {
+            "type": "number",
+            "example": 524288000
+          },
+          "assetCount": {
+            "type": "number"
+          },
+          "designCount": {
+            "type": "number",
+            "description": "งานที่ยังไม่อยู่ในถังขยะ"
+          },
+          "trashedDesignCount": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "usedBytes",
+          "quotaBytes",
+          "assetCount",
+          "designCount",
+          "trashedDesignCount"
+        ]
+      },
+      "DataExportDto": {
+        "type": "object",
+        "properties": {
+          "exportedAt": {
+            "type": "string"
+          },
+          "designs": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "folders": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "assets": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "templates": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "preferences": {
+            "type": "object",
+            "additionalProperties": true,
+            "nullable": true
+          }
+        },
+        "required": [
+          "exportedAt",
+          "designs",
+          "folders",
+          "assets",
+          "templates",
+          "preferences"
+        ]
+      }
+    }
+  }
+}

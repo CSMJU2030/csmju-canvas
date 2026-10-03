@@ -1,0 +1,137 @@
+// CS Canvas (csmju-canvas) — ฐานข้อมูลของระบบย่อยนี้เท่านั้น (ARC-01)
+//
+// กฎที่ schema นี้ยึด (csmju2030-standards 1.7.1):
+//   1. ไม่มีตาราง users — อ้างผู้ใช้ด้วย `coreUserId` (ค่า `sub` จาก token) เท่านั้น (DD-01)
+//   2. ไม่เก็บ core role อีเมล หรือชื่อจริง — อ่านจาก token ที่ตรวจแล้วทุก request
+//   3. ตาราง/คอลัมน์เป็น snake_case ผ่าน @map/@@map · ฟิลด์ใน Prisma เป็น camelCase (DD-03)
+//   4. วันเวลาเป็น timestamptz ทั้งหมด
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  // Prisma 7: connection URL อยู่ใน prisma.config.ts และส่ง adapter ให้ PrismaClient
+}
+
+/// สิทธิ์ในระบบนี้ (Layer 2) — แปลงสดจาก core role ทุก request ไม่เก็บลงฐาน
+/// อยู่ใน schema เพื่อให้ type ของ enum มาจากที่เดียวกับส่วนอื่น
+enum Layer2Role {
+  CREATOR
+  EDITOR
+  ADMIN
+}
+
+enum NotificationKind {
+  DESIGN_TRASHED
+  TEMPLATE_USED
+}
+
+/// โฟลเดอร์ในหน้า "โปรเจกต์" ของผู้ใช้แต่ละคน
+model Folder {
+  id         String   @id @default(uuid()) @db.Uuid
+  coreUserId String   @map("core_user_id")
+  name       String   @db.VarChar(80)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  designs Design[] @relation("FolderDesigns")
+
+  @@index([coreUserId])
+  @@map("folders")
+}
+
+/// งานออกแบบหนึ่งชิ้น — `document` คือ JSON state ของผืนผ้าใบ (ดู docs/design-document.md)
+/// ที่ CMS นำไป render สดได้
+model Design {
+  id               String    @id @default(uuid()) @db.Uuid
+  coreUserId       String    @map("core_user_id")
+  title            String    @db.VarChar(120)
+  /// key ของประเภทงาน เช่น presentation, poster, certificate (frontend/src/lib/design-types.ts)
+  designType       String    @map("design_type") @db.VarChar(40)
+  width            Int
+  height           Int
+  document         Json
+  /// ภาพย่อ JPEG แบบ data URL ขนาดเล็ก (≤ 200 KB) สร้างฝั่ง client ตอนบันทึก
+  thumbnail        String?
+  folderId         String?   @map("folder_id") @db.Uuid
+  sourceTemplateId String?   @map("source_template_id") @db.Uuid
+  trashedAt        DateTime? @map("trashed_at") @db.Timestamptz(3)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  folder         Folder?   @relation("FolderDesigns", fields: [folderId], references: [id], onDelete: SetNull)
+  sourceTemplate Template? @relation("TemplateDesigns", fields: [sourceTemplateId], references: [id], onDelete: SetNull)
+
+  @@index([coreUserId, trashedAt, updatedAt])
+  @@map("designs")
+}
+
+/// เทมเพลตที่ทุกคนเห็น — เผยแพร่ได้เฉพาะ EDITOR/ADMIN
+/// `createdByCoreUserId` เป็น null = เทมเพลตตั้งต้นที่ทีม CS Canvas ออกแบบไว้ (seed)
+model Template {
+  id                  String   @id @default(uuid()) @db.Uuid
+  createdByCoreUserId String?  @map("created_by_core_user_id")
+  title               String   @db.VarChar(120)
+  description         String   @default("") @db.VarChar(300)
+  designType          String   @map("design_type") @db.VarChar(40)
+  category            String   @db.VarChar(40)
+  width               Int
+  height              Int
+  document            Json
+  thumbnail           String?
+  usageCount          Int      @default(0) @map("usage_count")
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  designs Design[] @relation("TemplateDesigns")
+
+  @@index([designType])
+  @@index([usageCount])
+  @@map("templates")
+}
+
+/// รูปที่ผู้ใช้อัปโหลดมาใช้ในงาน — ไฟล์อยู่บนดิสก์ของ backend (LOCAL_STORAGE_DIR)
+model Asset {
+  id          String    @id @default(uuid()) @db.Uuid
+  coreUserId  String    @map("core_user_id")
+  fileName    String    @map("file_name") @db.VarChar(200)
+  mimeType    String    @map("mime_type") @db.VarChar(60)
+  sizeBytes   Int       @map("size_bytes")
+  storagePath String    @map("storage_path") @db.VarChar(200)
+  trashedAt   DateTime? @map("trashed_at") @db.Timestamptz(3)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([coreUserId, trashedAt])
+  @@map("assets")
+}
+
+model Notification {
+  id         String           @id @default(uuid()) @db.Uuid
+  coreUserId String           @map("core_user_id")
+  kind       NotificationKind
+  title      String           @db.VarChar(160)
+  link       String?          @db.VarChar(200)
+  readAt     DateTime?        @map("read_at") @db.Timestamptz(3)
+  createdAt  DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([coreUserId, createdAt])
+  @@map("notifications")
+}
+
+/// การตั้งค่าของผู้ใช้ในระบบนี้ (ไม่ใช่ข้อมูลบัญชี — บัญชีเป็นของ Core Hub)
+model Preference {
+  id                  String   @id @default(uuid()) @db.Uuid
+  coreUserId          String   @unique @map("core_user_id")
+  aboutMe             String   @default("") @map("about_me") @db.VarChar(300)
+  reduceMotion        Boolean  @default(false) @map("reduce_motion")
+  highContrast        Boolean  @default(false) @map("high_contrast")
+  largeText           Boolean  @default(false) @map("large_text")
+  notifyTemplateUsed  Boolean  @default(true) @map("notify_template_used")
+  notifyTrash         Boolean  @default(true) @map("notify_trash")
+  updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("preferences")
+}

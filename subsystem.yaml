@@ -1,36 +1,95 @@
 # manifest ของระบบย่อย — CI และ conformance อ่านไฟล์นี้ไฟล์เดียว
-# schema: standards/schemas/subsystem.schema.json
+# schema: standards/schemas/subsystem.schema.json (standards 1.7.1 · SSO 1.1 · auth-contract 1.2)
+# ห้ามใส่บัญชีหรือรหัสผ่านในไฟล์นี้ — บัญชีทดสอบอยู่ในไฟล์นอก repo ที่ CONFORMANCE_ACCOUNTS_FILE ชี้
+# บันทึกเป็น LF เท่านั้น · ห้ามข้อความหลายบรรทัดและ flow mapping (ตัวอ่านของ conformance ไม่รองรับ)
 
-name: csmju-canvas          # ต้องตรงกับทะเบียนใน Core Hub และกับ data.service ของ /api/health
-standards_version: "1.0.0"
-conformance_level: L3                 # L1 · L2 · L3 (ระบบที่มี UI ต้องถึง L3)
+name: csmju-canvas # ตรงกับทะเบียนใน Core Hub, SUBSYSTEM_ID และ data.service ของ /api/health
+conformance_level: L3 # มีหน้าเว็บ
 
-base_url: http://localhost:3002       # URL ของระบบย่อยตอนรันเพื่อทดสอบ
-core_hub_url: http://localhost:3000
-callback_path: /auth/callback         # ต้องตรงกับ callback_url ที่ลงทะเบียนไว้
+display_name: "CS Canvas — ระบบสร้างสื่อและกราฟิกของสาขาวิทยาการคอมพิวเตอร์"
+repo: github.com/CSMJU2030/csmju-canvas
+status: proposed
+
+# frontend เป็นประตูเดียว: Next rewrite /api/* และ /auth/login /auth/callback /auth/logout ไป backend :4207
+# localhost ไม่ใช่ 127.0.0.1 — คุกกี้ผูกกับชื่อ host และ callback ลงทะเบียนเป็น localhost
+base_url: http://localhost:3207
+core_hub_url: https://csmju2030.jowave.com
+core_hub_web_url: https://csmju2030.jowave.com
+callback_path: /auth/callback
 
 public_endpoints:
   - GET /api/health
+  - GET /auth/login
   - GET /auth/callback
+  - POST /auth/logout
 
-# conformance ใช้ probes ตรวจสัญญา API — ประกาศไม่ครบ = ขึ้น SKIP = ยังไม่ผ่าน
+# ต้องตรงกับ DEFAULT_ROLE_MAPPING ใน backend/src/auth/role-mapping.ts เป๊ะ
+# CREATOR = สร้างและแก้งานของตัวเอง · EDITOR = เผยแพร่เทมเพลตได้ด้วย · ADMIN = จัดการเทมเพลตของทุกคน
+default_role_mapping:
+  student: CREATOR
+  alumni: CREATOR
+  staff: EDITOR
+  lecturer: EDITOR
+  guest: CREATOR
+  admin: ADMIN
+
 probes:
-  collection: /api/v1/<resources>
-  not_found: /api/v1/<resources>/99999999-9999-4999-8999-999999999999
-  invalid_id: /api/v1/<resources>/not-a-uuid
+  collection: /api/v1/templates
+  not_found: /api/v1/templates/99999999-9999-4999-8999-999999999999
+  invalid_id: /api/v1/templates/not-a-uuid
+  # การเผยแพร่เทมเพลตทำได้เฉพาะอาจารย์ บุคลากร และผู้ดูแล (templates.controller.ts · @Layer2Roles)
+  # นักศึกษา/ผู้เยี่ยมชมถูกห้ามตามการออกแบบ · runner ส่ง valid_body ด้วย token ของ denied_role เท่านั้น
+  # key ใน body เป็นคำเดียว — runner แปลง snake_case เป็น camelCase ทั้งก้อน
   create:
-    path: /api/v1/<resources>
+    path: /api/v1/templates
     allowed_role: staff
-    denied_role: student
+    denied_role: guest
     invalid_body:
-      someRequiredField: ""
+      title: ""
     valid_body:
-      someRequiredField: value
+      title: Conformance Probe
+      category: education
+      width: 1080
+      height: 1080
 
 owners:
   pl: "@csmju2030/pl-canvas"
   aie: "@csmju2030/aie-canvas"
 
-display_name: "CS Canvas"
-repo: github.com/CSMJU2030/csmju-canvas
-status: proposed
+# ─── ส่วนต่อจากนี้ไม่อยู่ใน schema กลาง (schema เปิด additionalProperties) ───
+
+api:
+  prefix: /api/v1
+  health_check: /api/health
+  openapi: backend/openapi.json
+
+ui:
+  design_system_version: null # ยังติดตั้ง @csmju2030/design-system ไม่ได้ (ต้องมี PAT read:packages) · ใช้ token ชื่อเดียวกันใน globals.css
+  tailwind: "4"
+  app_shell: false # วาดแถบซ้ายเอง (components/shell/app-shell.tsx) ระหว่างรอติดตั้ง CsmjuAppShell
+
+modules:
+  - designs # งานออกแบบ + JSON state ที่ CMS ดึงไป render
+  - templates # เทมเพลต (เผยแพร่ได้เฉพาะ EDITOR/ADMIN)
+  - assets # รูปที่อัปโหลด เก็บบนดิสก์ของ backend เสิร์ฟผ่าน API ที่ต้องมี session
+  - folders # โฟลเดอร์ในหน้าโปรเจกต์
+  - notifications # แจ้งเตือนในระบบ
+  - preferences # การตั้งค่าการเข้าถึงและการแจ้งเตือน
+  - quotas # พื้นที่ใช้งานคงเหลือ
+  - data-exports # ดาวน์โหลดข้อมูลของตัวเอง
+  - auth # SSO 1.1 + /api/v1/me (คัดลอกจาก csmju-nexus)
+
+data_ownership:
+  local_only:
+    - เนื้อหาที่ผู้ใช้สร้าง (งาน เทมเพลต รูป โฟลเดอร์)
+    - การตั้งค่าและแจ้งเตือนในระบบนี้
+  never_stored:
+    - core_role
+    - email
+    - ชื่อจริงหรือรหัสผ่าน
+
+limits:
+  upload_max_bytes: 10485760
+  storage_quota_per_user_bytes: 524288000
+  design_document_max_bytes: 4194304
+  trash_retention_days: 30

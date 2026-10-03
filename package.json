@@ -1,5 +1,25 @@
 {
   "name": "csmju-canvas",
+  "version": "0.1.0",
   "private": true,
-  "packageManager": "pnpm@9.15.9"
+  "packageManager": "pnpm@9.15.9",
+  "scripts": {
+    "dev": "pnpm --filter frontend dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "test:e2e": "pnpm --filter backend test:e2e",
+    "check:standards": "bash standards/scripts/run-all-checks.sh .",
+    "conformance": "node standards/conformance/run.js"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "prisma",
+      "@prisma/client",
+      "@prisma/engines",
+      "unrs-resolver",
+      "@nestjs/core"
+    ]
+  }
 }
