@@ -20,7 +20,7 @@ const OWNER_OPTIONS = [
   { value: 'others', label: 'คนอื่น (เทมเพลตที่เผยแพร่)' },
 ] as const;
 
-const EDITED_OPTIONS = [
+export const EDITED_OPTIONS = [
   { value: '', label: 'ทุกช่วงเวลา' },
   { value: 'day', label: 'วันนี้' },
   { value: 'week', label: '7 วันที่ผ่านมา' },
@@ -60,7 +60,7 @@ export function FilterBar({ value, onChange }: { value: SearchFilters; onChange:
   );
 }
 
-function FilterPopover({
+export function FilterPopover({
   label,
   current,
   options,

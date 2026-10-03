@@ -44,6 +44,11 @@ export class ListDesignsQuery extends PaginationQuery {
   @Matches(DESIGN_TYPE_PATTERN, { message: 'designType ไม่ถูกต้อง' })
   designType?: string;
 
+  @ApiPropertyOptional({ example: 'poster,flyer', description: 'หลายประเภทคั่นด้วยจุลภาค (ตัวกรองหมวดหมู่ในหน้าโปรเจกต์)' })
+  @IsOptional()
+  @Matches(/^[a-z][a-z0-9-]{1,39}(,[a-z][a-z0-9-]{1,39}){0,29}$/, { message: 'designTypes ต้องเป็นรายการ key คั่นด้วยจุลภาค' })
+  designTypes?: string;
+
   @ApiPropertyOptional({ format: 'uuid' })
   @IsOptional()
   @IsUUID('4', { message: 'folderId ต้องเป็น UUID v4' })

@@ -50,7 +50,11 @@ export class DesignsService {
       coreUserId,
       trashedAt: query.trashed ? { not: null } : null,
       ...(query.q ? { title: { contains: query.q, mode: 'insensitive' } } : {}),
-      ...(query.designType ? { designType: query.designType } : {}),
+      ...(query.designType
+        ? { designType: query.designType }
+        : query.designTypes
+          ? { designType: { in: query.designTypes.split(',') } }
+          : {}),
       ...(query.folderId ? { folderId: query.folderId } : {}),
       ...(query.editedWithin
         ? { updatedAt: { gte: new Date(Date.now() - EDITED_WITHIN_MS[query.editedWithin]) } }

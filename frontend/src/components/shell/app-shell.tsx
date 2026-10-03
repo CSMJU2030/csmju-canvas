@@ -2,12 +2,12 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Bell, BookOpen, CircleUserRound, Clock, FolderOpen, House, LayoutTemplate, LogOut, PanelLeft, Plus,
+  Bell, BookOpen, ChevronRight, CircleUserRound, Clock, CloudUpload, FolderOpen, House, LayoutTemplate, LogOut, PanelLeft, Plus,
   Settings, Trash2, UserRound,
 } from 'lucide-react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { usePathname, useSearchParams } from 'next/navigation';
+import { Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
 import { api } from '@/lib/csmju/api';
 import { useMe, useSignOut } from '@/lib/csmju/session';
 import { relativeTime } from '@/lib/format';
@@ -246,7 +246,7 @@ function NotificationsPopover() {
   );
 }
 
-export function Avatar({ email, size = 'md' }: { email: string; size?: 'md' | 'lg' }) {
+export function Avatar({ email, size = 'md' }: { email: string; size?: 'sm' | 'md' | 'lg' }) {
   const initial = (email.split('@')[0] || '?').slice(0, 1).toUpperCase();
 
   return (
@@ -254,7 +254,7 @@ export function Avatar({ email, size = 'md' }: { email: string; size?: 'md' | 'l
       aria-hidden
       className={cx(
         'csmju-gradient-button flex shrink-0 items-center justify-center rounded-full font-semibold',
-        size === 'lg' ? 'size-14 text-csmju-h3' : 'size-10 text-csmju-body',
+        size === 'lg' ? 'size-14 text-csmju-h3' : size === 'sm' ? 'size-7 text-csmju-caption' : 'size-10 text-csmju-body',
       )}
     >
       {initial}
@@ -369,26 +369,55 @@ function RecentDesignsNav() {
 }
 
 function ProjectsNav() {
+  // useSearchParams ต้องอยู่ใต้ Suspense ไม่งั้น next build ล้มตอน prerender
+  return (
+    <Suspense fallback={null}>
+      <ProjectsNavInner />
+    </Suspense>
+  );
+}
+
+/// แถบรองของหน้าโปรเจกต์ตามภาพบรีฟ: โปรเจกต์ทั้งหมด · ล่าสุด · โปรเจกต์ของคุณ (กางดูโฟลเดอร์ได้) · ถังขยะ
+function ProjectsNavInner() {
   const pathname = usePathname();
+  const params = useSearchParams();
+  const me = useMe();
+  const [expanded, setExpanded] = useState(true);
   const folders = useQuery({ queryKey: ['folders'], queryFn: () => api.list<Folder>('/folders?limit=100') });
+  const view = params.get('view');
+  const folder = params.get('folder');
+  const onProjects = pathname === '/projects';
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <nav aria-label="โปรเจกต์" className="flex flex-col gap-0.5">
-        <SideLink href="/projects" label="โปรเจกต์ทั้งหมด" icon={<FolderOpen aria-hidden className="size-5" />} active={pathname === '/projects'} />
-        <SideLink href="/projects?sort=updated" label="ล่าสุด" icon={<Clock aria-hidden className="size-5" />} active={false} />
-      </nav>
-      {(folders.data?.items.length ?? 0) > 0 && (
-        <>
-          <p className="mt-5 mb-1 px-3 text-csmju-caption font-semibold text-muted">โฟลเดอร์</p>
-          <nav aria-label="โฟลเดอร์" className="flex min-h-0 flex-col gap-0.5 overflow-y-auto">
-            {folders.data!.items.map((folder) => (
-              <SideLink key={folder.id} href={`/projects?folder=${folder.id}`} label={folder.name} icon={<FolderOpen aria-hidden className="size-5 text-muted" />} active={false} />
+      <nav aria-label="โปรเจกต์" className="flex min-h-0 flex-col gap-0.5">
+        <SideLink href="/projects" label="โปรเจกต์ทั้งหมด" icon={<FolderOpen aria-hidden className="size-5" />} active={onProjects && !view && !folder} />
+        <SideLink href="/projects?view=recent" label="ล่าสุด" icon={<Clock aria-hidden className="size-5" />} active={onProjects && view === 'recent'} />
+        <div className="flex items-center">
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            aria-expanded={expanded}
+            aria-label={expanded ? 'ซ่อนโฟลเดอร์ของคุณ' : 'แสดงโฟลเดอร์ของคุณ'}
+            className="inline-flex size-11 shrink-0 items-center justify-center rounded-xl text-muted hover:bg-surface/70"
+          >
+            <ChevronRight aria-hidden className={cx('size-4 transition-transform', expanded && 'rotate-90')} />
+          </button>
+          <span className="flex min-h-11 min-w-0 items-center gap-3 text-csmju-caption text-ink">
+            <Avatar email={me.email} size="sm" />
+            <span className="truncate">โปรเจกต์ของคุณ</span>
+          </span>
+        </div>
+        {expanded && (
+          <div className="ml-6 flex min-h-0 flex-col gap-0.5 overflow-y-auto">
+            <SideLink href="/projects?view=uploads" label="อัปโหลด" icon={<CloudUpload aria-hidden className="size-5 text-muted" />} active={onProjects && view === 'uploads'} />
+            {folders.data?.items.map((f) => (
+              <SideLink key={f.id} href={`/projects?folder=${f.id}`} label={f.name} icon={<FolderOpen aria-hidden className="size-5 text-muted" />} active={onProjects && folder === f.id} />
             ))}
-          </nav>
-        </>
-      )}
-      <div className="mt-auto">
+          </div>
+        )}
+      </nav>
+      <div className="mt-auto border-t border-line pt-2">
         <SideLink href="/trash" label="ถังขยะ" icon={<Trash2 aria-hidden className="size-5" />} active={pathname.startsWith('/trash')} />
       </div>
     </div>

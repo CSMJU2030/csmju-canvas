@@ -250,6 +250,16 @@
             }
           },
           {
+            "name": "designTypes",
+            "required": false,
+            "in": "query",
+            "description": "หลายประเภทคั่นด้วยจุลภาค (ตัวกรองหมวดหมู่ในหน้าโปรเจกต์)",
+            "schema": {
+              "example": "poster,flyer",
+              "type": "string"
+            }
+          },
+          {
             "name": "folderId",
             "required": false,
             "in": "query",

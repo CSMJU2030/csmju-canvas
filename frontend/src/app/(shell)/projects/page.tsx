@@ -1,19 +1,34 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Ellipsis, Folder as FolderIcon, FolderPlus, Search } from 'lucide-react';
+import {
+  ArrowDownUp, ChevronDown, ChevronLeft, CloudUpload, Ellipsis, Folder as FolderIcon, FolderPlus, LayoutGrid,
+  List, Plus, Search, Trash2,
+} from 'lucide-react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useState } from 'react';
-import { Button, EmptyState, ErrorState, Menu, Spinner, cx, errorMessage, inputClass, useToast } from '@/components/csmju/primitives';
-import { DesignCard } from '@/components/designs/cards';
+import { Suspense, useState, type ReactNode } from 'react';
+import { Pager } from '@/components/csmju/list-controls';
+import { EmptyState, ErrorState, Menu, Spinner, cx, errorMessage, useToast } from '@/components/csmju/primitives';
+import { DesignCard, Thumbnail } from '@/components/designs/cards';
+import { Carousel } from '@/components/designs/carousel';
 import { DesignMenu, RenameDialog } from '@/components/designs/design-menu';
+import { EDITED_OPTIONS, FilterPopover } from '@/components/home/search-filters';
 import { useOpenCreate } from '@/components/shell/create-dialog';
 import { api, qs } from '@/lib/csmju/api';
-import { DESIGN_TYPES } from '@/lib/design-types';
-import type { DesignSummary, Folder } from '@/lib/types';
-import { Pager, SelectBox } from '@/components/csmju/list-controls';
+import { DESIGN_GROUPS, DESIGN_TYPES, designTypeLabel } from '@/lib/design-types';
+import { formatBytes, relativeTime } from '@/lib/format';
+import type { Asset, DesignSummary, Folder, Quota } from '@/lib/types';
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 30;
+
+type Sort = 'updated' | 'created' | 'title';
+
+const SORT_LABEL: Record<Sort, string> = {
+  updated: 'แก้ไขล่าสุด',
+  created: 'สร้างล่าสุด',
+  title: 'ชื่อ (ก–ฮ)',
+};
 
 export default function ProjectsPage() {
   return (
@@ -23,166 +38,487 @@ export default function ProjectsPage() {
   );
 }
 
+/// หน้าโปรเจกต์แบบ Canva: หัวไล่สี + ค้นหา + ตัวกรอง · แถบเครื่องมือ (เรียง · มุมมอง · สร้าง)
+/// · แถว "ล่าสุด" · ส่วน "โฟลเดอร์" และ "ดีไซน์" ที่พับได้
+///
+/// มุมมองย่อยอยู่ใน URL: ?folder=<id> · ?view=uploads (โฟลเดอร์อัปโหลด) · ?view=recent
 function Projects() {
   const params = useSearchParams();
-  const router = useRouter();
   const folderId = params.get('folder');
-  const setFolderId = (id: string | null) => router.replace(id ? `/projects?folder=${id}` : '/projects');
+  const view = params.get('view');
   const [q, setQ] = useState('');
   const [designType, setDesignType] = useState('');
-  const [sort, setSort] = useState<'updated' | 'created' | 'title'>('updated');
-  const [page, setPage] = useState(1);
-  const [dialog, setDialog] = useState<{ kind: 'new' } | { kind: 'rename'; folder: Folder } | null>(null);
+  const [group, setGroup] = useState('');
+  const [editedWithin, setEditedWithin] = useState('');
+  const [sort, setSort] = useState<Sort>('updated');
+  const [layout, setLayout] = useState<'grid' | 'list'>('grid');
+  const [newFolder, setNewFolder] = useState(false);
   const queryClient = useQueryClient();
   const toast = useToast();
-  const openCreate = useOpenCreate();
 
   const folders = useQuery({ queryKey: ['folders'], queryFn: () => api.list<Folder>('/folders?limit=100') });
-  const designs = useQuery({
-    queryKey: ['designs', 'projects', folderId, q.trim(), designType, sort, page],
-    queryFn: () =>
-      api.list<DesignSummary>(
-        `/designs${qs({ folderId: folderId ?? undefined, q: q.trim(), designType, sort, page, limit: PAGE_SIZE })}`,
-      ),
-  });
+  const activeFolder = folders.data?.items.find((f) => f.id === folderId);
+  const filtering = q.trim() !== '' || designType !== '' || group !== '' || editedWithin !== '';
 
-  const saveFolder = useMutation({
-    mutationFn: ({ id, name }: { id?: string; name: string }) =>
-      id ? api.patch<Folder>(`/folders/${id}`, { name }) : api.post<Folder>('/folders', { name }),
+  const createFolder = useMutation({
+    mutationFn: (name: string) => api.post<Folder>('/folders', { name }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['folders'] });
-      setDialog(null);
-    },
-    onError: (error) => toast(errorMessage(error), 'error'),
-  });
-  const deleteFolder = useMutation({
-    mutationFn: (id: string) => api.del(`/folders/${id}`),
-    onSuccess: (_data, id) => {
-      if (folderId === id) setFolderId(null);
-      void queryClient.invalidateQueries({ queryKey: ['folders'] });
-      void queryClient.invalidateQueries({ queryKey: ['designs'] });
-      toast('ลบโฟลเดอร์แล้ว งานข้างในยังอยู่');
+      setNewFolder(false);
+      toast('สร้างโฟลเดอร์แล้ว');
     },
     onError: (error) => toast(errorMessage(error), 'error'),
   });
 
-  const activeFolder = folders.data?.items.find((f) => f.id === folderId);
+  const title = view === 'uploads' ? 'อัปโหลด' : view === 'recent' ? 'ล่าสุด' : activeFolder ? activeFolder.name : 'โปรเจกต์ทั้งหมด';
+  const groupTypes = group ? DESIGN_TYPES.filter((t) => t.group === group).map((t) => t.key).join(',') : '';
+  const listKey = `${folderId}|${view}|${q.trim()}|${designType}|${groupTypes}|${editedWithin}|${sort}`;
 
   return (
-    <div className="px-4 py-8 md:px-10">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-csmju-h1 font-bold text-ink">โปรเจกต์</h1>
-        <div className="flex gap-2">
-          <Button onClick={() => setDialog({ kind: 'new' })}>
-            <FolderPlus aria-hidden className="size-4" /> โฟลเดอร์ใหม่
-          </Button>
-          <Button variant="primary" onClick={() => openCreate()}>สร้างดีไซน์</Button>
-        </div>
-      </div>
-
-      <section className="mt-6">
-        <h2 className="mb-2 text-csmju-h3 font-semibold text-ink">โฟลเดอร์</h2>
-        {folders.isLoading ? (
-          <Spinner />
-        ) : folders.isError ? (
-          <ErrorState message={errorMessage(folders.error)} onRetry={() => void folders.refetch()} />
-        ) : (
-          <ul className="flex flex-wrap gap-2">
-            <li>
-              <FolderChip label="งานทั้งหมด" active={folderId === null} onClick={() => { setFolderId(null); setPage(1); }} />
-            </li>
-            {folders.data!.items.map((folder) => (
-              <li key={folder.id} className="flex items-center gap-1">
-                <FolderChip
-                  label={`${folder.name} (${folder.designCount})`}
-                  active={folderId === folder.id}
-                  onClick={() => { setFolderId(folder.id); setPage(1); }}
-                />
-                <Menu
-                  label={`ตัวเลือกของโฟลเดอร์ ${folder.name}`}
-                  trigger={<Ellipsis aria-hidden className="size-4" />}
-                  triggerClassName="size-11 shadow-none"
-                  items={[
-                    { label: 'เปลี่ยนชื่อ', onSelect: () => setDialog({ kind: 'rename', folder }) },
-                    {
-                      label: 'ลบโฟลเดอร์',
-                      danger: true,
-                      onSelect: () => {
-                        if (window.confirm(`ลบโฟลเดอร์ “${folder.name}”? งานข้างในจะไม่ถูกลบ`)) deleteFolder.mutate(folder.id);
-                      },
-                    },
-                  ]}
-                />
-              </li>
-            ))}
-          </ul>
+    <div>
+      <section className="csmju-hero relative px-4 pt-14 pb-6 text-center md:px-10">
+        <QuotaChip />
+        {(folderId || view) && (
+          <Link href="/projects" className="absolute top-5 left-5 inline-flex min-h-11 items-center gap-1 rounded-xl px-3 text-csmju-caption font-semibold text-ink hover:bg-surface/60">
+            <ChevronLeft aria-hidden className="size-5" /> โปรเจกต์ทั้งหมด
+          </Link>
         )}
-      </section>
-
-      <section className="mt-8">
-        <h2 className="mb-3 text-csmju-h3 font-semibold text-ink">{activeFolder ? activeFolder.name : 'งานทั้งหมด'}</h2>
-        <div className="mb-4 grid gap-3 md:grid-cols-4">
-          <div className="relative md:col-span-2">
-            <Search aria-hidden className="pointer-events-none absolute top-1/2 left-3 size-5 -translate-y-1/2 text-muted" />
-            <label htmlFor="proj-q" className="sr-only">ค้นหางาน</label>
-            <input id="proj-q" type="search" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} placeholder="ค้นหาจากชื่องาน" className={cx(inputClass, 'pl-10')} />
-          </div>
-          <SelectBox label="ประเภท" value={designType} onChange={(v) => { setDesignType(v); setPage(1); }} options={[['', 'ทุกประเภท'], ...DESIGN_TYPES.map((t) => [t.key, t.label] as [string, string])]} />
-          <SelectBox label="เรียงตาม" value={sort} onChange={(v) => setSort(v as typeof sort)} options={[['updated', 'แก้ไขล่าสุด'], ['created', 'สร้างล่าสุด'], ['title', 'ชื่อ (ก–ฮ)']]} />
-        </div>
-        {designs.isLoading ? (
-          <Spinner />
-        ) : designs.isError ? (
-          <ErrorState message={errorMessage(designs.error)} onRetry={() => void designs.refetch()} />
-        ) : designs.data!.items.length === 0 ? (
-          <EmptyState
-            title={activeFolder ? 'โฟลเดอร์นี้ยังว่าง' : 'ยังไม่มีงาน'}
-            description={activeFolder ? 'ใช้เมนู “…” บนการ์ดงานแล้วเลือก “ย้ายไปโฟลเดอร์”' : 'เริ่มสร้างงานแรกของคุณ'}
-            icon={<FolderIcon aria-hidden className="size-8" />}
-          />
-        ) : (
+        <h1 className="text-csmju-h1 font-bold text-ink md:text-csmju-display">{title}</h1>
+        {view !== 'uploads' && (
           <>
-            <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-              {designs.data!.items.map((design) => (
-                <li key={design.id}>
-                  <DesignCard design={design} href={`/design/${design.id}`} menu={<DesignMenu design={design} />} />
-                </li>
-              ))}
-            </ul>
-            <Pager page={page} totalPages={designs.data!.meta.totalPages} onPage={setPage} />
+            <form role="search" onSubmit={(e) => e.preventDefault()} className="mx-auto mt-6 max-w-2xl">
+              <div className="relative rounded-2xl bg-surface shadow-csmju-md focus-within:ring-2 focus-within:ring-primary">
+                <Search aria-hidden className="pointer-events-none absolute top-1/2 left-5 size-5 -translate-y-1/2 text-ink" />
+                <label htmlFor="proj-q" className="sr-only">ค้นหาดีไซน์และโฟลเดอร์</label>
+                <input
+                  id="proj-q"
+                  type="search"
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="ค้นหาดีไซน์ โฟลเดอร์ และไฟล์อัปโหลดต่างๆ"
+                  className="min-h-14 w-full rounded-2xl bg-transparent pr-4 pl-14 text-csmju-body text-ink placeholder:text-muted focus:outline-none"
+                />
+              </div>
+            </form>
+            <div className="mt-3 flex flex-wrap justify-center gap-2">
+              <FilterPopover
+                label="ประเภท"
+                current={designType}
+                options={[{ value: '', label: 'ทุกประเภท' }, ...DESIGN_TYPES.map((t) => ({ value: t.key, label: t.label }))]}
+                onPick={(v) => { setDesignType(v); setGroup(''); }}
+              />
+              <FilterPopover
+                label="หมวดหมู่"
+                current={group}
+                options={[{ value: '', label: 'ทุกหมวด' }, ...DESIGN_GROUPS.filter((g) => g.available).map((g) => ({ value: g.key, label: g.label }))]}
+                onPick={(v) => { setGroup(v); setDesignType(''); }}
+              />
+              <FilterPopover label="วันที่แก้ไข" current={editedWithin} options={EDITED_OPTIONS.map((o) => ({ value: o.value, label: o.label }))} onPick={setEditedWithin} />
+            </div>
           </>
         )}
       </section>
 
-      {dialog?.kind === 'new' && (
-        <RenameDialog title="โฟลเดอร์ใหม่" initial="" busy={saveFolder.isPending} onClose={() => setDialog(null)} onSave={(name) => saveFolder.mutate({ name })} />
-      )}
-      {dialog?.kind === 'rename' && (
-        <RenameDialog
-          title="เปลี่ยนชื่อโฟลเดอร์"
-          initial={dialog.folder.name}
-          busy={saveFolder.isPending}
-          onClose={() => setDialog(null)}
-          onSave={(name) => saveFolder.mutate({ id: dialog.folder.id, name })}
-        />
+      <div className="px-4 pb-12 md:px-10">
+        {view === 'uploads' ? (
+          <UploadsView />
+        ) : (
+          <>
+            <Toolbar sort={sort} onSort={setSort} layout={layout} onLayout={setLayout} onNewFolder={() => setNewFolder(true)} />
+            {!filtering && !folderId && view !== 'recent' && <RecentRow />}
+            {!filtering && !folderId && view !== 'recent' && (
+              <Collapsible title="โฟลเดอร์">
+                <FolderGrid folders={folders.data?.items ?? []} loading={folders.isLoading} />
+              </Collapsible>
+            )}
+            {filtering && <FolderMatches folders={folders.data?.items ?? []} query={q.trim()} />}
+            <Collapsible title="ดีไซน์">
+              {/* key เปลี่ยนเมื่อตัวกรองเปลี่ยน → กลับไปหน้า 1 โดยไม่ต้องใช้ effect */}
+              <DesignsList
+                key={listKey}
+                folderId={folderId}
+                q={q.trim()}
+                designType={designType}
+                designTypes={groupTypes}
+                editedWithin={editedWithin}
+                sort={view === 'recent' ? 'updated' : sort}
+                layout={layout}
+              />
+            </Collapsible>
+          </>
+        )}
+      </div>
+
+      {newFolder && (
+        <RenameDialog title="โฟลเดอร์ใหม่" initial="" busy={createFolder.isPending} onClose={() => setNewFolder(false)} onSave={(name) => createFolder.mutate(name)} />
       )}
     </div>
   );
 }
 
-function FolderChip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+/// ตรงตำแหน่ง "ทดลองใช้ฟรี 30 วัน" ในภาพบรีฟ — แสดงพื้นที่คงเหลือแทน (ไม่มีระบบจ่ายเงิน)
+function QuotaChip() {
+  const { data } = useQuery({ queryKey: ['quotas'], queryFn: () => api.get<Quota>('/quotas') });
+
+  if (!data) return null;
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={cx(
-        'inline-flex min-h-11 items-center gap-2 rounded-xl border px-3 text-csmju-caption',
-        active ? 'border-primary bg-primary-soft font-semibold text-primary' : 'border-line-strong text-ink hover:bg-surface-muted',
-      )}
+    <Link
+      href="/account/storage"
+      className="absolute top-5 right-5 hidden min-h-11 items-center gap-2 rounded-full bg-surface px-4 text-csmju-caption font-semibold text-ink shadow-csmju-sm hover:shadow-csmju-md sm:inline-flex"
     >
-      <FolderIcon aria-hidden className="size-4" />
-      {label}
-    </button>
+      <CloudUpload aria-hidden className="size-4 text-chart-5" />
+      พื้นที่คงเหลือ {formatBytes(Math.max(0, data.quotaBytes - data.usedBytes))}
+    </Link>
+  );
+}
+
+/// แถบเครื่องมือขวาบน: เรียง (⇅) · สลับตาราง/รายการ · สร้าง (+)
+function Toolbar({
+  sort,
+  onSort,
+  layout,
+  onLayout,
+  onNewFolder,
+}: {
+  sort: Sort;
+  onSort: (s: Sort) => void;
+  layout: 'grid' | 'list';
+  onLayout: (l: 'grid' | 'list') => void;
+  onNewFolder: () => void;
+}) {
+  const openCreate = useOpenCreate();
+
+  return (
+    <div className="flex items-center justify-end gap-2 py-4">
+      <Menu
+        label={`เรียงตาม: ${SORT_LABEL[sort]}`}
+        trigger={<ArrowDownUp aria-hidden className="size-5" />}
+        triggerClassName="shadow-none bg-transparent hover:bg-surface-muted"
+        items={(Object.keys(SORT_LABEL) as Sort[]).map((key) => ({
+          label: `${key === sort ? '✓ ' : ''}${SORT_LABEL[key]}`,
+          onSelect: () => onSort(key),
+        }))}
+      />
+      <button
+        type="button"
+        onClick={() => onLayout(layout === 'grid' ? 'list' : 'grid')}
+        aria-label={layout === 'grid' ? 'แสดงเป็นรายการ' : 'แสดงเป็นตาราง'}
+        title={layout === 'grid' ? 'แสดงเป็นรายการ' : 'แสดงเป็นตาราง'}
+        className="inline-flex size-11 items-center justify-center rounded-xl text-ink hover:bg-surface-muted"
+      >
+        {layout === 'grid' ? <List aria-hidden className="size-5" /> : <LayoutGrid aria-hidden className="size-5" />}
+      </button>
+      <Menu
+        label="สร้างใหม่"
+        trigger={<Plus aria-hidden className="size-5" />}
+        triggerClassName="rounded-full border border-line-strong shadow-none bg-surface hover:bg-surface-muted"
+        items={[
+          { label: 'ดีไซน์ใหม่', icon: <Plus aria-hidden className="size-4" />, onSelect: () => openCreate() },
+          { label: 'โฟลเดอร์ใหม่', icon: <FolderPlus aria-hidden className="size-4" />, onSelect: onNewFolder },
+          { label: 'อัปโหลดรูป', icon: <CloudUpload aria-hidden className="size-4" />, onSelect: () => openCreate('upload') },
+        ]}
+      />
+    </div>
+  );
+}
+
+function Collapsible({ title, children }: { title: string; children: ReactNode }) {
+  const [open, setOpen] = useState(true);
+
+  return (
+    <section className="mt-8">
+      <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} className="mb-4 flex min-h-11 items-center gap-2 text-csmju-h2 font-bold text-ink">
+        <ChevronDown aria-hidden className={cx('size-5 transition-transform', !open && '-rotate-90')} />
+        {title}
+      </button>
+      {open && children}
+    </section>
+  );
+}
+
+function RecentRow() {
+  const recent = useQuery({
+    queryKey: ['designs', 'projects-recent'],
+    queryFn: () => api.list<DesignSummary>(`/designs${qs({ limit: 12, sort: 'updated' })}`),
+  });
+
+  if (recent.isLoading || (recent.data?.items.length ?? 0) === 0) return null;
+
+  return (
+    <section>
+      <h2 className="mb-4 text-csmju-h2 font-bold text-ink">ล่าสุด</h2>
+      <Carousel label="ดีไซน์ล่าสุด">
+        {recent.data!.items.map((design) => (
+          <li key={design.id} className="w-56 shrink-0 snap-start">
+            <DesignCard design={design} href={`/design/${design.id}`} menu={<DesignMenu design={design} />} />
+          </li>
+        ))}
+      </Carousel>
+    </section>
+  );
+}
+
+/// ไทล์โฟลเดอร์สีม่วงแบบ Canva · โฟลเดอร์ "อัปโหลด" (รูปทั้งหมดที่อัปโหลด) อยู่ก่อนเสมอ
+function FolderGrid({ folders, loading }: { folders: Folder[]; loading: boolean }) {
+  const { data: quota } = useQuery({ queryKey: ['quotas'], queryFn: () => api.get<Quota>('/quotas') });
+
+  return (
+    <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      <li>
+        <FolderTile href="/projects?view=uploads" name="อัปโหลด" detail={quota ? `${quota.assetCount.toLocaleString('th-TH')} รายการ` : ''} icon={<CloudUpload aria-hidden className="size-5" />} />
+      </li>
+      {loading ? (
+        <li className="text-csmju-caption text-muted">กำลังโหลดโฟลเดอร์…</li>
+      ) : (
+        folders.map((folder) => (
+          <li key={folder.id} className="relative">
+            <FolderTile href={`/projects?folder=${folder.id}`} name={folder.name} detail={`${folder.designCount.toLocaleString('th-TH')} ดีไซน์`} />
+            <div className="absolute top-1/2 right-2 -translate-y-1/2">
+              <FolderMenu folder={folder} />
+            </div>
+          </li>
+        ))
+      )}
+    </ul>
+  );
+}
+
+function FolderTile({ href, name, detail, icon }: { href: string; name: string; detail: string; icon?: ReactNode }) {
+  return (
+    <Link href={href} className="flex min-h-16 items-center gap-3 rounded-xl py-2 pr-14 pl-2 hover:bg-surface-muted">
+      <span className="relative flex h-12 w-14 shrink-0 items-end justify-center">
+        <span className="absolute top-0 left-0 h-4 w-7 rounded-t-md bg-primary-soft-hover" />
+        <span className="relative flex h-10 w-14 items-center justify-center rounded-md bg-primary-soft-hover text-primary">{icon}</span>
+      </span>
+      <span className="min-w-0">
+        <span className="block truncate text-csmju-caption font-semibold text-ink">{name}</span>
+        {detail && <span className="block text-csmju-caption text-muted">{detail}</span>}
+      </span>
+    </Link>
+  );
+}
+
+function FolderMenu({ folder }: { folder: Folder }) {
+  const queryClient = useQueryClient();
+  const toast = useToast();
+  const router = useRouter();
+  const [renaming, setRenaming] = useState(false);
+  const rename = useMutation({
+    mutationFn: (name: string) => api.patch(`/folders/${folder.id}`, { name }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['folders'] });
+      setRenaming(false);
+    },
+    onError: (error) => toast(errorMessage(error), 'error'),
+  });
+  const remove = useMutation({
+    mutationFn: () => api.del(`/folders/${folder.id}`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['folders'] });
+      void queryClient.invalidateQueries({ queryKey: ['designs'] });
+      toast('ลบโฟลเดอร์แล้ว ดีไซน์ข้างในยังอยู่');
+      router.replace('/projects');
+    },
+    onError: (error) => toast(errorMessage(error), 'error'),
+  });
+
+  return (
+    <>
+      <Menu
+        label={`ตัวเลือกของโฟลเดอร์ ${folder.name}`}
+        trigger={<Ellipsis aria-hidden className="size-5" />}
+        triggerClassName="shadow-none bg-transparent hover:bg-surface"
+        items={[
+          { label: 'เปลี่ยนชื่อ', onSelect: () => setRenaming(true) },
+          {
+            label: 'ลบโฟลเดอร์',
+            danger: true,
+            onSelect: () => {
+              if (window.confirm(`ลบโฟลเดอร์ “${folder.name}”? ดีไซน์ข้างในจะไม่ถูกลบ`)) remove.mutate();
+            },
+          },
+        ]}
+      />
+      {renaming && <RenameDialog title="เปลี่ยนชื่อโฟลเดอร์" initial={folder.name} busy={rename.isPending} onClose={() => setRenaming(false)} onSave={(name) => rename.mutate(name)} />}
+    </>
+  );
+}
+
+function FolderMatches({ folders, query }: { folders: Folder[]; query: string }) {
+  const matches = query ? folders.filter((f) => f.name.toLowerCase().includes(query.toLowerCase())) : [];
+
+  if (matches.length === 0) return null;
+
+  return (
+    <section className="mt-6">
+      <h2 className="mb-3 text-csmju-h3 font-bold text-ink">โฟลเดอร์</h2>
+      <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {matches.map((folder) => (
+          <li key={folder.id}>
+            <FolderTile href={`/projects?folder=${folder.id}`} name={folder.name} detail={`${folder.designCount} ดีไซน์`} />
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function DesignsList({
+  folderId,
+  q,
+  designType,
+  designTypes,
+  editedWithin,
+  sort,
+  layout,
+}: {
+  folderId: string | null;
+  q: string;
+  designType: string;
+  designTypes: string;
+  editedWithin: string;
+  sort: Sort;
+  layout: 'grid' | 'list';
+}) {
+  const [page, setPage] = useState(1);
+  const openCreate = useOpenCreate();
+  const designs = useQuery({
+    queryKey: ['designs', 'projects', folderId, q, designType, designTypes, editedWithin, sort, page],
+    queryFn: () =>
+      api.list<DesignSummary>(
+        `/designs${qs({ folderId: folderId ?? undefined, q, designType, designTypes: designTypes || undefined, editedWithin, sort, page, limit: PAGE_SIZE })}`,
+      ),
+  });
+
+  if (designs.isLoading) return <Spinner />;
+  if (designs.isError) return <ErrorState message={errorMessage(designs.error)} onRetry={() => void designs.refetch()} />;
+  if (designs.data!.items.length === 0) {
+    const searching = Boolean(q || designType || designTypes || editedWithin);
+
+    return (
+      <EmptyState
+        title={searching ? 'ไม่พบดีไซน์ที่ตรงกับการค้นหา' : folderId ? 'โฟลเดอร์นี้ยังว่าง' : 'ยังไม่มีดีไซน์'}
+        description={folderId && !searching ? 'ใช้เมนู “…” บนการ์ดดีไซน์แล้วเลือก “ย้ายไปโฟลเดอร์”' : undefined}
+        icon={<FolderIcon aria-hidden className="size-8" />}
+        action={
+          !folderId && !searching ? (
+            <button type="button" onClick={() => openCreate()} className="min-h-11 rounded-xl bg-primary px-5 text-csmju-caption font-semibold text-on-inverse hover:bg-primary-hover">
+              สร้างดีไซน์
+            </button>
+          ) : undefined
+        }
+      />
+    );
+  }
+
+  return (
+    <>
+      {layout === 'grid' ? (
+        <ul className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          {designs.data!.items.map((design) => (
+            <li key={design.id}>
+              <DesignCard design={design} href={`/design/${design.id}`} menu={<DesignMenu design={design} />} />
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <table className="w-full text-left text-csmju-caption">
+          <thead className="text-muted">
+            <tr className="border-b border-line">
+              <th scope="col" className="py-2 font-medium">ชื่อ</th>
+              <th scope="col" className="hidden py-2 font-medium md:table-cell">ประเภท</th>
+              <th scope="col" className="hidden py-2 font-medium sm:table-cell">แก้ไขล่าสุด</th>
+              <th scope="col" className="w-14 py-2"><span className="sr-only">ตัวเลือก</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            {designs.data!.items.map((design) => (
+              <tr key={design.id} className="border-b border-line hover:bg-surface-muted">
+                <td className="py-2">
+                  <Link href={`/design/${design.id}`} className="flex items-center gap-3">
+                    <span className="w-16 shrink-0">
+                      <Thumbnail src={design.thumbnail} width={design.width} height={design.height} designType={design.designType} alt="" />
+                    </span>
+                    <span className="truncate font-semibold text-ink">{design.title}</span>
+                  </Link>
+                </td>
+                <td className="hidden py-2 text-body md:table-cell">{designTypeLabel(design.designType)}</td>
+                <td className="hidden py-2 text-body sm:table-cell">{relativeTime(design.updatedAt)}</td>
+                <td className="py-2"><DesignMenu design={design} /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <Pager page={page} totalPages={designs.data!.meta.totalPages} onPage={setPage} />
+    </>
+  );
+}
+
+/// โฟลเดอร์ "อัปโหลด": รูปทั้งหมดที่ผู้ใช้อัปโหลด (ไม่รวมถังขยะ)
+function UploadsView() {
+  const [page, setPage] = useState(1);
+  const queryClient = useQueryClient();
+  const toast = useToast();
+  const openCreate = useOpenCreate();
+  const assets = useQuery({
+    queryKey: ['assets', 'projects', page],
+    queryFn: () => api.list<Asset>(`/assets${qs({ page, limit: 40 })}`),
+  });
+  const trash = useMutation({
+    mutationFn: (id: string) => api.patch(`/assets/${id}`, { trashed: true }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['assets'] });
+      void queryClient.invalidateQueries({ queryKey: ['quotas'] });
+      toast('ย้ายรูปไปถังขยะแล้ว');
+    },
+    onError: (error) => toast(errorMessage(error), 'error'),
+  });
+
+  return (
+    <div className="pt-6">
+      {assets.isLoading ? (
+        <Spinner />
+      ) : assets.isError ? (
+        <ErrorState message={errorMessage(assets.error)} onRetry={() => void assets.refetch()} />
+      ) : assets.data!.items.length === 0 ? (
+        <EmptyState
+          title="ยังไม่มีไฟล์อัปโหลด"
+          description="รูปที่อัปโหลดในหน้าแก้ไขหรือจากปุ่มสร้างจะเก็บไว้ที่นี่"
+          icon={<CloudUpload aria-hidden className="size-8" />}
+          action={
+            <button type="button" onClick={() => openCreate('upload')} className="min-h-11 rounded-xl bg-primary px-5 text-csmju-caption font-semibold text-on-inverse hover:bg-primary-hover">
+              อัปโหลดรูป
+            </button>
+          }
+        />
+      ) : (
+        <>
+          <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
+            {assets.data!.items.map((asset) => (
+              <li key={asset.id} className="group relative">
+                <span className="csmju-checker flex aspect-square items-center justify-center overflow-hidden rounded-xl">
+                  {/* eslint-disable-next-line @next/next/no-img-element -- รูปผ่าน API ที่ต้องมี session */}
+                  <img src={asset.contentUrl} alt={asset.fileName} loading="lazy" className="max-h-full max-w-full object-contain" />
+                </span>
+                <p className="mt-2 truncate text-csmju-caption font-semibold text-ink" title={asset.fileName}>{asset.fileName}</p>
+                <p className="text-csmju-caption text-muted">{formatBytes(asset.sizeBytes)} • {relativeTime(asset.createdAt)}</p>
+                <button
+                  type="button"
+                  onClick={() => trash.mutate(asset.id)}
+                  aria-label={`ย้าย ${asset.fileName} ไปถังขยะ`}
+                  title="ย้ายไปถังขยะ"
+                  className="absolute top-2 right-2 inline-flex size-11 items-center justify-center rounded-xl bg-surface/90 text-danger shadow-csmju-sm md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100"
+                >
+                  <Trash2 aria-hidden className="size-4" />
+                </button>
+              </li>
+            ))}
+          </ul>
+          <Pager page={page} totalPages={assets.data!.meta.totalPages} onPage={setPage} />
+        </>
+      )}
+    </div>
   );
 }
