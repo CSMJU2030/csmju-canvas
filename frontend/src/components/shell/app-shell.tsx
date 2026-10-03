@@ -24,7 +24,6 @@ export { ROLE_LABEL } from './avatar';
 const NAV = [
   { href: '/', label: 'หน้าหลัก', icon: House },
   { href: '/projects', label: 'โปรเจกต์', icon: FolderOpen },
-  { href: '/templates', label: 'เทมเพลต', icon: LayoutTemplate },
   { href: '/help', label: 'คู่มือ', icon: BookOpen },
 ];
 
@@ -135,7 +134,8 @@ function Rail({ open, onToggleSecondary }: { open: boolean; onToggleSecondary: (
         </span>
         สร้าง
       </button>
-      {NAV.map((item) => {
+      {/* ไอคอน "เทมเพลต" โผล่ต่อท้ายเมื่อเปิดแท็บเทมเพลต (ภาพบรีฟ) */}
+      {[...NAV, ...(pathname.startsWith('/templates') ? [{ href: '/templates', label: 'เทมเพลต', icon: LayoutTemplate }] : [])].map((item) => {
         const active = isActive(pathname, item.href);
 
         return (
