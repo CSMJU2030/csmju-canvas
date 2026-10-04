@@ -1,12 +1,13 @@
 'use client';
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, CheckCircle2, Eye, Folder as FolderIcon, MessageCircle, History, Search, Users } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Download, Eye, Folder as FolderIcon, MessageCircle, History, Search, Users } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Button, Dialog, Spinner, cx, errorMessage, inputClass, useToast } from '@/components/csmju/primitives';
 import { api } from '@/lib/csmju/api';
 import { DESIGN_GROUPS, DESIGN_TYPES } from '@/lib/design-types';
 import { toInputColor } from '@/lib/editor/color';
+import { download, safeFileName } from '@/lib/editor/export';
 import { layerLabel } from '@/lib/editor/factory';
 import { isGradient } from '@/lib/editor/paint';
 import { useEditor } from '@/lib/editor/store';
@@ -144,6 +145,7 @@ interface Stats {
 function AnalyticsDialog({ onClose }: { onClose: () => void }) {
   const designId = useEditor((s) => s.designId);
   const linkAccess = useEditor((s) => s.linkAccess);
+  const title = useEditor((s) => s.title);
   const stats = useQuery({ queryKey: ['design-stats', designId], queryFn: () => api.get<Stats>(`/designs/${designId}/stats`) });
   const cards = stats.data
     ? [
@@ -175,6 +177,29 @@ function AnalyticsDialog({ onClose }: { onClose: () => void }) {
             {stats.data?.lastViewedAt ? `เปิดดูล่าสุด ${new Date(stats.data.lastViewedAt).toLocaleString('th-TH')}` : 'ยังไม่มีใครเปิดดูผ่านลิงก์'} · นับเฉพาะคนอื่นที่เข้าสู่ระบบแล้วเปิดงานผ่านลิงก์ ไม่นับเจ้าของ
           </p>
           {linkAccess === 'NONE' && <p className="rounded-xl bg-warning-bg px-3 py-2 text-csmju-caption text-warning">งานนี้ยังเปิดได้เฉพาะคุณ — เปลี่ยนการแชร์เป็น “ทุกคนที่มีลิงก์” ก่อน จึงจะมีผู้เข้าชม</p>}
+          <div>
+            <Button
+              onClick={() => {
+                const d = stats.data!;
+                const rows = [
+                  ['รายการ', 'ค่า'],
+                  ['ชื่องาน', title],
+                  ['จำนวนผู้เข้าชมที่ไม่ซ้ำ', String(d.uniqueViewers)],
+                  ['จำนวนการเข้าชมทั้งหมด', String(d.totalViews)],
+                  ['ความคิดเห็น', String(d.commentCount)],
+                  ['เวอร์ชันที่เก็บไว้', String(d.versionCount)],
+                  ['เปิดดูล่าสุด', d.lastViewedAt ?? ''],
+                  ['ดึงข้อมูลเมื่อ', new Date().toISOString()],
+                ];
+                const csv = rows.map((r) => r.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(',')).join('\r\n');
+
+                // BOM ให้ Excel อ่านภาษาไทยถูก
+                download(new Blob(['\ufeff', csv], { type: 'text/csv;charset=utf-8' }), `${safeFileName(title)}-analytics.csv`);
+              }}
+            >
+              <Download aria-hidden className="size-4" /> ดาวน์โหลด CSV
+            </Button>
+          </div>
         </div>
       )}
     </Dialog>
