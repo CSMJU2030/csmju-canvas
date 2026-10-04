@@ -12,6 +12,8 @@ export interface FontFamily {
   regular: string;
   bold: string | null;
   style: 'sans' | 'serif' | 'display' | 'handwriting';
+  /// ภาษาที่ฟอนต์ออกแบบมา · ฟอนต์อังกฤษแสดงภาษาไทยด้วยฟอนต์สำรอง Noto Sans Thai
+  script?: 'th' | 'en';
 }
 
 export const FONT_FAMILIES: FontFamily[] = [
@@ -27,6 +29,50 @@ export const FONT_FAMILIES: FontFamily[] = [
   { id: 'Charmonman', label: 'ชามนแมน (Charmonman)', regular: 'Charmonman-Regular.ttf', bold: 'Charmonman-Bold.ttf', style: 'handwriting' },
   { id: 'Itim', label: 'ไอติม (Itim)', regular: 'Itim-Regular.ttf', bold: null, style: 'handwriting' },
   { id: 'Sriracha', label: 'ศรีราชา (Sriracha)', regular: 'Sriracha-Regular.ttf', bold: null, style: 'handwriting' },
+  { id: 'Anuphan', label: 'อนุพันธ์ (Anuphan)', regular: 'Anuphan-Variable.ttf', bold: 'Anuphan-Variable.ttf', style: 'sans', script: 'th' },
+  { id: 'Bai Jamjuree', label: 'ใบจามจุรี (Bai Jamjuree)', regular: 'BaiJamjuree-Regular.ttf', bold: 'BaiJamjuree-Bold.ttf', style: 'sans', script: 'th' },
+  { id: 'Chonburi', label: 'ชลบุรี (Chonburi)', regular: 'Chonburi-Regular.ttf', bold: null, style: 'display', script: 'th' },
+  { id: 'Fahkwang', label: 'ฟ้ากว้าง (Fahkwang)', regular: 'Fahkwang-Regular.ttf', bold: 'Fahkwang-Bold.ttf', style: 'display', script: 'th' },
+  { id: 'K2D', label: 'K2D', regular: 'K2D-Regular.ttf', bold: 'K2D-Bold.ttf', style: 'sans', script: 'th' },
+  { id: 'KoHo', label: 'โคโฮ (KoHo)', regular: 'KoHo-Regular.ttf', bold: 'KoHo-Bold.ttf', style: 'sans', script: 'th' },
+  { id: 'Kodchasan', label: 'กชสัณ (Kodchasan)', regular: 'Kodchasan-Regular.ttf', bold: 'Kodchasan-Bold.ttf', style: 'display', script: 'th' },
+  { id: 'Krub', label: 'ครับ (Krub)', regular: 'Krub-Regular.ttf', bold: 'Krub-Bold.ttf', style: 'sans', script: 'th' },
+  { id: 'Mali', label: 'มะลิ (Mali)', regular: 'Mali-Regular.ttf', bold: 'Mali-Bold.ttf', style: 'handwriting', script: 'th' },
+  { id: 'Niramit', label: 'นิรมิต (Niramit)', regular: 'Niramit-Regular.ttf', bold: 'Niramit-Bold.ttf', style: 'sans', script: 'th' },
+  { id: 'Taviraj', label: 'ทวิราช (Taviraj)', regular: 'Taviraj-Regular.ttf', bold: 'Taviraj-Bold.ttf', style: 'serif', script: 'th' },
+  { id: 'Trirong', label: 'ตรีรงค์ (Trirong)', regular: 'Trirong-Regular.ttf', bold: 'Trirong-Bold.ttf', style: 'serif', script: 'th' },
+  { id: 'Athiti', label: 'อทิติ (Athiti)', regular: 'Athiti-Regular.ttf', bold: 'Athiti-Bold.ttf', style: 'sans', script: 'th' },
+  { id: 'Maitree', label: 'ไมตรี (Maitree)', regular: 'Maitree-Regular.ttf', bold: 'Maitree-Bold.ttf', style: 'serif', script: 'th' },
+  { id: 'Pattaya', label: 'พัทยา (Pattaya)', regular: 'Pattaya-Regular.ttf', bold: null, style: 'display', script: 'th' },
+  { id: 'Thasadith', label: 'ทัศดิษฐ์ (Thasadith)', regular: 'Thasadith-Regular.ttf', bold: 'Thasadith-Bold.ttf', style: 'sans', script: 'th' },
+  { id: 'Srisakdi', label: 'ศรีศักดิ์ (Srisakdi)', regular: 'Srisakdi-Regular.ttf', bold: 'Srisakdi-Bold.ttf', style: 'display', script: 'th' },
+  { id: 'Charm', label: 'ชาม (Charm)', regular: 'Charm-Regular.ttf', bold: 'Charm-Bold.ttf', style: 'handwriting', script: 'th' },
+  { id: 'Noto Serif Thai', label: 'Noto Serif Thai', regular: 'NotoSerifThai-Variable.ttf', bold: 'NotoSerifThai-Variable.ttf', style: 'serif', script: 'th' },
+  { id: 'Montserrat', label: 'Montserrat', regular: 'Montserrat-Variable.ttf', bold: 'Montserrat-Variable.ttf', style: 'sans', script: 'en' },
+  { id: 'Poppins', label: 'Poppins', regular: 'Poppins-Regular.ttf', bold: 'Poppins-Bold.ttf', style: 'sans', script: 'en' },
+  { id: 'Roboto', label: 'Roboto', regular: 'Roboto-Variable.ttf', bold: 'Roboto-Variable.ttf', style: 'sans', script: 'en' },
+  { id: 'Open Sans', label: 'Open Sans', regular: 'OpenSans-Variable.ttf', bold: 'OpenSans-Variable.ttf', style: 'sans', script: 'en' },
+  { id: 'Lato', label: 'Lato', regular: 'Lato-Regular.ttf', bold: 'Lato-Bold.ttf', style: 'sans', script: 'en' },
+  { id: 'Inter', label: 'Inter', regular: 'Inter-Variable.ttf', bold: 'Inter-Variable.ttf', style: 'sans', script: 'en' },
+  { id: 'Nunito', label: 'Nunito', regular: 'Nunito-Variable.ttf', bold: 'Nunito-Variable.ttf', style: 'sans', script: 'en' },
+  { id: 'Quicksand', label: 'Quicksand', regular: 'Quicksand-Variable.ttf', bold: 'Quicksand-Variable.ttf', style: 'sans', script: 'en' },
+  { id: 'Rubik', label: 'Rubik', regular: 'Rubik-Variable.ttf', bold: 'Rubik-Variable.ttf', style: 'sans', script: 'en' },
+  { id: 'Raleway', label: 'Raleway', regular: 'Raleway-Variable.ttf', bold: 'Raleway-Variable.ttf', style: 'sans', script: 'en' },
+  { id: 'Josefin Sans', label: 'Josefin Sans', regular: 'JosefinSans-Variable.ttf', bold: 'JosefinSans-Variable.ttf', style: 'sans', script: 'en' },
+  { id: 'Space Grotesk', label: 'Space Grotesk', regular: 'SpaceGrotesk-Variable.ttf', bold: 'SpaceGrotesk-Variable.ttf', style: 'sans', script: 'en' },
+  { id: 'Comfortaa', label: 'Comfortaa', regular: 'Comfortaa-Variable.ttf', bold: 'Comfortaa-Variable.ttf', style: 'display', script: 'en' },
+  { id: 'Oswald', label: 'Oswald', regular: 'Oswald-Variable.ttf', bold: 'Oswald-Variable.ttf', style: 'display', script: 'en' },
+  { id: 'Bebas Neue', label: 'Bebas Neue', regular: 'BebasNeue-Regular.ttf', bold: null, style: 'display', script: 'en' },
+  { id: 'Anton', label: 'Anton', regular: 'Anton-Regular.ttf', bold: null, style: 'display', script: 'en' },
+  { id: 'Archivo Black', label: 'Archivo Black', regular: 'ArchivoBlack-Regular.ttf', bold: null, style: 'display', script: 'en' },
+  { id: 'Righteous', label: 'Righteous', regular: 'Righteous-Regular.ttf', bold: null, style: 'display', script: 'en' },
+  { id: 'Abril Fatface', label: 'Abril Fatface', regular: 'AbrilFatface-Regular.ttf', bold: null, style: 'display', script: 'en' },
+  { id: 'Lobster', label: 'Lobster', regular: 'Lobster-Regular.ttf', bold: null, style: 'display', script: 'en' },
+  { id: 'Playfair Display', label: 'Playfair Display', regular: 'PlayfairDisplay-Variable.ttf', bold: 'PlayfairDisplay-Variable.ttf', style: 'serif', script: 'en' },
+  { id: 'Pacifico', label: 'Pacifico', regular: 'Pacifico-Regular.ttf', bold: null, style: 'handwriting', script: 'en' },
+  { id: 'Dancing Script', label: 'Dancing Script', regular: 'DancingScript-Variable.ttf', bold: 'DancingScript-Variable.ttf', style: 'handwriting', script: 'en' },
+  { id: 'Caveat', label: 'Caveat', regular: 'Caveat-Variable.ttf', bold: 'Caveat-Variable.ttf', style: 'handwriting', script: 'en' },
+  { id: 'Great Vibes', label: 'Great Vibes', regular: 'GreatVibes-Regular.ttf', bold: null, style: 'handwriting', script: 'en' },
 ];
 
 export const DEFAULT_FONT = 'Noto Sans Thai';

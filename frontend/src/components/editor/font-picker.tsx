@@ -1,7 +1,7 @@
 'use client';
 
 import { Check, ChevronDown, Search } from 'lucide-react';
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { FloatingPanel, useAnchoredMenu } from '@/components/csmju/floating';
 import { cx } from '@/components/csmju/primitives';
 import { FONT_FAMILIES, cssFamily, ensureFont, type FontFamily } from '@/lib/editor/fonts';
@@ -24,6 +24,34 @@ export function usePreloadFonts(ids: string[]) {
   }, [key]);
 }
 
+/// โหลดไฟล์ฟอนต์เมื่อแถวนั้นเลื่อนมาให้เห็น (มีฟอนต์หลายสิบตัว ไม่โหลดทั้งหมดพร้อมกัน)
+export function FontName({ id, label, className }: { id: string; label: string; className?: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+
+    if (!el) return;
+
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        void ensureFont(id, 400);
+        observer.disconnect();
+      }
+    });
+
+    observer.observe(el);
+
+    return () => observer.disconnect();
+  }, [id]);
+
+  return (
+    <span ref={ref} className={className} style={{ fontFamily: cssFamily(id) }}>
+      {label}
+    </span>
+  );
+}
+
 export function matchFonts(query: string, category: FontFamily['style'] | 'all' = 'all'): FontFamily[] {
   const term = query.trim().toLowerCase();
 
@@ -43,7 +71,7 @@ export function FontPicker({ value, onChange, label = 'ฟอนต์' }: { val
   const current = FONT_FAMILIES.find((f) => f.id === value);
   const fonts = matchFonts(query, category);
 
-  usePreloadFonts(open ? FONT_FAMILIES.map((f) => f.id) : [value]);
+  usePreloadFonts([value]);
 
   return (
     <>
@@ -103,9 +131,7 @@ export function FontPicker({ value, onChange, label = 'ฟอนต์' }: { val
                   }}
                   className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left hover:bg-surface-muted"
                 >
-                  <span className="flex-1 truncate text-csmju-body text-ink" style={{ fontFamily: cssFamily(font.id) }}>
-                    {font.label} <span className="text-muted">ตัวอย่าง</span>
-                  </span>
+                  <FontName id={font.id} label={font.label} className="flex-1 truncate text-csmju-body text-ink" />
                   {font.id === value && <Check aria-hidden className="size-5 text-ink" />}
                 </button>
               </li>

@@ -109,6 +109,8 @@ export interface EditorState extends EditorMeta {
   distributeSelected(axis: 'horizontal' | 'vertical'): void;
   /// แก้คุณสมบัติของหน้า (ชื่อ ซ่อน ล็อก โน้ต เวลา)
   updatePage(index: number, patch: Partial<Omit<Page, 'id' | 'elements'>>): void;
+  /// วางชิ้นงานไว้หลังสุดของหน้าปัจจุบัน (ภาพแบ็กกราวด์) ในขั้น undo เดียว
+  addBehind(element: CanvasElement): void;
   /// ค้นหาและแทนที่ข้อความทุกหน้า (ข้ามชิ้นที่ล็อก) · คืนจำนวนที่แทน
   replaceText(find: string, replacement: string, matchCase: boolean): number;
   /// แทนสีหนึ่งด้วยอีกสีในหน้าปัจจุบันหรือทั้งงาน · คืนจำนวนจุดที่เปลี่ยน
@@ -433,6 +435,12 @@ export const useEditor = create<EditorState>((set, get) => {
       const state = get();
 
       commit(withPage(state.doc, index, (page) => ({ ...page, ...patch })));
+    },
+
+    addBehind(element) {
+      const state = get();
+
+      commit(withPage(state.doc, state.pageIndex, (page) => ({ ...page, elements: [element, ...page.elements] })));
     },
 
     replaceText(find, replacement, matchCase) {

@@ -667,7 +667,7 @@ const TARGET_TITLE: Record<ColorTarget, string> = {
   shadow: 'สีเงา',
 };
 
-export function ColorPanel({ target: forced }: { target?: ColorTarget } = {}) {
+export function ColorPanel({ target: forced, embedded = false }: { target?: ColorTarget; embedded?: boolean } = {}) {
   const storeTarget = useEditorUi((s) => s.colorTarget);
   const target = forced ?? storeTarget;
   const selected = useSelected();
@@ -739,7 +739,7 @@ export function ColorPanel({ target: forced }: { target?: ColorTarget } = {}) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PanelHeader title={forced === 'background' ? 'แบ็กกราวด์' : TARGET_TITLE[target]} onClose={close} />
+      {!embedded && <PanelHeader title={forced === 'background' ? 'แบ็กกราวด์' : TARGET_TITLE[target]} onClose={close} />}
       <div className="shrink-0 px-4 pb-2">
         <div className="relative">
           <Search aria-hidden className="pointer-events-none absolute top-1/2 left-3 size-5 -translate-y-1/2 text-ink" />

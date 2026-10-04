@@ -14,7 +14,7 @@ import type { CanvasElement, Crop, ImageAdjust, ImageElement, TextElement } from
 import { useEditorUi } from '@/lib/editor/ui-store';
 import type { Asset } from '@/lib/types';
 import { PanelHeader, PresetTile, RangeField, UnderlineTabs } from './controls';
-import { usePreloadFonts } from './font-picker';
+import { FontName } from './font-picker';
 import { ShadowControls } from './side-panels';
 
 function close() {
@@ -60,6 +60,7 @@ export function FontPanel() {
   const [tab, setTab] = useState<'fonts' | 'styles'>('fonts');
   const [query, setQuery] = useState('');
   const [style, setStyle] = useState<FontFamily['style'] | 'all'>('all');
+  const [script, setScript] = useState<'all' | 'th' | 'en'>('all');
   const current = texts[0]?.fontFamily;
   const ids = texts.filter((t) => !t.locked).map((t) => t.id);
   const term = query.trim().toLowerCase();
@@ -71,10 +72,9 @@ export function FontPanel() {
     return FONT_FAMILIES.filter((f) => set.has(f.id));
   }, [doc]);
   const fonts = FONT_FAMILIES.filter(
-    (f) => (style === 'all' || f.style === style) && (!term || f.label.toLowerCase().includes(term) || f.id.toLowerCase().includes(term)),
+    (f) => (style === 'all' || f.style === style) && (script === 'all' || (f.script ?? 'th') === script) && (!term || f.label.toLowerCase().includes(term) || f.id.toLowerCase().includes(term)),
   );
 
-  usePreloadFonts(FONT_FAMILIES.map((f) => f.id));
 
   const applyFont = async (id: string) => {
     await Promise.all([ensureFont(id, 400), ensureFont(id, 700)]);
@@ -90,9 +90,8 @@ export function FontPanel() {
         aria-pressed={font.id === current}
         className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left hover:bg-surface-muted disabled:opacity-50"
       >
-        <span className="flex-1 truncate text-csmju-body text-ink" style={{ fontFamily: cssFamily(font.id) }}>
-          {font.label}
-        </span>
+        <FontName id={font.id} label={font.label} className="flex-1 truncate text-csmju-body text-ink" />
+        {(font.script ?? 'th') === 'en' && <span className="text-csmju-caption text-muted">อังกฤษ</span>}
         {font.id === current && <Check aria-hidden className="size-5 text-ink" />}
       </button>
     </li>
@@ -125,6 +124,26 @@ export function FontPanel() {
               />
             </div>
             <div className="csmju-scroll-x mt-3 flex gap-2 overflow-x-auto pb-1">
+              {(
+                [
+                  ['th', 'ภาษาไทย'],
+                  ['en', 'อังกฤษ'],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  aria-pressed={script === key}
+                  onClick={() => setScript(script === key ? 'all' : key)}
+                  className={cx(
+                    'min-h-10 shrink-0 rounded-xl border px-3 text-csmju-caption font-semibold',
+                    script === key ? 'border-primary bg-primary-soft text-primary' : 'border-line-strong text-ink hover:bg-surface-muted',
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+              <span aria-hidden className="mx-1 w-px shrink-0 bg-line" />
               {STYLE_CHIPS.map((c) => (
                 <button
                   key={c.key}
@@ -143,7 +162,7 @@ export function FontPanel() {
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-2 pt-2 pb-6">
             {ids.length === 0 && <p className="px-2 pb-2 text-csmju-caption text-muted">เลือกข้อความก่อน แล้วเปลี่ยนฟอนต์ได้ที่นี่</p>}
-            {!term && style === 'all' && inDoc.length > 0 && (
+            {!term && style === 'all' && script === 'all' && inDoc.length > 0 && (
               <>
                 <h3 className="px-2 pt-2 pb-1 text-csmju-caption font-bold text-ink">ฟอนต์ในเอกสาร</h3>
                 <ul>{inDoc.map(fontRow)}</ul>
