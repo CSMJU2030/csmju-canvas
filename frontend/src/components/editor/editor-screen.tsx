@@ -7,19 +7,22 @@ import {
   ZoomIn, ZoomOut,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ErrorState, IconButton, Spinner, cx, errorMessage, useToast } from '@/components/csmju/primitives';
 import { api, ApiError } from '@/lib/csmju/api';
 import { useMe } from '@/lib/csmju/session';
 import { designTypeLabel } from '@/lib/design-types';
 import { useEditor } from '@/lib/editor/store';
+import { useEditorUi } from '@/lib/editor/ui-store';
 import { normalizeDocument } from '@/lib/editor/types';
 import type { Design } from '@/lib/types';
 import { useCreateDesign } from '@/lib/create-design';
 import { ShareDialog } from '@/components/designs/design-actions';
 import { ExportDialog, PublishTemplateDialog } from './dialogs';
 import { PANEL_LABELS, PanelContent, RAIL, StarredIcon, type PanelKey, type RailKey } from './panels';
-import { PropertiesBar } from './properties-bar';
+import { Wallpaper } from 'lucide-react';
+import { ContextMenu } from './context-menu';
+import { ContextToolbar } from './context-toolbar';
 import { SelectionToolbar } from './selection-toolbar';
 import { Stage, clampZoom, fitToScreen } from './stage';
 import { ToolsPalette } from './tools-palette';
@@ -71,24 +74,25 @@ export function EditorScreen({ id }: { id: string }) {
 }
 
 function EditorLayout({ needsThumbnail }: { needsThumbnail: boolean }) {
-  // จอเล็กเริ่มโดยพับแผงไว้ ให้เห็นผืนผ้าใบเต็มที่ (หน้านี้ render ฝั่ง client เท่านั้น — อยู่หลัง SessionProvider)
-  const [panel, setPanelState] = useState<PanelKey | null>(() =>
-    typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches ? null : 'templates',
-  );
-  const [toolsOpen, setToolsOpen] = useState(false);
+  const panel = useEditorUi((s) => s.panel);
+  const toolsOpen = useEditorUi((s) => s.toolsOpen);
+  const colorTarget = useEditorUi((s) => s.colorTarget);
+
+  // จอเล็กเริ่มโดยพับแผงไว้ ให้เห็นผืนผ้าใบเต็มที่ · จอใหญ่เปิดแผงเทมเพลตแบบ Canva
+  useEffect(() => {
+    useEditorUi.getState().setPanel(window.matchMedia('(max-width: 767px)').matches ? null : 'templates');
+
+    return () => useEditorUi.getState().setPanel(null);
+  }, []);
 
   // เปิดแผงอื่น = ปิดแถบเครื่องมือและเลิกโหมดวาด (แบบ Canva ที่แสดงทีละอย่าง)
   const setPanel = (next: PanelKey | null) => {
-    setPanelState(next);
-    setToolsOpen(false);
+    useEditorUi.getState().setPanel(next);
     useEditor.getState().setTool({ mode: 'select' });
   };
-  const openTools = () => {
-    setPanelState(null);
-    setToolsOpen(true);
-  };
+  const openTools = () => useEditorUi.getState().setToolsOpen(true);
   const closeTools = () => {
-    setToolsOpen(false);
+    useEditorUi.getState().setToolsOpen(false);
     useEditor.getState().setTool({ mode: 'select' });
   };
   const onRail = (key: RailKey) => {
@@ -100,8 +104,12 @@ function EditorLayout({ needsThumbnail }: { needsThumbnail: boolean }) {
 
     setPanel(panel === key ? null : key);
   };
-  const railActive = (key: RailKey | 'starred') =>
-    key === 'tools' ? toolsOpen || panel === 'signature' : panel === key;
+  const railActive = (key: RailKey | 'starred' | 'background') =>
+    key === 'tools'
+      ? toolsOpen || panel === 'signature'
+      : key === 'background'
+        ? panel === 'background' || (panel === 'color' && colorTarget === 'background')
+        : panel === key;
   const [dialog, setDialog] = useState<'export' | 'publish' | 'share' | null>(null);
   const readOnly = useEditor((s) => s.access === 'VIEW');
   const { status, retry } = useAutosave(needsThumbnail && !readOnly);
@@ -131,6 +139,7 @@ function EditorLayout({ needsThumbnail }: { needsThumbnail: boolean }) {
             <RailButton key={item.key} label={item.label} icon={item.icon} tone={item.tone} active={railActive(item.key)} onClick={() => onRail(item.key)} />
           ))}
           <span aria-hidden className="mt-auto mb-1 h-px w-8 bg-line-strong" />
+          <RailButton label="แบ็กกราวด์" icon={Wallpaper} tone="text-type-red" active={railActive('background')} onClick={() => setPanel(railActive('background') ? null : 'background')} />
           <RailButton label="ติดดาวแล้ว" icon={StarredIcon} tone="text-type-orange" active={railActive('starred')} onClick={() => setPanel(panel === 'starred' ? null : 'starred')} />
         </nav>
         {panel && (
@@ -150,9 +159,9 @@ function EditorLayout({ needsThumbnail }: { needsThumbnail: boolean }) {
         )}
 
         <div className="relative flex min-w-0 flex-1 flex-col">
-          <PropertiesBar />
           <div className="relative flex min-h-0 flex-1 flex-col">
             <Stage />
+            <ContextToolbar />
             <SelectionToolbar />
             {toolsOpen && <ToolsPalette onClose={closeTools} onSignature={() => setPanel('signature')} />}
           </div>
@@ -166,6 +175,7 @@ function EditorLayout({ needsThumbnail }: { needsThumbnail: boolean }) {
       <ExportDialog open={dialog === 'export'} onClose={() => setDialog(null)} />
       {dialog === 'publish' && <PublishTemplateDialog open onClose={() => setDialog(null)} />}
       {dialog === 'share' && <EditorShareDialog onClose={() => setDialog(null)} />}
+      <ContextMenu />
     </div>
   );
 }

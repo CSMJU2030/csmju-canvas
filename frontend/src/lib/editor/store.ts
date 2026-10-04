@@ -64,6 +64,8 @@ export interface EditorState extends EditorMeta {
   clipboard: CanvasElement[];
   /// เครื่องมือวาด (ไม่อยู่ในประวัติ undo และไม่บันทึกลงงาน)
   tool: DrawTool;
+  /// สไตล์ที่คัดลอกไว้ (ปุ่มคัดลอกสไตล์ / Ctrl+Alt+C)
+  styleClipboard: StyleSnapshot | null;
 
   load(meta: EditorMeta, doc: DesignDocument): void;
   setTitle(title: string): void;
@@ -83,6 +85,15 @@ export interface EditorState extends EditorMeta {
   /// ลบตาม id (ยางลบ) — ข้ามชิ้นที่ล็อก
   removeElements(ids: string[]): void;
   setTool(patch: Partial<DrawTool>): void;
+  copyStyle(): void;
+  /// วางสไตล์ที่คัดลอกไว้ลงชิ้นงาน (ข้ามชิ้นที่ล็อก)
+  pasteStyle(ids: string[]): void;
+  /// กระจายระยะห่างให้เท่ากัน (ต้องเลือก 3 ชิ้นขึ้นไป)
+  distributeSelected(axis: 'horizontal' | 'vertical'): void;
+  /// แก้คุณสมบัติของหน้า (ชื่อ ซ่อน ล็อก โน้ต เวลา)
+  updatePage(index: number, patch: Partial<Omit<Page, 'id' | 'elements'>>): void;
+  /// แทนสีหนึ่งด้วยอีกสีในหน้าปัจจุบันหรือทั้งงาน · คืนจำนวนจุดที่เปลี่ยน
+  replaceColor(from: string, to: string, scope: 'page' | 'all'): number;
   removeSelected(): void;
   duplicateSelected(): void;
   copySelected(): void;
@@ -184,6 +195,7 @@ export const useEditor = create<EditorState>((set, get) => {
     pan: { x: 0, y: 0 },
     clipboard: [],
     tool: DEFAULT_DRAW_TOOL,
+    styleClipboard: null,
 
     load(meta, doc) {
       gestureSnapshot = null;
@@ -276,6 +288,88 @@ export const useEditor = create<EditorState>((set, get) => {
       mutatePage((p) => ({ ...p, elements: p.elements.filter((el) => !removable.has(el.id)) }), {
         selection: get().selection.filter((id) => !removable.has(id)),
       });
+    },
+
+    copyStyle() {
+      const state = get();
+      const first = currentPage(state).elements.find((el) => state.selection.includes(el.id));
+
+      if (first) set({ styleClipboard: styleOf(first) });
+    },
+
+    pasteStyle(ids) {
+      const style = get().styleClipboard;
+
+      if (!style) return;
+
+      const page = currentPage(get());
+      const targets = ids.filter((id) => !page.elements.find((el) => el.id === id)?.locked);
+
+      if (targets.length > 0) get().updateElements(targets, (el) => applyStyle(el, style));
+    },
+
+    distributeSelected(axis) {
+      const state = get();
+      const picked = currentPage(state)
+        .elements.filter((el) => state.selection.includes(el.id) && !el.locked)
+        .map((el) => ({ el, box: boundingBox(el) }));
+
+      if (picked.length < 3) return;
+
+      const horizontal = axis === 'horizontal';
+
+      picked.sort((a, b) => (horizontal ? a.box.x - b.box.x : a.box.y - b.box.y));
+
+      const first = picked[0].box;
+      const last = picked[picked.length - 1].box;
+      const span = horizontal ? last.x + last.width - first.x : last.y + last.height - first.y;
+      const used = picked.reduce((sum, p) => sum + (horizontal ? p.box.width : p.box.height), 0);
+      const gap = (span - used) / (picked.length - 1);
+      const targets = new Map<string, number>();
+      let cursor = horizontal ? first.x : first.y;
+
+      for (const p of picked) {
+        targets.set(p.el.id, cursor - (horizontal ? p.box.x : p.box.y));
+        cursor += (horizontal ? p.box.width : p.box.height) + gap;
+      }
+
+      get().updateElements([...targets.keys()], (el) =>
+        horizontal ? { x: el.x + targets.get(el.id)! } : { y: el.y + targets.get(el.id)! },
+      );
+    },
+
+    updatePage(index, patch) {
+      const state = get();
+
+      commit(withPage(state.doc, index, (page) => ({ ...page, ...patch })));
+    },
+
+    replaceColor(from, to, scope) {
+      const state = get();
+      let count = 0;
+      const swap = (value: string | null | undefined) => {
+        if (!value || !value.includes(from)) return value;
+
+        count++;
+
+        return value.split(from).join(to);
+      };
+      const mapPage = (page: Page): Page => ({
+        ...page,
+        background: swap(page.background) ?? null,
+        elements: page.elements.map((el) => {
+          if (el.locked) return el;
+          if (el.type === 'shape') return { ...el, fill: swap(el.fill) ?? null, stroke: swap(el.stroke) ?? null };
+          if (el.type === 'text' || el.type === 'svg' || el.type === 'path') return { ...el, color: swap(el.color)! };
+
+          return el;
+        }),
+      });
+      const pages = state.doc.pages.map((page, i) => (scope === 'all' || i === state.pageIndex ? mapPage(page) : page));
+
+      if (count > 0) commit({ ...state.doc, pages });
+
+      return count;
     },
 
     setTool(patch) {
@@ -511,6 +605,53 @@ export const useEditor = create<EditorState>((set, get) => {
 });
 
 /// สำเนาที่มี id ใหม่ · กลุ่มเดิมได้ groupId ใหม่ (ไม่ผูกกับต้นฉบับ)
+/// ค่าที่ "คัดลอกสไตล์" เก็บ — แยกตามชนิดชิ้นงาน
+export interface StyleSnapshot {
+  type: CanvasElement['type'];
+  /// สีหลัก (ข้อความ ไอคอน เส้นวาด หรือสีพื้นรูปทรง) — ใช้เมื่อวางข้ามชนิด
+  color: string | null;
+  common: Partial<CanvasElement>;
+  specific: Partial<CanvasElement>;
+}
+
+const STYLE_KEYS: Record<CanvasElement['type'], string[]> = {
+  text: ['fontFamily', 'fontSize', 'fontWeight', 'italic', 'underline', 'strike', 'uppercase', 'align', 'lineHeight', 'letterSpacing', 'color', 'effect', 'list', 'curve'],
+  shape: ['fill', 'stroke', 'strokeWidth', 'strokeStyle', 'cornerRadius'],
+  image: ['cornerRadius', 'adjust', 'filter', 'filterIntensity', 'border'],
+  svg: ['color'],
+  path: ['color', 'strokeWidth'],
+};
+
+function pick(el: CanvasElement, keys: string[]): Partial<CanvasElement> {
+  const source = el as unknown as Record<string, unknown>;
+
+  return Object.fromEntries(keys.filter((k) => source[k] !== undefined).map((k) => [k, source[k]])) as Partial<CanvasElement>;
+}
+
+export function styleOf(el: CanvasElement): StyleSnapshot {
+  const color = el.type === 'shape' ? el.fill : el.type === 'image' ? null : el.color;
+
+  return {
+    type: el.type,
+    color: color && !color.includes('gradient') ? color : null,
+    common: pick(el, ['opacity', 'shadow', 'animation']),
+    specific: pick(el, STYLE_KEYS[el.type]),
+  };
+}
+
+export function applyStyle(el: CanvasElement, style: StyleSnapshot): Partial<CanvasElement> {
+  if (style.type === el.type) return { ...style.common, ...style.specific } as Partial<CanvasElement>;
+
+  const out: Record<string, unknown> = { ...style.common };
+
+  if (style.color) {
+    if (el.type === 'shape') out.fill = style.color;
+    else if (el.type !== 'image') out.color = style.color;
+  }
+
+  return out as Partial<CanvasElement>;
+}
+
 export function cloneElements(elements: CanvasElement[], offset: number): CanvasElement[] {
   const groupMap = new Map<string, string>();
 

@@ -24,6 +24,7 @@ import { brushStyle, drawPage, setImageReadyListener, strokeFreehand } from '@/l
 import { snapRect } from '@/lib/editor/snapping';
 import { brushWidth, currentPage, selectionBox, useEditor, type DrawBrush } from '@/lib/editor/store';
 import type { CanvasElement, PathElement, TextElement } from '@/lib/editor/types';
+import { PREVIEW_MS, useEditorUi } from '@/lib/editor/ui-store';
 
 /// ผืนผ้าใบหลักของ editor — วาดด้วย Canvas 2D ทุกเฟรมที่มีการเปลี่ยน (requestAnimationFrame)
 ///
@@ -66,6 +67,8 @@ export function Stage() {
   const sizeRef = useRef(size);
   /// ตำแหน่งเมาส์ล่าสุด (พิกัดหน้า) — ใช้วาดวงยางลบ
   const hover = useRef<Point | null>(null);
+  /// ใช้วาดเฟรมถัดไประหว่างเล่นตัวอย่างแอนิเมชัน (อ้างถึง draw ล่าสุดโดยไม่ต้องอ้างตัวเอง)
+  const drawLoop = useRef<() => void>(() => undefined);
 
   const editingTextId = useEditor((s) => s.editingTextId);
 
@@ -118,9 +121,17 @@ export function Stage() {
     ctx.beginPath();
     ctx.rect(0, 0, width, height);
     ctx.clip();
+    // ตัวอย่างแอนิเมชันจากแผงแอนิเมต — เล่นจนครบแล้วหยุดเอง
+    const preview = useEditorUi.getState().preview;
+    const elapsed = preview ? performance.now() - preview.start : Infinity;
+    const playing = preview && elapsed < PREVIEW_MS;
+
     drawPage(ctx, page, { width, height }, {
       skipIds: state.editingTextId ? new Set([state.editingTextId]) : undefined,
+      progress: playing ? (el) => (preview.ids.includes(el.id) ? elapsed / PREVIEW_MS : undefined) : undefined,
     });
+
+    if (playing) frame.current = requestAnimationFrame(() => drawLoop.current());
 
     // เส้นที่กำลังวาด (ยังไม่เป็น element จนกว่าจะปล่อย)
     const g = gesture.current;
@@ -201,6 +212,10 @@ export function Stage() {
     }
   }, [toScreen]);
 
+  useEffect(() => {
+    drawLoop.current = draw;
+  }, [draw]);
+
   const requestDraw = useCallback(() => {
     if (frame.current === null) frame.current = requestAnimationFrame(draw);
   }, [draw]);
@@ -248,6 +263,9 @@ export function Stage() {
   useEffect(() => {
     setImageReadyListener(requestDraw);
 
+    const unsubscribeUi = useEditorUi.subscribe((ui, prev) => {
+      if (ui.preview !== prev.preview) requestDraw();
+    });
     const unsubscribe = useEditor.subscribe((state, prev) => {
       if (state.width !== prev.width || state.height !== prev.height) {
         fitted.current = `${state.designId}:${state.width}x${state.height}`;
@@ -259,6 +277,7 @@ export function Stage() {
 
     return () => {
       unsubscribe();
+      unsubscribeUi();
       setImageReadyListener(null);
     };
   }, [requestDraw]);
@@ -399,6 +418,17 @@ export function Stage() {
     }
 
     const hit = topElementAt(p);
+
+    // โหมดคัดลอกสไตล์: คลิกชิ้นงาน = วางสไตล์ (ไม่เริ่มลาก)
+    if (useEditorUi.getState().painting) {
+      if (hit) {
+        state.pasteStyle(hit.groupId ? currentPage(state).elements.filter((el) => el.groupId === hit.groupId).map((el) => el.id) : [hit.id]);
+        state.select([hit.id]);
+      }
+
+      useEditorUi.getState().setPainting(false);
+      return;
+    }
 
     if (hit) {
       let ids = state.selection;
@@ -620,6 +650,7 @@ export function Stage() {
     const state = useEditor.getState();
 
     if (state.tool.mode === 'draw') return setCursor(drawCursor(state.tool.brush));
+    if (useEditorUi.getState().painting) return setCursor(PAINT_CURSOR);
 
     const page = currentPage(state);
     const selected = page.elements.filter((el) => state.selection.includes(el.id));
@@ -636,6 +667,21 @@ export function Stage() {
     const hit = topElementAt(toPage(event.clientX, event.clientY));
 
     setCursor(hit ? (hit.locked ? 'not-allowed' : 'move') : 'default');
+  };
+
+  /// คลิกขวา: เลือกชิ้นใต้เมาส์ (ถ้ายังไม่ได้เลือก) แล้วเปิดเมนู
+  const onContextMenu = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    event.preventDefault();
+
+    const state = useEditor.getState();
+
+    if (state.tool.mode === 'draw') return;
+
+    const hit = topElementAt(toPage(event.clientX, event.clientY));
+
+    if (hit && !state.selection.includes(hit.id)) state.select([hit.id]);
+    if (!hit) state.select([]);
+    useEditorUi.getState().openContextMenu({ x: event.clientX, y: event.clientY });
   };
 
   const onDoubleClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
@@ -720,6 +766,7 @@ export function Stage() {
           if (useEditor.getState().tool.brush === 'eraser') requestDraw();
         }}
         onDoubleClick={onDoubleClick}
+        onContextMenu={onContextMenu}
         className="block outline-none"
       />
       {editingTextId && <TextEditor id={editingTextId} />}
@@ -961,6 +1008,15 @@ function distanceToSegment(p: Point, a: Point, b: Point): number {
 
   return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
 }
+
+/// เคอร์เซอร์ลูกกลิ้งทาสีตอนวางสไตล์
+const PAINT_CURSOR = (() => {
+  const svg =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="rgb(255 255 255)" stroke="rgb(15 23 42)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' +
+    '<rect x="2" y="2" width="16" height="6" rx="2"/><path d="M10 16v-2a2 2 0 0 1 2-2h8a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="8" y="16" width="4" height="6" rx="1"/></svg>';
+
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 4 4, copy`;
+})();
 
 function resizeCursor(handle: Handle, rotation: number): string {
   const base: Record<Handle, number> = { e: 0, se: 45, s: 90, sw: 135, w: 180, nw: 225, n: 270, ne: 315 };

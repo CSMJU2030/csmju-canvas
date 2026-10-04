@@ -2,6 +2,8 @@
 
 import { useEffect } from 'react';
 import { currentPage, useEditor } from '@/lib/editor/store';
+import { useEditorUi } from '@/lib/editor/ui-store';
+import { promptLink } from './context-menu';
 import { isTyping } from './stage';
 
 /// คีย์ลัดของหน้าแก้ไข (ดูรายการเต็มใน /help/shortcuts)
@@ -36,10 +38,78 @@ export function useShortcuts() {
         return;
       }
 
+      if (mod && event.key === 'Enter') {
+        event.preventDefault();
+        state.addPage();
+        return;
+      }
+
+      if (event.altKey && event.key === '1') {
+        event.preventDefault();
+        useEditorUi.getState().setPanel('position');
+        return;
+      }
+
+      if (event.key === 'Escape' && useEditorUi.getState().painting) {
+        useEditorUi.getState().setPainting(false);
+        return;
+      }
+
+      if (mod && key === 'v' && state.clipboard.length > 0 && state.selection.length === 0) {
+        event.preventDefault();
+        state.paste();
+        return;
+      }
+
       if (state.selection.length === 0) return;
 
       if (event.key === 'Escape') {
         state.select([]);
+        return;
+      }
+
+      // Ctrl+Alt+C = คัดลอกสไตล์ แล้วคลิกชิ้นงานถัดไปเพื่อวาง
+      if (mod && event.altKey && key === 'c') {
+        event.preventDefault();
+        state.copyStyle();
+        useEditorUi.getState().setPainting(true);
+        return;
+      }
+
+      if (mod && key === 'k') {
+        event.preventDefault();
+
+        const el = currentPage(state).elements.find((e) => e.id === state.selection[0]);
+
+        promptLink(el?.link ?? '', () => undefined);
+        return;
+      }
+
+      if (event.altKey && event.shiftKey && key === 'l') {
+        event.preventDefault();
+
+        const page = currentPage(state);
+        const locked = state.selection.every((id) => page.elements.find((el) => el.id === id)?.locked);
+
+        state.updateElements(state.selection, () => ({ locked: !locked }));
+        return;
+      }
+
+      // ตัวหนา/เอียง/ขีดเส้นใต้ ของข้อความที่เลือก
+      if (mod && (key === 'b' || key === 'i' || key === 'u')) {
+        const texts = currentPage(state).elements.filter((el) => state.selection.includes(el.id) && el.type === 'text' && !el.locked);
+
+        if (texts.length > 0) {
+          event.preventDefault();
+
+          const first = texts[0] as Extract<typeof texts[number], { type: 'text' }>;
+
+          state.updateElements(
+            texts.map((el) => el.id),
+            () => (key === 'b' ? { fontWeight: first.fontWeight === 700 ? 400 : 700 } : key === 'i' ? { italic: !first.italic } : { underline: !first.underline }),
+          );
+        }
+
         return;
       }
 
@@ -73,15 +143,15 @@ export function useShortcuts() {
         return;
       }
 
-      if (mod && event.key === ']') {
+      if (mod && (event.key === ']' || event.code === 'BracketRight')) {
         event.preventDefault();
-        state.reorderSelected(event.shiftKey ? 'front' : 'forward');
+        state.reorderSelected(event.shiftKey || event.altKey ? 'front' : 'forward');
         return;
       }
 
-      if (mod && event.key === '[') {
+      if (mod && (event.key === '[' || event.code === 'BracketLeft')) {
         event.preventDefault();
-        state.reorderSelected(event.shiftKey ? 'back' : 'backward');
+        state.reorderSelected(event.shiftKey || event.altKey ? 'back' : 'backward');
         return;
       }
 

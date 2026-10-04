@@ -1,7 +1,19 @@
 import { cssFamily, ensureFont, isFontReady } from './fonts';
-import { isLineShape, type CanvasElement, type ImageElement, type Page, type PathElement, type ShapeElement, type SvgElement, type TextElement } from './types';
+import { applyAdjust, effectiveAdjust, findFilter, isNeutral } from './image-filters';
+import { canvasPaint } from './paint';
+import {
+  isLineShape,
+  type CanvasElement,
+  type ImageElement,
+  type Page,
+  type PathElement,
+  type ShapeElement,
+  type StrokeStyle,
+  type SvgElement,
+  type TextElement,
+} from './types';
 
-/// วาดหน้าลง canvas 2D — ใช้ทั้งบนจอ (editor) ภาพย่อ และการส่งออก PNG/JPEG
+/// วาดหน้าลง canvas 2D — ใช้ทั้งบนจอ (editor) ภาพย่อ พรีเซนต์ และการส่งออก PNG/JPEG/PDF
 ///
 /// ฟังก์ชันชุดนี้ไม่รู้เรื่องการซูม: ผู้เรียกตั้ง transform ของ context ไว้ก่อน
 /// แล้วทุกอย่างวาดในพิกัดของหน้า
@@ -84,6 +96,10 @@ const segmenter =
   typeof Intl !== 'undefined' && 'Segmenter' in Intl
     ? new Intl.Segmenter('th', { granularity: 'word' })
     : null;
+const graphemes =
+  typeof Intl !== 'undefined' && 'Segmenter' in Intl
+    ? new Intl.Segmenter('th', { granularity: 'grapheme' })
+    : null;
 
 /// ตัดคำภาษาไทยด้วย Intl.Segmenter (ภาษาไทยไม่มีช่องว่างระหว่างคำ)
 function words(text: string): string[] {
@@ -92,23 +108,47 @@ function words(text: string): string[] {
   return Array.from(segmenter.segment(text), (s) => s.segment);
 }
 
+function clusters(text: string): string[] {
+  if (!graphemes) return Array.from(text);
+
+  return Array.from(graphemes.segment(text), (s) => s.segment);
+}
+
+/// ข้อความที่แสดงจริง: ตัวพิมพ์ใหญ่ (aA) และสัญลักษณ์รายการ
+export function displayParagraphs(el: TextElement): string[] {
+  const text = el.uppercase ? el.text.toUpperCase() : el.text;
+  const paragraphs = text.split('\n');
+
+  if (!el.list || el.list === 'none') return paragraphs;
+
+  return paragraphs.map((p, i) => (el.list === 'bullet' ? `• ${p}` : `${i + 1}. ${p}`));
+}
+
+interface Line {
+  text: string;
+  /// บรรทัดสุดท้ายของย่อหน้า (จัดเต็มแนวไม่ยืดบรรทัดนี้)
+  last: boolean;
+}
+
 /// แบ่งข้อความเป็นบรรทัดตามความกว้างกล่อง
-export function layoutText(el: TextElement, ctx: CanvasRenderingContext2D | null = measurer()): string[] {
-  if (!ctx) return el.text.split('\n');
+export function layoutLines(el: TextElement, ctx: CanvasRenderingContext2D | null = measurer()): Line[] {
+  const paragraphs = displayParagraphs(el);
+
+  if (!ctx) return paragraphs.map((text) => ({ text, last: true }));
 
   ctx.font = fontString(el);
   setLetterSpacing(ctx, el.letterSpacing);
 
-  const lines: string[] = [];
+  const lines: Line[] = [];
 
-  for (const paragraph of el.text.split('\n')) {
+  for (const paragraph of paragraphs) {
     let line = '';
 
     for (const word of words(paragraph)) {
       const candidate = line + word;
 
       if (line && ctx.measureText(candidate).width > el.width) {
-        lines.push(line.trimEnd());
+        lines.push({ text: line.trimEnd(), last: false });
         line = word.trimStart();
 
         // คำเดียวยาวเกินกล่อง — หั่นเป็นตัวอักษร
@@ -116,7 +156,7 @@ export function layoutText(el: TextElement, ctx: CanvasRenderingContext2D | null
           let cut = line.length - 1;
 
           while (cut > 1 && ctx.measureText(line.slice(0, cut)).width > el.width) cut--;
-          lines.push(line.slice(0, cut));
+          lines.push({ text: line.slice(0, cut), last: false });
           line = line.slice(cut);
         }
       } else {
@@ -124,15 +164,45 @@ export function layoutText(el: TextElement, ctx: CanvasRenderingContext2D | null
       }
     }
 
-    lines.push(line);
+    lines.push({ text: line, last: true });
   }
 
   return lines;
 }
 
+export function layoutText(el: TextElement, ctx: CanvasRenderingContext2D | null = measurer()): string[] {
+  return layoutLines(el, ctx).map((l) => l.text);
+}
+
+/// รูปโค้งของข้อความโค้ง: รัศมีและมุมที่กินไป (เรเดียน)
+function arcOf(el: TextElement, ctx: CanvasRenderingContext2D | null) {
+  const curve = Math.max(-100, Math.min(100, el.curve ?? 0));
+  const text = displayParagraphs(el).join(' ');
+  let width = text.length * el.fontSize * 0.6;
+
+  if (ctx) {
+    ctx.font = fontString(el);
+    setLetterSpacing(ctx, el.letterSpacing);
+    width = ctx.measureText(text).width;
+  }
+
+  const theta = Math.max(0.05, (Math.abs(curve) / 100) * Math.PI * 1.9);
+  const radius = Math.max(el.fontSize, width / theta);
+
+  return { text, theta, radius, sign: curve >= 0 ? 1 : -1, width };
+}
+
 /// ความสูงที่ข้อความต้องใช้จริง — editor ปรับความสูงกล่องตามนี้หลังพิมพ์หรือเปลี่ยนขนาด
 export function measureTextHeight(el: TextElement): number {
-  return Math.max(1, layoutText(el).length) * el.fontSize * el.lineHeight;
+  const lineHeight = el.fontSize * el.lineHeight;
+
+  if (el.curve) {
+    const { theta, radius } = arcOf(el, measurer());
+
+    return lineHeight + radius * (1 - Math.cos(Math.min(theta, Math.PI * 1.98) / 2));
+  }
+
+  return Math.max(1, layoutLines(el).length) * lineHeight;
 }
 
 function setLetterSpacing(ctx: CanvasRenderingContext2D, px: number) {
@@ -142,6 +212,25 @@ function setLetterSpacing(ctx: CanvasRenderingContext2D, px: number) {
 }
 
 const pendingFonts = new Set<string>();
+
+interface TextPass {
+  dx?: number;
+  dy?: number;
+  fill?: string | null;
+  stroke?: string | null;
+  lineWidth?: number;
+  shadow?: { x: number; y: number; blur: number; color: string } | null;
+  decorations?: boolean;
+}
+
+/// สีพร้อมความโปร่ง 0–1 (รับ rgb(r g b) ที่ editor เขียน)
+export function withAlpha(color: string, alpha: number): string {
+  const m = color.match(/rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/);
+
+  if (!m) return color;
+
+  return `rgb(${m[1]} ${m[2]} ${m[3]} / ${Math.max(0, Math.min(1, alpha))})`;
+}
 
 function drawText(ctx: CanvasRenderingContext2D, el: TextElement) {
   // ฟอนต์ยังไม่พร้อม — สั่งโหลดครั้งเดียว แล้ววาดใหม่ทั้งหน้าเมื่อโหลดเสร็จ
@@ -155,28 +244,205 @@ function drawText(ctx: CanvasRenderingContext2D, el: TextElement) {
     });
   }
 
-  const lines = layoutText(el, ctx);
-  const lineHeight = el.fontSize * el.lineHeight;
-
   ctx.font = fontString(el);
   setLetterSpacing(ctx, el.letterSpacing);
-  ctx.fillStyle = el.color;
   ctx.textBaseline = 'middle';
-  ctx.textAlign = el.align;
+  ctx.lineJoin = 'round';
 
-  const x = el.align === 'left' ? el.x : el.align === 'center' ? el.x + el.width / 2 : el.x + el.width;
+  const lines = el.curve ? [] : layoutLines(el, ctx);
+  const lineHeight = el.fontSize * el.lineHeight;
+  const arc = el.curve ? arcOf(el, ctx) : null;
+
+  const pass = (p: TextPass) => {
+    ctx.save();
+
+    if (p.shadow) {
+      ctx.shadowOffsetX = p.shadow.x;
+      ctx.shadowOffsetY = p.shadow.y;
+      ctx.shadowBlur = p.shadow.blur;
+      ctx.shadowColor = p.shadow.color;
+    }
+
+    if (p.fill) ctx.fillStyle = p.fill;
+    if (p.stroke) {
+      ctx.strokeStyle = p.stroke;
+      ctx.lineWidth = p.lineWidth ?? 1;
+    }
+
+    const dx = p.dx ?? 0;
+    const dy = p.dy ?? 0;
+
+    if (arc) {
+      drawArcText(ctx, el, arc, lineHeight, dx, dy, p);
+    } else {
+      lines.forEach((line, index) => drawLine(ctx, el, line, el.y + lineHeight * index + lineHeight / 2 + dy, dx, p));
+    }
+
+    ctx.restore();
+  };
+
+  const effect = el.effect;
+  const unit = el.fontSize / 100;
+
+  if (!effect) {
+    pass({ fill: el.color, decorations: true });
+    return;
+  }
+
+  const rad = ((effect.direction - 90) * Math.PI) / 180;
+  const ox = Math.cos(rad) * effect.offset * unit * 0.5;
+  const oy = Math.sin(rad) * effect.offset * unit * 0.5;
+
+  switch (effect.kind) {
+    case 'shadow':
+      pass({
+        fill: el.color,
+        decorations: true,
+        shadow: { x: ox, y: oy, blur: effect.blur * unit * 0.6, color: withAlpha(effect.color, effect.intensity / 100) },
+      });
+      break;
+    case 'lift':
+      pass({
+        fill: el.color,
+        decorations: true,
+        shadow: { x: 0, y: el.fontSize * 0.08, blur: el.fontSize * 0.25, color: `rgb(0 0 0 / ${0.15 + effect.intensity / 200})` },
+      });
+      break;
+    case 'hollow':
+      pass({ stroke: el.color, lineWidth: Math.max(1, effect.intensity * unit * 0.08) });
+      break;
+    case 'outline':
+      pass({ stroke: effect.color, lineWidth: Math.max(1, effect.intensity * unit * 0.12) });
+      pass({ fill: el.color, decorations: true });
+      break;
+    case 'splice':
+      pass({ fill: effect.color, dx: ox, dy: oy });
+      pass({ stroke: el.color, lineWidth: Math.max(1, effect.intensity * unit * 0.08) });
+      break;
+    case 'echo':
+      pass({ fill: withAlpha(effect.color, 0.25), dx: ox * 2, dy: oy * 2 });
+      pass({ fill: withAlpha(effect.color, 0.5), dx: ox, dy: oy });
+      pass({ fill: el.color, decorations: true });
+      break;
+    case 'glitch':
+      pass({ fill: 'rgb(0 255 255)', dx: -Math.abs(ox) - effect.offset * unit * 0.1, dy: oy });
+      pass({ fill: effect.color, dx: Math.abs(ox) + effect.offset * unit * 0.1, dy: -oy });
+      pass({ fill: el.color, decorations: true });
+      break;
+    case 'neon': {
+      const glow = el.color;
+      const strength = 0.3 + effect.intensity / 100;
+
+      pass({ fill: glow, shadow: { x: 0, y: 0, blur: el.fontSize * 0.5 * strength, color: glow } });
+      pass({ fill: glow, shadow: { x: 0, y: 0, blur: el.fontSize * 0.2 * strength, color: glow } });
+      pass({ fill: withAlpha('rgb(255 255 255)', 0.35 + strength * 0.3), decorations: true });
+      break;
+    }
+    case 'background':
+      drawTextBackground(ctx, el, lines, lineHeight, effect);
+      pass({ fill: el.color, decorations: true });
+      break;
+  }
+}
+
+/// เอฟเฟกต์ "พื้นหลัง": กล่องสีหลังแต่ละบรรทัด · intensity = ความโค้งมน · offset = ระยะขยาย · blur = ความโปร่งใส
+function drawTextBackground(ctx: CanvasRenderingContext2D, el: TextElement, lines: Line[], lineHeight: number, effect: NonNullable<TextElement['effect']>) {
+  const pad = (effect.offset / 100) * el.fontSize * 0.5;
+
+  ctx.save();
+  ctx.fillStyle = withAlpha(effect.color, 1 - effect.blur / 100);
 
   lines.forEach((line, index) => {
-    const y = el.y + lineHeight * index + lineHeight / 2;
+    if (!line.text.trim()) return;
 
-    ctx.fillText(line, x, y);
+    const width = Math.min(el.width, ctx.measureText(line.text).width);
+    const left = el.align === 'center' ? el.x + (el.width - width) / 2 : el.align === 'right' ? el.x + el.width - width : el.x;
+    const top = el.y + lineHeight * index;
+    const r = (effect.intensity / 100) * (lineHeight / 2 + pad);
 
-    if (el.underline && line) {
-      const width = ctx.measureText(line).width;
-      const left = el.align === 'left' ? x : el.align === 'center' ? x - width / 2 : x - width;
+    ctx.beginPath();
+    ctx.roundRect(left - pad, top - pad / 2, width + pad * 2, lineHeight + pad, r);
+    ctx.fill();
+  });
 
-      ctx.fillRect(left, y + el.fontSize * 0.42, width, Math.max(1, el.fontSize / 15));
-    }
+  ctx.restore();
+}
+
+function drawLine(ctx: CanvasRenderingContext2D, el: TextElement, line: Line, y: number, dx: number, p: TextPass) {
+  if (!line.text) return;
+
+  const justify = el.align === 'justify' && !line.last;
+  const draw = (text: string, x: number) => {
+    if (p.fill) ctx.fillText(text, x + dx, y);
+    if (p.stroke) ctx.strokeText(text, x + dx, y);
+  };
+  let left: number;
+  let width: number;
+
+  if (justify) {
+    const parts = words(line.text);
+    const widths = parts.map((part) => ctx.measureText(part).width);
+    const natural = widths.reduce((a, b) => a + b, 0);
+    const gap = parts.length > 1 ? (el.width - natural) / (parts.length - 1) : 0;
+    let x = el.x;
+
+    ctx.textAlign = 'left';
+    parts.forEach((part, i) => {
+      draw(part, x);
+      x += widths[i] + gap;
+    });
+    left = el.x;
+    width = el.width;
+  } else {
+    const align = el.align === 'justify' ? 'left' : el.align;
+    const anchor = align === 'left' ? el.x : align === 'center' ? el.x + el.width / 2 : el.x + el.width;
+
+    ctx.textAlign = align;
+    draw(line.text, anchor);
+    width = ctx.measureText(line.text).width;
+    left = align === 'left' ? anchor : align === 'center' ? anchor - width / 2 : anchor - width;
+  }
+
+  if (p.decorations && p.fill) {
+    const thickness = Math.max(1, el.fontSize / 15);
+
+    if (el.underline) ctx.fillRect(left + dx, y + el.fontSize * 0.42, width, thickness);
+    if (el.strike) ctx.fillRect(left + dx, y - thickness / 2, width, thickness);
+  }
+}
+
+/// ข้อความโค้ง: วางทีละกลุ่มอักษร (รักษาสระ/วรรณยุกต์ไทยไว้กับพยัญชนะ) ตามเส้นรอบวง
+function drawArcText(
+  ctx: CanvasRenderingContext2D,
+  el: TextElement,
+  arc: ReturnType<typeof arcOf>,
+  lineHeight: number,
+  dx: number,
+  dy: number,
+  p: TextPass,
+) {
+  const parts = clusters(arc.text);
+  const widths = parts.map((part) => ctx.measureText(part).width);
+  const cx = el.x + el.width / 2 + dx;
+  let phi = -arc.width / arc.radius / 2;
+
+  ctx.textAlign = 'center';
+
+  const cy =
+    arc.sign > 0 ? el.y + lineHeight / 2 + arc.radius + dy : el.y + el.height - lineHeight / 2 - arc.radius + dy;
+
+  parts.forEach((part, i) => {
+    const mid = phi + widths[i] / arc.radius / 2;
+    const x = cx + arc.radius * Math.sin(mid);
+    const y = arc.sign > 0 ? cy - arc.radius * Math.cos(mid) : cy + arc.radius * Math.cos(mid);
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(arc.sign > 0 ? mid : -mid);
+    if (p.fill) ctx.fillText(part, 0, 0);
+    if (p.stroke) ctx.strokeText(part, 0, 0);
+    ctx.restore();
+    phi += widths[i] / arc.radius;
   });
 }
 
@@ -187,6 +453,19 @@ function roundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: num
 
   ctx.beginPath();
   ctx.roundRect(x, y, w, h, radius);
+}
+
+export function dashFor(style: StrokeStyle | undefined, width: number): number[] {
+  switch (style) {
+    case 'dash':
+      return [width * 2, width * 1.5];
+    case 'long-dash':
+      return [width * 5, width * 2.5];
+    case 'dot':
+      return [0.01, width * 2];
+    default:
+      return [];
+  }
 }
 
 function shapePath(ctx: CanvasRenderingContext2D, el: ShapeElement) {
@@ -297,8 +576,10 @@ function drawShape(ctx: CanvasRenderingContext2D, el: ShapeElement) {
   const isLine = isLineShape(el.shape);
 
   if (el.fill && !isLine) {
-    ctx.fillStyle = el.fill;
+    ctx.fillStyle = canvasPaint(ctx, el.fill, el);
     ctx.fill();
+    // เส้นขอบไม่ต้องมีเงาซ้ำ
+    ctx.shadowColor = 'transparent';
   }
 
   if (el.stroke && el.strokeWidth > 0) {
@@ -306,7 +587,9 @@ function drawShape(ctx: CanvasRenderingContext2D, el: ShapeElement) {
     ctx.lineWidth = el.strokeWidth;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
+    ctx.setLineDash(dashFor(el.strokeStyle, el.strokeWidth));
     ctx.stroke();
+    ctx.setLineDash([]);
 
     if (el.shape === 'arrow') {
       const size = Math.max(8, el.strokeWidth * 3);
@@ -368,27 +651,132 @@ function drawPath(ctx: CanvasRenderingContext2D, el: PathElement) {
   }
 }
 
+// ── รูปภาพ ──────────────────────────────────────────────────────────
+
+/// รูปที่ผ่านการปรับแสงสี/ฟิลเตอร์แล้ว — ประมวลผลครั้งเดียวต่อชุดค่า แล้วเก็บไว้ใช้ซ้ำ
+const processed = new Map<string, HTMLCanvasElement>();
+const PROCESS_LIMIT = 1600;
+
+function sourceRect(el: ImageElement, img: HTMLImageElement) {
+  const crop = el.crop ?? { x: 0, y: 0, width: 1, height: 1 };
+
+  return {
+    sx: crop.x * img.naturalWidth,
+    sy: crop.y * img.naturalHeight,
+    sw: Math.max(1, crop.width * img.naturalWidth),
+    sh: Math.max(1, crop.height * img.naturalHeight),
+  };
+}
+
+function processedImage(el: ImageElement, img: HTMLImageElement): { source: CanvasImageSource; sx: number; sy: number; sw: number; sh: number } {
+  const rect = sourceRect(el, img);
+  const filter = findFilter(el.filter);
+  const intensity = el.filterIntensity ?? 100;
+  const adjust = effectiveAdjust(el.adjust, filter, intensity);
+  const pixelWork = { ...adjust, blur: 0 };
+
+  if (isNeutral(pixelWork, filter) || typeof document === 'undefined') return { source: img, ...rect };
+
+  const key = `${el.src}|${JSON.stringify(el.crop ?? null)}|${JSON.stringify(pixelWork)}|${el.filter ?? ''}|${intensity}`;
+  let canvas = processed.get(key);
+
+  if (!canvas) {
+    const scale = Math.min(1, PROCESS_LIMIT / Math.max(rect.sw, rect.sh));
+
+    canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(rect.sw * scale));
+    canvas.height = Math.max(1, Math.round(rect.sh * scale));
+
+    const c = canvas.getContext('2d', { willReadFrequently: true })!;
+
+    c.drawImage(img, rect.sx, rect.sy, rect.sw, rect.sh, 0, 0, canvas.width, canvas.height);
+
+    try {
+      const data = c.getImageData(0, 0, canvas.width, canvas.height);
+
+      applyAdjust(data, pixelWork, filter, intensity);
+      c.putImageData(data, 0, 0);
+    } catch {
+      // อ่านพิกเซลไม่ได้ (รูปข้ามโดเมน) — แสดงรูปเดิม
+    }
+
+    if (processed.size > 24) processed.delete(processed.keys().next().value!);
+    processed.set(key, canvas);
+  }
+
+  return { source: canvas, sx: 0, sy: 0, sw: canvas.width, sh: canvas.height };
+}
+
 function drawImage(ctx: CanvasRenderingContext2D, el: ImageElement) {
   const img = getImage(el.src);
-
-  ctx.save();
-
-  if (el.cornerRadius > 0) {
-    roundedRect(ctx, el.x, el.y, el.width, el.height, el.cornerRadius);
-    ctx.clip();
-  }
 
   if (!img) {
     // ระหว่างรอโหลด วาดกล่องเทาจาง ๆ แทน
     ctx.fillStyle = 'rgba(100, 116, 139, 0.15)';
     ctx.fillRect(el.x, el.y, el.width, el.height);
-    ctx.restore();
     return;
   }
 
+  const { source, sx, sy, sw, sh } = processedImage(el, img);
+  const blur = el.adjust?.blur ?? 0;
+
+  // เงาของรูปต้องตามรูปร่างของรูป: ถ้ามีขอบมนต้องวาดรูปที่ตัดขอบแล้วลงผืนแยกก่อน
+  if (el.shadow && el.cornerRadius > 0 && typeof document !== 'undefined') {
+    const off = document.createElement('canvas');
+    const scale = Math.min(2, Math.max(1, sw / el.width));
+
+    off.width = Math.max(1, Math.round(el.width * scale));
+    off.height = Math.max(1, Math.round(el.height * scale));
+
+    const o = off.getContext('2d')!;
+
+    o.scale(scale, scale);
+    roundedRect(o, 0, 0, el.width, el.height, el.cornerRadius);
+    o.clip();
+    paintImage(o, source, sx, sy, sw, sh, { ...el, x: 0, y: 0 }, blur);
+    ctx.drawImage(off, el.x, el.y, el.width, el.height);
+  } else {
+    ctx.save();
+
+    if (el.cornerRadius > 0) {
+      roundedRect(ctx, el.x, el.y, el.width, el.height, el.cornerRadius);
+      ctx.clip();
+    }
+
+    paintImage(ctx, source, sx, sy, sw, sh, el, blur);
+    ctx.restore();
+  }
+
+  ctx.shadowColor = 'transparent';
+
+  if (el.border && el.border.width > 0) {
+    const w = el.border.width;
+
+    roundedRect(ctx, el.x + w / 2, el.y + w / 2, el.width - w, el.height - w, Math.max(0, el.cornerRadius - w / 2));
+    ctx.strokeStyle = el.border.color;
+    ctx.lineWidth = w;
+    ctx.lineCap = 'round';
+    ctx.setLineDash(dashFor(el.border.style, w));
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}
+
+function paintImage(
+  ctx: CanvasRenderingContext2D,
+  source: CanvasImageSource,
+  sx: number,
+  sy: number,
+  sw: number,
+  sh: number,
+  el: Pick<ImageElement, 'x' | 'y' | 'width' | 'height' | 'flipX' | 'flipY'>,
+  blur: number,
+) {
+  ctx.save();
   ctx.translate(el.x + el.width / 2, el.y + el.height / 2);
   ctx.scale(el.flipX ? -1 : 1, el.flipY ? -1 : 1);
-  ctx.drawImage(img, -el.width / 2, -el.height / 2, el.width, el.height);
+  if (blur > 0) ctx.filter = `blur(${(blur / 100) * Math.min(el.width, el.height) * 0.05}px)`;
+  ctx.drawImage(source, sx, sy, sw, sh, -el.width / 2, -el.height / 2, el.width, el.height);
   ctx.restore();
 }
 
@@ -398,11 +786,15 @@ function drawSvg(ctx: CanvasRenderingContext2D, el: SvgElement) {
   if (img) ctx.drawImage(img, el.x, el.y, el.width, el.height);
 }
 
-export function drawElement(ctx: CanvasRenderingContext2D, el: CanvasElement) {
+// ── element และหน้า ─────────────────────────────────────────────────
+
+export function drawElement(ctx: CanvasRenderingContext2D, el: CanvasElement, progress?: number) {
   if (el.hidden || el.opacity <= 0) return;
 
   ctx.save();
   ctx.globalAlpha = el.opacity;
+
+  if (progress !== undefined && el.animation) applyAnimation(ctx, el, progress);
 
   if (el.rotation) {
     const cx = el.x + el.width / 2;
@@ -411,6 +803,13 @@ export function drawElement(ctx: CanvasRenderingContext2D, el: CanvasElement) {
     ctx.translate(cx, cy);
     ctx.rotate((el.rotation * Math.PI) / 180);
     ctx.translate(-cx, -cy);
+  }
+
+  if (el.shadow && el.type !== 'text') {
+    ctx.shadowOffsetX = el.shadow.x;
+    ctx.shadowOffsetY = el.shadow.y;
+    ctx.shadowBlur = el.shadow.blur;
+    ctx.shadowColor = el.shadow.color;
   }
 
   switch (el.type) {
@@ -434,20 +833,87 @@ export function drawElement(ctx: CanvasRenderingContext2D, el: CanvasElement) {
   ctx.restore();
 }
 
+/// แอนิเมชันตอนเข้า (พรีเซนต์ และตัวอย่างในแผงแอนิเมต) — ปรับ transform/ความทึบตามความคืบหน้า 0–1
+function applyAnimation(ctx: CanvasRenderingContext2D, el: CanvasElement, t: number) {
+  const p = Math.max(0, Math.min(1, t));
+  const ease = 1 - Math.pow(1 - p, 3);
+  const cx = el.x + el.width / 2;
+  const cy = el.y + el.height / 2;
+
+  switch (el.animation) {
+    case 'rise':
+      ctx.globalAlpha *= ease;
+      ctx.translate(0, (1 - ease) * el.height * 0.5);
+      break;
+    case 'pan':
+      ctx.globalAlpha *= ease;
+      ctx.translate(-(1 - ease) * el.width * 0.4, 0);
+      break;
+    case 'fade':
+      ctx.globalAlpha *= ease;
+      break;
+    case 'pop': {
+      const s = p < 0.7 ? (p / 0.7) * 1.1 : 1.1 - ((p - 0.7) / 0.3) * 0.1;
+
+      ctx.globalAlpha *= Math.min(1, p * 2);
+      ctx.translate(cx, cy);
+      ctx.scale(Math.max(0.01, s), Math.max(0.01, s));
+      ctx.translate(-cx, -cy);
+      break;
+    }
+    case 'wipe':
+      ctx.beginPath();
+      ctx.rect(el.x - el.width, el.y - el.height, el.width * (1 + 2 * ease), el.height * 3);
+      ctx.clip();
+      break;
+    case 'blur':
+      ctx.globalAlpha *= ease;
+      ctx.filter = `blur(${(1 - ease) * 12}px)`;
+      break;
+    case 'drift':
+      ctx.globalAlpha *= ease;
+      ctx.translate((1 - ease) * el.width * 0.15, (1 - ease) * el.height * 0.15);
+      break;
+    case 'tumble':
+      ctx.globalAlpha *= ease;
+      ctx.translate(cx, cy);
+      ctx.rotate((1 - ease) * -0.6);
+      ctx.translate(-cx, -cy);
+      break;
+    case 'breathe': {
+      const s = 0.85 + 0.15 * ease;
+
+      ctx.globalAlpha *= ease;
+      ctx.translate(cx, cy);
+      ctx.scale(s, s);
+      ctx.translate(-cx, -cy);
+      break;
+    }
+    case 'bounce': {
+      const b = Math.abs(Math.sin(p * Math.PI * 2.5)) * (1 - p);
+
+      ctx.globalAlpha *= Math.min(1, p * 3);
+      ctx.translate(0, -b * el.height * 0.4);
+      break;
+    }
+  }
+}
+
 export function drawPage(
   ctx: CanvasRenderingContext2D,
   page: Page,
   size: { width: number; height: number },
-  options: { transparent?: boolean; skipIds?: ReadonlySet<string> } = {},
+  options: { transparent?: boolean; skipIds?: ReadonlySet<string>; progress?: (el: CanvasElement) => number | undefined } = {},
 ) {
   if (page.background && !options.transparent) {
-    ctx.fillStyle = page.background;
+    ctx.fillStyle = canvasPaint(ctx, page.background, { x: 0, y: 0, ...size });
     ctx.fillRect(0, 0, size.width, size.height);
   }
 
   for (const el of page.elements) {
     if (options.skipIds?.has(el.id)) continue;
-    drawElement(ctx, el);
+
+    drawElement(ctx, el, options.progress?.(el));
   }
 }
 

@@ -1,4 +1,5 @@
-import { renderPageToCanvas } from './render';
+import { boundingBox, unionBox } from './geometry';
+import { drawElement, preloadPage, renderPageToCanvas } from './render';
 import type { DesignDocument, Page } from './types';
 
 /// ส่งออกฝั่ง client ทั้งหมดด้วย Canvas API — ไม่มีไฟล์ไหนถูกส่งไปที่เซิร์ฟเวอร์
@@ -25,7 +26,7 @@ function canvasToBlob(canvas: HTMLCanvasElement, format: ExportFormat, quality: 
   });
 }
 
-function download(blob: Blob, fileName: string) {
+export function download(blob: Blob, fileName: string) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
 
@@ -73,4 +74,28 @@ export async function thumbnailOf(page: Page, size: { width: number; height: num
   });
 
   return canvas.toDataURL('image/jpeg', 0.72);
+}
+
+/// ดาวน์โหลดเฉพาะชิ้นงานที่เลือก (เมนูคลิกขวา) เป็น PNG พื้นโปร่งใส ขนาด 2 เท่า
+export async function exportSelection(page: Page, ids: string[], title: string): Promise<void> {
+  const picked = page.elements.filter((el) => ids.includes(el.id) && !el.hidden);
+  const box = unionBox(picked.map(boundingBox));
+
+  if (!box) return;
+
+  await preloadPage({ ...page, elements: picked });
+
+  const scale = Math.min(2, 8000 / Math.max(box.width, box.height));
+  const canvas = document.createElement('canvas');
+
+  canvas.width = Math.max(1, Math.round(box.width * scale));
+  canvas.height = Math.max(1, Math.round(box.height * scale));
+
+  const ctx = canvas.getContext('2d')!;
+
+  ctx.scale(scale, scale);
+  ctx.translate(-box.x, -box.y);
+  for (const el of picked) drawElement(ctx, el);
+
+  download(await canvasToBlob(canvas, 'png', 1), `${safeFileName(title)}-ชิ้นงาน.png`);
 }

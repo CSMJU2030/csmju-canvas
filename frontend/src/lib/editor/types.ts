@@ -20,9 +20,40 @@ export interface BaseElement {
   hidden: boolean;
   /// element ที่มี groupId เดียวกันถูกเลือกและย้ายไปด้วยกัน
   groupId: string | null;
+  /// เงา (แผงเอฟเฟกต์) · ไม่มี/null = ไม่มีเงา
+  shadow?: Shadow | null;
+  /// แอนิเมชันตอนพรีเซนต์ (แผงแอนิเมต) · ไม่มี/null = ไม่เคลื่อนไหว
+  animation?: AnimationKind | null;
+  /// ลิงก์เมื่อกดในโหมดพรีเซนต์/เว็บไซต์
+  link?: string | null;
 }
 
-export type TextAlign = 'left' | 'center' | 'right';
+export interface Shadow {
+  x: number;
+  y: number;
+  blur: number;
+  color: string;
+}
+
+export type AnimationKind = 'rise' | 'pan' | 'fade' | 'pop' | 'wipe' | 'blur' | 'drift' | 'tumble' | 'breathe' | 'bounce';
+
+export type TextAlign = 'left' | 'center' | 'right' | 'justify';
+
+export type TextEffectKind = 'shadow' | 'lift' | 'hollow' | 'splice' | 'echo' | 'glitch' | 'neon' | 'background' | 'outline';
+
+/// เอฟเฟกต์ข้อความแบบ Canva — ค่าที่ใช้แตกต่างกันตามชนิด (ดู docs/design-document.md)
+export interface TextEffect {
+  kind: TextEffectKind;
+  /// 0–100
+  offset: number;
+  /// 0–360 องศา (ทิศของเงา/เสียงสะท้อน)
+  direction: number;
+  /// 0–100
+  blur: number;
+  /// 0–100
+  intensity: number;
+  color: string;
+}
 
 export interface TextElement extends BaseElement {
   type: 'text';
@@ -36,6 +67,14 @@ export interface TextElement extends BaseElement {
   lineHeight: number;
   letterSpacing: number;
   color: string;
+  strike?: boolean;
+  /// แสดงเป็นตัวพิมพ์ใหญ่ทั้งหมด (ปุ่ม aA) — ข้อความที่เก็บไม่เปลี่ยน
+  uppercase?: boolean;
+  /// รายการหัวข้อย่อย: ใส่สัญลักษณ์ต่อหน้าทุกย่อหน้า
+  list?: 'none' | 'bullet' | 'number';
+  effect?: TextEffect | null;
+  /// ข้อความโค้งเป็นวงกลม · 0 = ตรง · −100..100 (บวก = โค้งขึ้น)
+  curve?: number;
 }
 
 export type ShapeKind =
@@ -61,10 +100,46 @@ export function isLineShape(shape: ShapeKind): boolean {
 export interface ShapeElement extends BaseElement {
   type: 'shape';
   shape: ShapeKind;
+  /// สีหรือกราเดียนต์แบบ CSS (`linear-gradient(90deg, rgb(…) 0%, rgb(…) 100%)`) · null = ไม่มีสีพื้น
   fill: string | null;
   stroke: string | null;
   strokeWidth: number;
   cornerRadius: number;
+  strokeStyle?: StrokeStyle;
+}
+
+export type StrokeStyle = 'solid' | 'dash' | 'long-dash' | 'dot';
+
+/// ส่วนของรูปต้นฉบับที่แสดง เป็นสัดส่วน 0–1 ของรูป
+export interface Crop {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/// ค่าปรับรูป −100..100 (0 = เดิม) · vignette และ blur 0..100
+export interface ImageAdjust {
+  temperature: number;
+  tint: number;
+  brightness: number;
+  contrast: number;
+  highlights: number;
+  shadows: number;
+  whites: number;
+  blacks: number;
+  vibrance: number;
+  saturation: number;
+  sharpness: number;
+  clarity: number;
+  vignette: number;
+  blur: number;
+}
+
+export interface Border {
+  style: StrokeStyle;
+  width: number;
+  color: string;
 }
 
 export interface ImageElement extends BaseElement {
@@ -75,6 +150,12 @@ export interface ImageElement extends BaseElement {
   cornerRadius: number;
   flipX: boolean;
   flipY: boolean;
+  crop?: Crop | null;
+  adjust?: Partial<ImageAdjust> | null;
+  /// ฟิลเตอร์สำเร็จรูป (key ใน lib/editor/image-filters.ts) และความแรง 0–100
+  filter?: string | null;
+  filterIntensity?: number;
+  border?: Border | null;
 }
 
 export interface SvgElement extends BaseElement {
@@ -103,9 +184,19 @@ export type CanvasElement = TextElement | ShapeElement | ImageElement | SvgEleme
 
 export interface Page {
   id: string;
-  /// สีพื้นหลัง · null = โปร่งใส
+  /// สีหรือกราเดียนต์แบบ CSS · null = โปร่งใส
   background: string | null;
   elements: CanvasElement[];
+  /// ชื่อหน้า ("หน้า 1 - เพิ่มชื่อหน้า")
+  name?: string;
+  /// ซ่อนตอนพรีเซนต์และดาวน์โหลด
+  hidden?: boolean;
+  /// ล็อกทั้งหน้า — แก้ชิ้นงานในหน้าไม่ได้
+  locked?: boolean;
+  /// สมุดโน้ตของผู้พรีเซนต์ (ไม่เกิน 5000 ตัวอักษร)
+  notes?: string;
+  /// เวลาแสดงตอนเล่นอัตโนมัติ (วินาที)
+  duration?: number;
 }
 
 export interface DesignDocument {
@@ -138,6 +229,7 @@ export function normalizeDocument(input: unknown): DesignDocument {
   return {
     version: DOCUMENT_VERSION,
     pages: pages.map((page) => ({
+      ...page,
       id: typeof page.id === 'string' ? page.id : newId('page'),
       background: page.background === undefined ? 'rgb(255 255 255)' : page.background,
       elements: Array.isArray(page.elements)

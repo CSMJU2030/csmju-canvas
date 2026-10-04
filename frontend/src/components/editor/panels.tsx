@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowDown, ArrowLeft, ArrowUp, ChevronDown, Copy, Ellipsis, Eye, EyeOff, Folder as FolderIcon, FolderInput, FolderMinus,
   FolderOpen, FolderPlus, Globe, ImageIcon, LayoutPanelLeft, Lock, LockOpen, PenLine, Pencil, Plus, Search, Shapes,
-  SlidersHorizontal, Smile, Spline, Star, StickyNote, Trash2, Type, CloudUpload,
+  SlidersHorizontal, Smile, Spline, Star, StickyNote, Trash2, Type, CloudUpload, Download, X,
 } from 'lucide-react';
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { FloatingPanel, useAnchoredMenu } from '@/components/csmju/floating';
@@ -23,10 +23,14 @@ import { pushRecent, useRecent } from '@/lib/editor/recent';
 import { measureTextHeight, renderPageToCanvas } from '@/lib/editor/render';
 import { currentPage, useEditor } from '@/lib/editor/store';
 import { normalizeDocument, type ShapeKind } from '@/lib/editor/types';
+import type { PanelKey } from '@/lib/editor/ui-store';
+import { download, safeFileName } from '@/lib/editor/export';
 import type { Asset, AssetFolder, Template, TemplateSummary } from '@/lib/types';
 import { ColorPicker, RainbowSwatch, Swatch } from './color-picker';
 import { matchFonts, usePreloadFonts } from './font-picker';
 import { CreateFolderDialog, ProjectsPanel } from './project-panel';
+import { AnimatePanel, ColorPanel, EffectsPanel, PositionPanel } from './side-panels';
+import { CropPanel, FontPanel, ImageEditPanel, ReplacePanel } from './side-panels-media';
 import { SignaturePanel } from './signature-panel';
 import { LINES, SHAPES, ShapeGlyph } from './tools-palette';
 
@@ -36,7 +40,7 @@ import { LINES, SHAPES, ShapeGlyph } from './tools-palette';
 /// "เครื่องมือ" ไม่ใช่แผง แต่เปิดแถบเครื่องมือลอย (tools-palette.tsx)
 /// เลเยอร์และหน้า เปิดจากแถบล่าง · ลายเซ็นเปิดจากแถบเครื่องมือ
 
-export type PanelKey = 'templates' | 'elements' | 'text' | 'uploads' | 'projects' | 'starred' | 'signature' | 'layers' | 'pages';
+export type { PanelKey };
 export type RailKey = 'templates' | 'elements' | 'text' | 'uploads' | 'tools' | 'projects';
 
 type IconType = React.ComponentType<{ className?: string; 'aria-hidden'?: boolean; strokeWidth?: number }>;
@@ -58,9 +62,19 @@ export const PANEL_LABELS: Record<PanelKey, string> = {
   uploads: 'อัปโหลด',
   projects: 'โปรเจกต์',
   starred: 'ติดดาวแล้ว',
+  background: 'แบ็กกราวด์',
   signature: 'สร้างลายเซ็น',
   layers: 'เลเยอร์',
   pages: 'หน้า',
+  notes: 'สมุดโน้ต',
+  position: 'ตำแหน่ง',
+  color: 'สี',
+  effects: 'เอฟเฟกต์',
+  animate: 'แอนิเมต',
+  font: 'ฟอนต์',
+  'image-edit': 'แก้ไขรูปภาพ',
+  crop: 'ครอปภาพ',
+  replace: 'แทนที่รูป',
 };
 
 export function PanelContent({
@@ -101,7 +115,96 @@ export function PanelContent({
           <PagesPanel />
         </PanelFrame>
       );
+    case 'notes':
+      return <NotesPanel onClose={onClose} />;
+    case 'background':
+      return <ColorPanel target="background" />;
+    case 'position':
+      return <PositionPanel />;
+    case 'color':
+      return <ColorPanel />;
+    case 'effects':
+      return <EffectsPanel />;
+    case 'animate':
+      return <AnimatePanel />;
+    case 'font':
+      return <FontPanel />;
+    case 'image-edit':
+      return <ImageEditPanel />;
+    case 'crop':
+      return <CropPanel />;
+    case 'replace':
+      return <ReplacePanel />;
   }
+}
+
+const NOTE_SIZES = [
+  { key: 14, label: 'เล็ก (14 พิกเซล)' },
+  { key: 20, label: 'กลาง (20 พิกเซล)' },
+  { key: 32, label: 'ใหญ่ (32 พิกเซล)' },
+  { key: 40, label: 'ใหญ่พิเศษ (40 พิกเซล)' },
+];
+
+/// สมุดโน้ตของผู้พรีเซนต์ ต่อหน้า (ภาพบรีฟ "สมุดโน้ต") — แสดงในหน้าต่างผู้พรีเซนต์ด้วย
+function NotesPanel({ onClose }: { onClose: () => void }) {
+  const pageIndex = useEditor((s) => s.pageIndex);
+  const page = useEditor((s) => currentPage(s));
+  const title = useEditor((s) => s.title);
+  const [size, setSize] = useState(20);
+  const notes = page.notes ?? '';
+  const id = useId();
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex shrink-0 items-center gap-1 px-3 pt-3 pb-2">
+        <h2 className="min-w-0 flex-1 truncate pl-1 text-csmju-caption font-bold text-ink">
+          หน้า {pageIndex + 1} - {page.name || <span className="font-normal text-muted">เพิ่มชื่อหน้า</span>}
+        </h2>
+        <label htmlFor={`${id}-size`} className="sr-only">ขนาดตัวอักษรของโน้ต</label>
+        <select
+          id={`${id}-size`}
+          value={size}
+          onChange={(event) => setSize(Number(event.target.value))}
+          className="min-h-9 rounded-lg border border-line-strong bg-surface px-1 text-csmju-caption text-ink"
+        >
+          {NOTE_SIZES.map((s) => (
+            <option key={s.key} value={s.key}>
+              {s.label}
+            </option>
+          ))}
+        </select>
+        <IconButton
+          label="ดาวน์โหลดโน้ตทุกหน้า"
+          onClick={() => {
+            const doc = useEditor.getState().doc;
+            const text = doc.pages
+              .map((p, i) => `หน้า ${i + 1}${p.name ? ` - ${p.name}` : ''}\n${p.notes?.trim() || '(ไม่มีโน้ต)'}`)
+              .join('\n\n');
+
+            download(new Blob([text], { type: 'text/plain;charset=utf-8' }), `${safeFileName(title)}-โน้ต.txt`);
+          }}
+        >
+          <Download aria-hidden className="size-4" />
+        </IconButton>
+        <IconButton label="ปิดสมุดโน้ต" onClick={onClose}>
+          <X aria-hidden className="size-4" />
+        </IconButton>
+      </div>
+      <label htmlFor={id} className="sr-only">โน้ตของหน้านี้</label>
+      <textarea
+        id={id}
+        value={notes}
+        maxLength={5000}
+        onFocus={() => useEditor.getState().beginGesture()}
+        onBlur={() => useEditor.getState().endGesture()}
+        onChange={(event) => useEditor.getState().updatePage(pageIndex, { notes: event.target.value })}
+        placeholder="เพิ่มหมายเหตุไปยังดีไซน์ของคุณ"
+        className="mx-3 min-h-0 flex-1 resize-none rounded-xl border border-transparent bg-transparent p-2 text-ink placeholder:text-muted focus:border-line-strong focus:outline-none"
+        style={{ fontSize: `${size}px`, lineHeight: 1.6 }}
+      />
+      <p className="shrink-0 px-4 py-2 text-right text-csmju-caption text-muted tabular-nums">{notes.length}/5000</p>
+    </div>
+  );
 }
 
 /// ส่วนหัวของแผงอยู่กับที่ เนื้อหาเลื่อนได้ (แบบ Canva ที่ช่องค้นหาไม่เลื่อนหายไป)
