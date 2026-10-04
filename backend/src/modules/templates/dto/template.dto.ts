@@ -156,6 +156,7 @@ export class TemplateSummaryDto {
   @ApiProperty({ description: 'true = เทมเพลตตั้งต้นของทีม CS Canvas' }) isBuiltIn!: boolean;
   @ApiProperty({ description: 'ผู้เรียกเป็นคนเผยแพร่เอง' }) isMine!: boolean;
   @ApiProperty({ description: 'ผู้เรียกติดดาวไว้' }) isStarred!: boolean;
+  @ApiProperty({ description: 'จำนวนหน้าในเทมเพลต', example: 3 }) pageCount!: number;
   @ApiProperty() createdAt!: string;
   @ApiProperty() updatedAt!: string;
 }

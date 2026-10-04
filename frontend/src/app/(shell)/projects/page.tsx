@@ -2,12 +2,13 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  ArrowDownUp, ChevronDown, ChevronLeft, CloudUpload, Ellipsis, Folder as FolderIcon, FolderPlus, LayoutGrid,
-  List, Plus, Search,
+  ArrowDownUp, ChevronDown, ChevronLeft, CloudUpload, Ellipsis, Folder as FolderIcon, FolderPlus, LayoutGrid, Link2,
+  List, Lock, Plus, Search,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useState, type ReactNode } from 'react';
+import { FloatingPanel, useAnchoredMenu } from '@/components/csmju/floating';
 import { Pager } from '@/components/csmju/list-controls';
 import { CardGridSkeleton, EmptyState, ErrorState, Menu, Spinner, cx, errorMessage, useToast } from '@/components/csmju/primitives';
 import { DesignCard, Thumbnail } from '@/components/designs/cards';
@@ -20,6 +21,7 @@ import { api, qs } from '@/lib/csmju/api';
 import { DESIGN_GROUPS, DESIGN_TYPES, designTypeLabel } from '@/lib/design-types';
 import { formatBytes, relativeTime } from '@/lib/format';
 import type { DesignSummary, Folder, Quota } from '@/lib/types';
+import { useIsMobile } from '@/lib/use-media';
 
 const PAGE_SIZE = 30;
 
@@ -52,7 +54,10 @@ function Projects() {
   const [group, setGroup] = useState('');
   const [editedWithin, setEditedWithin] = useState('');
   const [sort, setSort] = useState<Sort>('updated');
-  const [layout, setLayout] = useState<'grid' | 'list'>('grid');
+  const isMobile = useIsMobile();
+  // มือถือเริ่มเป็นรายการแบบแถว (ภาพบรีฟ "Design ของคุณ") · จอใหญ่เริ่มเป็นตาราง
+  const [layoutChoice, setLayout] = useState<'grid' | 'list' | null>(null);
+  const layout = layoutChoice ?? (isMobile ? 'list' : 'grid');
   const [newFolder, setNewFolder] = useState(false);
   const queryClient = useQueryClient();
   const toast = useToast();
@@ -79,17 +84,23 @@ function Projects() {
 
   return (
     <div>
-      <section className="csmju-hero relative px-4 pt-14 pb-6 text-center md:px-10">
+      <section className="csmju-hero relative px-4 pt-6 pb-5 text-left md:px-10 md:pt-14 md:pb-6 md:text-center">
         <QuotaChip />
-        {(folderId || view) && (
+        {isMobile && (
+          <div className="flex items-center justify-between">
+            <ViewMenu title={title} folders={folders.data?.items ?? []} />
+            <MobileCreateMenu onNewFolder={() => setNewFolder(true)} />
+          </div>
+        )}
+        {(folderId || view) && !isMobile && (
           <Link href="/projects" className="absolute top-5 left-5 inline-flex min-h-11 items-center gap-1 rounded-xl px-3 text-csmju-caption font-semibold text-ink hover:bg-surface/60">
             <ChevronLeft aria-hidden className="size-5" /> โปรเจกต์ทั้งหมด
           </Link>
         )}
-        <h1 className="text-csmju-h1 font-bold text-ink md:text-csmju-display">{title}</h1>
+        {!isMobile && <h1 className="text-csmju-h1 font-bold text-ink md:text-csmju-display">{title}</h1>}
         {view !== 'uploads' && (
           <>
-            <form role="search" onSubmit={(e) => e.preventDefault()} className="mx-auto mt-6 max-w-2xl">
+            <form role="search" onSubmit={(e) => e.preventDefault()} className="mx-auto mt-5 max-w-2xl md:mt-6">
               <div className="csmju-search relative rounded-2xl">
                 <Search aria-hidden className="pointer-events-none absolute top-1/2 left-5 size-5 -translate-y-1/2 text-ink" />
                 <label htmlFor="proj-q" className="sr-only">ค้นหาดีไซน์และโฟลเดอร์</label>
@@ -103,7 +114,7 @@ function Projects() {
                 />
               </div>
             </form>
-            <div className="mt-3 flex flex-wrap justify-center gap-2">
+            <div className="csmju-scroll-x -mx-4 mt-3 flex gap-2 overflow-x-auto px-4 md:mx-0 md:flex-wrap md:justify-center md:overflow-visible md:px-0">
               <FilterPopover
                 label="ประเภท"
                 current={designType}
@@ -125,27 +136,56 @@ function Projects() {
       <div className="px-4 pb-12 md:px-10">
         {(
           <>
-            <Toolbar sort={sort} onSort={setSort} layout={layout} onLayout={setLayout} onNewFolder={() => setNewFolder(true)} />
-            {!filtering && !folderId && view !== 'recent' && <RecentRow />}
-            {!filtering && !folderId && view !== 'recent' && (
+            {!isMobile && <Toolbar sort={sort} onSort={setSort} layout={layout} onLayout={setLayout} onNewFolder={() => setNewFolder(true)} />}
+            {!filtering && !folderId && view !== 'recent' && !isMobile && <RecentRow />}
+            {isMobile && (
+              <div className="mt-5 flex items-center justify-between">
+                <h2 className="text-csmju-h3 font-bold text-ink">{folderId || view ? 'ดีไซน์' : 'ล่าสุด'}</h2>
+                <button
+                  type="button"
+                  onClick={() => setLayout(layout === 'grid' ? 'list' : 'grid')}
+                  aria-label={layout === 'grid' ? 'แสดงเป็นรายการ' : 'แสดงเป็นตาราง'}
+                  className="inline-flex size-11 items-center justify-center rounded-xl text-ink"
+                >
+                  {layout === 'grid' ? <List aria-hidden className="size-6" /> : <LayoutGrid aria-hidden className="size-6" />}
+                </button>
+              </div>
+            )}
+            {!filtering && !folderId && view !== 'recent' && !isMobile && (
               <Collapsible title="โฟลเดอร์">
                 <FolderGrid folders={folders.data?.items ?? []} loading={folders.isLoading} />
               </Collapsible>
             )}
             {filtering && <FolderMatches folders={folders.data?.items ?? []} query={q.trim()} />}
-            <Collapsible title="ดีไซน์">
-              {/* key เปลี่ยนเมื่อตัวกรองเปลี่ยน → กลับไปหน้า 1 โดยไม่ต้องใช้ effect */}
-              <DesignsList
-                key={listKey}
-                folderId={folderId}
-                q={q.trim()}
-                designType={designType}
-                designTypes={groupTypes}
-                editedWithin={editedWithin}
-                sort={view === 'recent' ? 'updated' : sort}
-                layout={layout}
-              />
-            </Collapsible>
+            {isMobile ? (
+              <div className="mt-2">
+                <DesignsList
+                  key={listKey}
+                  folderId={folderId}
+                  q={q.trim()}
+                  designType={designType}
+                  designTypes={groupTypes}
+                  editedWithin={editedWithin}
+                  sort="updated"
+                  layout={layout}
+                  mobile
+                />
+              </div>
+            ) : (
+              <Collapsible title="ดีไซน์">
+                {/* key เปลี่ยนเมื่อตัวกรองเปลี่ยน → กลับไปหน้า 1 โดยไม่ต้องใช้ effect */}
+                <DesignsList
+                  key={listKey}
+                  folderId={folderId}
+                  q={q.trim()}
+                  designType={designType}
+                  designTypes={groupTypes}
+                  editedWithin={editedWithin}
+                  sort={view === 'recent' ? 'updated' : sort}
+                  layout={layout}
+                />
+              </Collapsible>
+            )}
           </>
         )}
       </div>
@@ -373,6 +413,7 @@ function DesignsList({
   editedWithin,
   sort,
   layout,
+  mobile = false,
 }: {
   folderId: string | null;
   q: string;
@@ -381,6 +422,7 @@ function DesignsList({
   editedWithin: string;
   sort: Sort;
   layout: 'grid' | 'list';
+  mobile?: boolean;
 }) {
   const [page, setPage] = useState(1);
   const openCreate = useOpenCreate();
@@ -415,7 +457,35 @@ function DesignsList({
 
   return (
     <>
-      {layout === 'grid' ? (
+      {layout === 'list' && mobile ? (
+        <ul className="flex flex-col">
+          {designs.data!.items.map((design) => (
+            <li key={design.id} className="flex items-center gap-3 py-3">
+              <Link href={`/design/${design.id}`} className="flex min-w-0 flex-1 items-center gap-4">
+                <span className="size-16 shrink-0">
+                  <Thumbnail src={design.thumbnail} width={design.width} height={design.height} designType={design.designType} alt="" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate text-csmju-body font-semibold text-ink">{design.title}</span>
+                  <span className="mt-0.5 flex items-center gap-1.5 text-csmju-caption text-muted">
+                    {design.linkAccess === 'NONE' ? (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-surface-muted px-1.5 text-ink">
+                        <Lock aria-hidden className="size-3.5" /> ส่วนตัว
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-primary-soft px-1.5 text-primary">
+                        <Link2 aria-hidden className="size-3.5" /> แชร์ลิงก์
+                      </span>
+                    )}
+                    •<span className="truncate">{designTypeLabel(design.designType).replace(/\s*\(.*\)$/, '')}</span>
+                  </span>
+                </span>
+              </Link>
+              <DesignMenu design={design} />
+            </li>
+          ))}
+        </ul>
+      ) : layout === 'grid' ? (
         <ul className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {designs.data!.items.map((design) => (
             <li key={design.id}>
@@ -454,5 +524,53 @@ function DesignsList({
       )}
       <Pager page={page} totalPages={designs.data!.meta.totalPages} onPage={setPage} />
     </>
+  );
+}
+
+/// "โปรเจกต์ทั้งหมด ⌄" บนมือถือ — เลือกมุมมอง (ทั้งหมด · ล่าสุด · อัปโหลด · ถังขยะ · โฟลเดอร์)
+function ViewMenu({ title, folders }: { title: string; folders: Folder[] }) {
+  const { open, setOpen, anchorRef, menuRef } = useAnchoredMenu('start');
+  const items = [
+    { href: '/projects', label: 'โปรเจกต์ทั้งหมด' },
+    { href: '/projects?view=recent', label: 'ล่าสุด' },
+    { href: '/projects?view=uploads', label: 'อัปโหลด' },
+    ...folders.map((f) => ({ href: `/projects?folder=${f.id}`, label: f.name })),
+    { href: '/trash', label: 'ถังขยะ' },
+  ];
+
+  return (
+    <>
+      <button ref={anchorRef} type="button" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((v) => !v)} className="inline-flex min-h-11 min-w-0 items-center gap-2 text-csmju-h1 font-bold text-ink">
+        <span className="truncate">{title}</span>
+        <span className="inline-flex size-7 shrink-0 items-center justify-center rounded-full border border-line-strong bg-surface">
+          <ChevronDown aria-hidden className="size-4" />
+        </span>
+      </button>
+      <FloatingPanel open={open} menuRef={menuRef} label="เลือกมุมมอง" className="max-h-popover w-64 overflow-y-auto rounded-2xl border border-line bg-surface py-1 shadow-csmju-lg">
+        {items.map((item) => (
+          <Link key={item.href} href={item.href} role="menuitem" onClick={() => setOpen(false)} className="flex min-h-12 items-center px-4 text-csmju-body text-ink hover:bg-surface-muted">
+            {item.label}
+          </Link>
+        ))}
+      </FloatingPanel>
+    </>
+  );
+}
+
+/// ปุ่ม + มุมขวาบนของมือถือ: ดีไซน์ใหม่ · โฟลเดอร์ใหม่ · อัปโหลดรูป
+function MobileCreateMenu({ onNewFolder }: { onNewFolder: () => void }) {
+  const openCreate = useOpenCreate();
+
+  return (
+    <Menu
+      label="สร้างใหม่"
+      trigger={<Plus aria-hidden className="size-7" />}
+      triggerClassName="bg-transparent shadow-none"
+      items={[
+        { label: 'ดีไซน์ใหม่', icon: <Plus aria-hidden className="size-4" />, onSelect: () => openCreate() },
+        { label: 'โฟลเดอร์ใหม่', icon: <FolderPlus aria-hidden className="size-4" />, onSelect: onNewFolder },
+        { label: 'อัปโหลดรูป', icon: <CloudUpload aria-hidden className="size-4" />, onSelect: () => openCreate('upload') },
+      ]}
+    />
   );
 }

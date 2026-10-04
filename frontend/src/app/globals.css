@@ -571,3 +571,8 @@
 :root[data-motion="reduce"] .csmju-dialog[open]::backdrop {
   animation: none;
 }
+
+/* เว้นขอบล่างของ iPhone ที่ไม่มีปุ่มโฮม */
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}

@@ -1,7 +1,7 @@
 'use client';
 
 import { ChevronDown } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { FloatingPanel, useAnchoredMenu } from '../csmju/floating';
 import { DESIGN_TYPES, TEMPLATE_CATEGORIES } from '@/lib/design-types';
 import { cx } from '../csmju/primitives';
 
@@ -71,32 +71,14 @@ export function FilterPopover({
   options: { value: string; label: string }[];
   onPick: (value: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  // กล่องตัวเลือกวาดชั้นบนสุด — ชิปบนมือถืออยู่ในแถวเลื่อนแนวนอนซึ่งจะตัดขอบกล่องถ้าวาดอยู่ข้างใน
+  const { open, setOpen, anchorRef, menuRef } = useAnchoredMenu('start');
   const selected = options.find((o) => o.value === current && current !== '');
 
-  useEffect(() => {
-    if (!open) return;
-
-    const close = (event: PointerEvent) => {
-      if (!ref.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
-    };
-
-    document.addEventListener('pointerdown', close);
-    document.addEventListener('keydown', onKey);
-
-    return () => {
-      document.removeEventListener('pointerdown', close);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
-
   return (
-    <div ref={ref} className="relative">
+    <div className="relative shrink-0">
       <button
+        ref={anchorRef}
         type="button"
         aria-haspopup="listbox"
         aria-expanded={open}
@@ -106,11 +88,11 @@ export function FilterPopover({
           selected ? 'border-primary bg-primary-soft text-primary' : 'border-line-strong bg-surface text-ink hover:bg-surface-muted',
         )}
       >
-        {selected ? `${label}: ${selected.label}` : label}
+        <span className="whitespace-nowrap">{selected ? `${label}: ${selected.label}` : label}</span>
         <ChevronDown aria-hidden className="size-4" />
       </button>
-      {open && (
-        <ul role="listbox" aria-label={label} className="absolute left-0 z-40 mt-1 max-h-80 min-w-60 overflow-y-auto rounded-xl border border-line bg-surface py-1 shadow-csmju-lg">
+      <FloatingPanel open={open} menuRef={menuRef} label={label} className="max-h-80 min-w-60 overflow-y-auto rounded-xl border border-line bg-surface py-1 shadow-csmju-lg">
+        <ul role="listbox" aria-label={label}>
           {options.map((option) => (
             <li key={option.value || 'all'} role="option" aria-selected={option.value === current}>
               <button
@@ -129,7 +111,7 @@ export function FilterPopover({
             </li>
           ))}
         </ul>
-      )}
+      </FloatingPanel>
     </div>
   );
 }

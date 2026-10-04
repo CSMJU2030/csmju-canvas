@@ -59,8 +59,16 @@ export class TemplatesService {
       this.prisma.template.count({ where }),
     ]);
 
+    // จำนวนหน้าใช้แสดงป้ายบนการ์ด — นับใน Postgres ไม่ต้องดึง JSON state ทั้งก้อนมา
+    const counts = rows.length
+      ? await this.prisma.$queryRaw<{ id: string; pages: number }[]>`
+          SELECT id::text AS id, COALESCE(jsonb_array_length(document->'pages'), 1)::int AS pages
+          FROM templates WHERE id = ANY(${rows.map((row) => row.id)}::uuid[])`
+      : [];
+    const pagesById = new Map(counts.map((c) => [c.id, c.pages]));
+
     return new Paginated(
-      rows.map((row) => toSummary(row, user.coreUserId)),
+      rows.map((row) => ({ ...toSummary(row, user.coreUserId), pageCount: pagesById.get(row.id) ?? 1 })),
       query.meta(total),
     );
   }
@@ -73,7 +81,7 @@ export class TemplatesService {
 
     if (!row) throw new NotFoundException('ไม่พบเทมเพลตนี้ อาจถูกลบไปแล้ว');
 
-    return { ...toSummary(row, user.coreUserId), document: row.document as Record<string, unknown> };
+    return { ...toSummary(row, user.coreUserId), pageCount: pageCountOf(row.document), document: row.document as Record<string, unknown> };
   }
 
   async create(user: CoreHubUser, dto: CreateTemplateDto) {
@@ -148,6 +156,12 @@ export class TemplatesService {
       throw new ForbiddenException('แก้ไขได้เฉพาะเทมเพลตที่คุณเผยแพร่เอง');
     }
   }
+}
+
+function pageCountOf(document: unknown): number {
+  const pages = (document as { pages?: unknown } | null)?.pages;
+
+  return Array.isArray(pages) ? pages.length : 1;
 }
 
 function toSummary(row: Omit<Template, 'document'> & { favorites?: { id: string }[] }, coreUserId: string) {

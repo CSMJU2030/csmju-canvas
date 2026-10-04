@@ -8,6 +8,7 @@ import { Button, CardGridSkeleton, EmptyState, ErrorState, cx, errorMessage, use
 import { TemplateCard } from '@/components/designs/cards';
 import { Carousel } from '@/components/designs/carousel';
 import { TypeArt } from '@/components/designs/type-art';
+import { BrowseSquares } from './mobile-home';
 import { api, qs } from '@/lib/csmju/api';
 import { useCreateDesign } from '@/lib/create-design';
 import { BROWSE_TILES, DESIGN_TYPES, designType, designTypeLabel } from '@/lib/design-types';
@@ -54,6 +55,7 @@ export function TemplatesTab({
   starred = false,
   builtIn = false,
   mine = false,
+  mobile = false,
 }: {
   query: string;
   category: string;
@@ -61,6 +63,7 @@ export function TemplatesTab({
   starred?: boolean;
   builtIn?: boolean;
   mine?: boolean;
+  mobile?: boolean;
 }) {
   const [type, setType] = useState(initialType);
   const scope = starred ? 'starred' : builtIn ? 'builtIn' : mine ? 'mine' : null;
@@ -70,9 +73,11 @@ export function TemplatesTab({
     <Results query={query} category={category} type={type} onType={setType} scope={scope} />
   ) : (
     <>
-      <Explore onPick={setType} />
+      {mobile ? <BrowseSquares title="สำรวจเทมเพลต" rows={2} onPick={setType} /> : <Explore onPick={setType} />}
       <LikeYourDesigns />
-      <AllTemplates />
+      <TemplateRow title="มีอะไรใหม่ใน CS Canvas" sort="recent" />
+      <TemplateRow title="ยอดนิยม" sort="popular" />
+      <AllTemplates title={mobile ? 'เทมเพลตอื่นๆ ที่เหมาะกับคุณ' : 'เทมเพลตทั้งหมด'} />
     </>
   );
 }
@@ -158,7 +163,31 @@ function LikeYourDesigns() {
   );
 }
 
-function AllTemplates() {
+/// แถวเทมเพลตใหญ่เลื่อนแนวนอน (มีอะไรใหม่ · ยอดนิยม) ตามภาพบรีฟ "เทมเพลต1.4–1.5"
+function TemplateRow({ title, sort }: { title: string; sort: 'recent' | 'popular' }) {
+  const use = useUse();
+  const query = useQuery({
+    queryKey: ['templates', 'row', sort],
+    queryFn: () => api.list<TemplateSummary>(`/templates${qs({ sort, limit: 10 })}`),
+  });
+
+  if (!query.data || query.data.items.length === 0) return null;
+
+  return (
+    <section>
+      <Heading>{title}</Heading>
+      <Carousel label={title}>
+        {query.data.items.map((template) => (
+          <li key={template.id} className={cx('shrink-0 snap-start', sort === 'recent' ? 'w-56' : 'w-72 md:w-96')}>
+            <TemplateCard size="lg" template={template} onUse={() => use(template)} />
+          </li>
+        ))}
+      </Carousel>
+    </section>
+  );
+}
+
+function AllTemplates({ title }: { title: string }) {
   const use = useUse();
   const [page, setPage] = useState(1);
   const query = useQuery({
@@ -168,7 +197,7 @@ function AllTemplates() {
 
   return (
     <section>
-      <Heading>เทมเพลตทั้งหมด</Heading>
+      <Heading>{title}</Heading>
       {query.isLoading ? (
         <CardGridSkeleton count={10} />
       ) : query.isError ? (

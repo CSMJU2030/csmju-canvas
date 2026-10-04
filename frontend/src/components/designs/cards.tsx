@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { LayoutTemplate, Star } from 'lucide-react';
+import { Copy, LayoutTemplate, Star } from 'lucide-react';
 import Link from 'next/link';
 import { useState, type ReactNode } from 'react';
 import { api } from '@/lib/csmju/api';
@@ -119,7 +119,13 @@ export function TemplateCard({
       <StarButton template={template} />
       <button type="button" onClick={onUse} className="block w-full text-left" aria-label={`ใช้เทมเพลต ${template.title}`}>
         {size === 'lg' ? (
-          <span className="flex aspect-video w-full items-center justify-center overflow-hidden rounded-xl border border-line bg-surface-muted transition-shadow group-hover:shadow-csmju-lg">
+          <span className="relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-xl border border-line bg-surface-muted transition-shadow group-hover:shadow-csmju-lg">
+            {(template.pageCount ?? 1) > 1 && (
+              <span className="absolute bottom-2 left-2 z-10 inline-flex items-center gap-1 rounded-md bg-inverse/70 px-2 py-0.5 text-csmju-caption font-semibold text-on-inverse">
+                <Copy aria-hidden className="size-3.5" /> {template.pageCount}
+                <span className="sr-only">หน้า</span>
+              </span>
+            )}
             {src ? (
               // eslint-disable-next-line @next/next/no-img-element -- ภาพตัวอย่างวาดจาก canvas ในเครื่อง
               <img src={src} alt={`ตัวอย่างเทมเพลต ${template.title}`} className="h-full w-full object-contain" />

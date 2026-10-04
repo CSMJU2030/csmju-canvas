@@ -1,28 +1,19 @@
 'use client';
 
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowUp, BookOpen, CircleHelp, LayoutTemplate, Palette, PanelRight, PanelRightClose, X } from 'lucide-react';
-import Link from 'next/link';
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { api, qs } from '@/lib/csmju/api';
-import { searchHelp, type HelpArticle } from '@/lib/help-articles';
-import type { DesignSummary, TemplateSummary } from '@/lib/types';
+import { ArrowUp, CircleHelp, PanelRight, PanelRightClose, X } from 'lucide-react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { answerQuestion, type AssistantAnswer } from '@/lib/assistant';
 import { cx } from '../csmju/primitives';
-
-interface Answer {
-  articles: HelpArticle[];
-  templates: TemplateSummary[];
-  designs: DesignSummary[];
-  failed: boolean;
-}
+import { AnswerBubble, Typing } from './assistant-answer';
 
 interface Turn {
   id: number;
   question: string;
-  answer: Answer | null;
+  answer: AssistantAnswer | null;
 }
 
-const SUGGESTIONS = ['เริ่มสร้างงานใหม่', 'ดาวน์โหลด png โปร่งใส', 'แชร์ดีไซน์ให้เพื่อน', 'กู้คืนงานจากถังขยะ', 'คีย์ลัด'];
+export const SUGGESTIONS = ['เริ่มสร้างงานใหม่', 'ดาวน์โหลด png โปร่งใส', 'แชร์ดีไซน์ให้เพื่อน', 'กู้คืนงานจากถังขยะ', 'คีย์ลัด'];
 
 /// ผู้ช่วย CS Canvas (ปุ่ม ?) — หน้าตาตามภาพบรีฟ "AI" และ "AI 1.1"
 ///
@@ -77,18 +68,7 @@ export function HelpAssistant() {
     setBusy(true);
     setTurns((current) => [...current, { id, question: q, answer: null }]);
 
-    let answer: Answer;
-
-    try {
-      const [templates, designs] = await Promise.all([
-        queryClient.fetchQuery({ queryKey: ['help', 'templates', q], queryFn: () => api.list<TemplateSummary>(`/templates${qs({ q, limit: 4 })}`) }),
-        queryClient.fetchQuery({ queryKey: ['help', 'designs', q], queryFn: () => api.list<DesignSummary>(`/designs${qs({ q, limit: 4 })}`) }),
-      ]);
-
-      answer = { articles: searchHelp(q, 3), templates: templates.items, designs: designs.items, failed: false };
-    } catch {
-      answer = { articles: searchHelp(q, 3), templates: [], designs: [], failed: true };
-    }
+    const answer = await answerQuestion(q, queryClient);
 
     setTurns((current) => current.map((turn) => (turn.id === id ? { ...turn, answer } : turn)));
     setBusy(false);
@@ -108,7 +88,8 @@ export function HelpAssistant() {
         aria-controls="help-panel"
         aria-label="ผู้ช่วย CS Canvas"
         title="ผู้ช่วย CS Canvas"
-        className="group fixed right-4 bottom-20 z-30 inline-flex size-14 items-center justify-center rounded-full bg-primary text-on-inverse shadow-csmju-lg hover:bg-primary-hover md:bottom-6"
+        // มือถือมีแท็บ "ผู้ช่วย" ที่แถบล่างแทนปุ่มนี้
+        className="group fixed right-4 bottom-6 z-30 hidden size-14 items-center justify-center rounded-full bg-primary text-on-inverse shadow-csmju-lg hover:bg-primary-hover md:inline-flex"
       >
         {open ? <X aria-hidden className="size-6" /> : <CircleHelp aria-hidden className="csmju-wiggle size-7" />}
       </button>
@@ -196,83 +177,5 @@ export function HelpAssistant() {
         </section>
       )}
     </>
-  );
-}
-
-function Typing() {
-  return (
-    <span role="status" aria-label="กำลังค้นหาคำตอบ" className="flex gap-1 self-start rounded-2xl rounded-bl-md bg-surface-muted px-4 py-3">
-      {[0, 1, 2].map((i) => (
-        <span key={i} aria-hidden className="size-2 animate-bounce rounded-full bg-muted motion-reduce:animate-none" style={{ animationDelay: `${i * 120}ms` }} />
-      ))}
-    </span>
-  );
-}
-
-function AnswerBubble({ question, answer, onNavigate }: { question: string; answer: Answer; onNavigate: () => void }) {
-  const top = answer.articles[0];
-  const nothing = answer.articles.length === 0 && answer.templates.length === 0 && answer.designs.length === 0;
-
-  return (
-    <div className="csmju-fade-in flex max-w-full flex-col gap-3 self-start rounded-2xl rounded-bl-md bg-surface-muted px-4 py-3 text-csmju-caption text-ink">
-      {nothing ? (
-        <p>
-          ไม่พบคำตอบสำหรับ “{question}” — ผู้ช่วยตอบได้เฉพาะเรื่องการใช้งาน CS Canvas เทมเพลต และงานของคุณ ลองถามเช่น “ดาวน์โหลด png” หรือ “แชร์ดีไซน์”
-          {answer.failed && ' (ค้นเทมเพลตและงานไม่สำเร็จ ลองอีกครั้ง)'}
-        </p>
-      ) : (
-        <>
-          {top && (
-            <div>
-              <p className="font-semibold">{top.title}</p>
-              <p className="mt-1 text-body">{top.body[0]}</p>
-            </div>
-          )}
-          {answer.articles.length > 0 && (
-            <Group icon={<BookOpen aria-hidden className="size-4" />} title="คู่มือที่เกี่ยวข้อง">
-              {answer.articles.map((a) => (
-                <ResultLink key={a.slug} href={`/help/${a.slug}`} title={a.title} onNavigate={onNavigate} />
-              ))}
-            </Group>
-          )}
-          {answer.templates.length > 0 && (
-            <Group icon={<LayoutTemplate aria-hidden className="size-4" />} title="เทมเพลต">
-              {answer.templates.map((t) => (
-                <ResultLink key={t.id} href={`/templates?q=${encodeURIComponent(t.title)}`} title={t.title} onNavigate={onNavigate} />
-              ))}
-            </Group>
-          )}
-          {answer.designs.length > 0 && (
-            <Group icon={<Palette aria-hidden className="size-4" />} title="งานของคุณ">
-              {answer.designs.map((d) => (
-                <ResultLink key={d.id} href={`/design/${d.id}`} title={d.title} onNavigate={onNavigate} />
-              ))}
-            </Group>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
-function Group({ icon, title, children }: { icon: ReactNode; title: string; children: ReactNode }) {
-  return (
-    <div>
-      <p className="mb-1 flex items-center gap-1.5 font-semibold text-muted">
-        {icon}
-        {title}
-      </p>
-      <ul className="flex flex-col">{children}</ul>
-    </div>
-  );
-}
-
-function ResultLink({ href, title, onNavigate }: { href: string; title: string; onNavigate: () => void }) {
-  return (
-    <li>
-      <Link href={href} onClick={onNavigate} className="flex min-h-11 items-center rounded-lg px-2 text-primary underline-offset-2 hover:bg-surface hover:underline">
-        {title}
-      </Link>
-    </li>
   );
 }

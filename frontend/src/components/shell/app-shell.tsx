@@ -2,8 +2,8 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Bell, BookOpen, ChevronRight, Clock, CloudUpload, FolderOpen, House, LayoutTemplate, PanelLeft, Plus, Sparkles, Star,
-  Trash2, UserRound,
+  Bell, BookOpen, ChevronRight, Clock, CloudUpload, Ellipsis, FolderOpen, House, LayoutTemplate, PanelLeft, Plus, Sparkles,
+  Star, Trash2, UserRound,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
@@ -501,45 +501,47 @@ function AccountNav() {
   );
 }
 
+/// แถบล่างของมือถือ 5 แท็บตามภาพบรีฟ: หน้าหลัก · ดีไซน์ของคุณ · เทมเพลต · ผู้ช่วย · เพิ่มเติม
+/// (สร้างงานใหม่ใช้ปุ่มลอยในหน้าแรกและปุ่ม + ในหน้าดีไซน์ของคุณ · แจ้งเตือนอยู่ในหน้าเพิ่มเติม)
 function MobileBar() {
   const pathname = usePathname();
-  const openCreate = useOpenCreate();
   const unread = useUnread();
   const items = [
-    { href: '/', label: 'หน้าหลัก', icon: House },
-    { href: '/projects', label: 'โปรเจกต์', icon: FolderOpen },
-    { href: '#create', label: 'สร้าง', icon: Plus },
-    { href: '/notifications', label: 'แจ้งเตือน', icon: Bell },
-    { href: '/account', label: 'บัญชี', icon: UserRound },
+    { href: '/', label: 'หน้าหลัก', icon: House, match: ['/'] },
+    { href: '/projects', label: 'ดีไซน์ของคุณ', icon: FolderOpen, match: ['/projects', '/trash'] },
+    { href: '/templates', label: 'เทมเพลต', icon: LayoutTemplate, match: ['/templates'] },
+    { href: '/assistant', label: 'ผู้ช่วย', icon: Sparkles, match: ['/assistant', '/help'] },
+    { href: '/more', label: 'เพิ่มเติม', icon: Ellipsis, match: ['/more', '/account', '/notifications'] },
   ];
 
   return (
-    <nav aria-label="เมนูหลัก (มือถือ)" className="fixed inset-x-0 bottom-0 z-30 flex border-t border-line bg-surface md:hidden">
-      {items.map((item) =>
-        item.href === '#create' ? (
-          <button key={item.href} type="button" onClick={() => openCreate()} className="flex min-h-16 flex-1 flex-col items-center justify-center gap-0.5 text-csmju-caption text-ink">
-            <span className="flex size-9 items-center justify-center rounded-full bg-primary text-on-inverse">
-              <item.icon aria-hidden className="size-5" strokeWidth={2.5} />
-            </span>
-            {item.label}
-          </button>
-        ) : (
+    <nav aria-label="เมนูหลัก (มือถือ)" className="fixed inset-x-0 bottom-0 z-30 flex border-t border-line bg-surface pb-safe md:hidden">
+      {items.map((item) => {
+        const active = item.match.some((m) => (m === '/' ? pathname === '/' : pathname.startsWith(m)));
+
+        return (
           <Link
             key={item.href}
             href={item.href}
-            aria-current={isActive(pathname, item.href) ? 'page' : undefined}
-            className={cx('relative flex min-h-16 flex-1 flex-col items-center justify-center text-csmju-caption', isActive(pathname, item.href) ? 'font-semibold text-primary' : 'text-body')}
+            aria-current={active ? 'page' : undefined}
+            className={cx('group relative flex min-h-16 flex-1 flex-col items-center justify-center gap-0.5 text-csmju-caption leading-tight', active ? 'font-semibold text-primary' : 'text-body')}
           >
-            <item.icon aria-hidden className="size-6" />
-            {item.label}
-            {item.href === '/notifications' && unread > 0 && (
-              <span className="absolute top-2 right-1/4 size-2.5 rounded-full bg-danger">
+            {item.href === '/assistant' && active ? (
+              <span className="csmju-gradient-button flex size-7 items-center justify-center rounded-full">
+                <item.icon aria-hidden className="size-4" />
+              </span>
+            ) : (
+              <item.icon aria-hidden className="csmju-wiggle size-6" fill={active ? 'currentColor' : 'none'} fillOpacity={active ? 0.2 : 0} />
+            )}
+            <span className="max-w-full truncate px-0.5">{item.label}</span>
+            {item.href === '/more' && unread > 0 && (
+              <span className="absolute top-2 right-1/4 size-2.5 rounded-full bg-danger ring-2 ring-surface">
                 <span className="sr-only">มีแจ้งเตือนที่ยังไม่อ่าน</span>
               </span>
             )}
           </Link>
-        ),
-      )}
+        );
+      })}
     </nav>
   );
 }

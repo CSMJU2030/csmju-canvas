@@ -2236,6 +2236,11 @@
             "type": "boolean",
             "description": "ผู้เรียกติดดาวไว้"
           },
+          "pageCount": {
+            "type": "number",
+            "description": "จำนวนหน้าในเทมเพลต",
+            "example": 3
+          },
           "createdAt": {
             "type": "string"
           },
@@ -2255,6 +2260,7 @@
           "isBuiltIn",
           "isMine",
           "isStarred",
+          "pageCount",
           "createdAt",
           "updatedAt"
         ]
@@ -2303,6 +2309,11 @@
             "type": "boolean",
             "description": "ผู้เรียกติดดาวไว้"
           },
+          "pageCount": {
+            "type": "number",
+            "description": "จำนวนหน้าในเทมเพลต",
+            "example": 3
+          },
           "createdAt": {
             "type": "string"
           },
@@ -2326,6 +2337,7 @@
           "isBuiltIn",
           "isMine",
           "isStarred",
+          "pageCount",
           "createdAt",
           "updatedAt",
           "document"

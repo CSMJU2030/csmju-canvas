@@ -16,6 +16,9 @@ import { api, qs } from '@/lib/csmju/api';
 import { useCreateDesign } from '@/lib/create-design';
 import { BROWSE_TILES, DESIGN_GROUPS, DESIGN_TYPES, designType, type DesignType } from '@/lib/design-types';
 import { formatBytes } from '@/lib/format';
+import { useIsMobile } from '@/lib/use-media';
+import { MobileHome } from './mobile-home';
+import { MobileTemplatesShell } from './mobile-templates';
 import { CategoryChips, TemplatesTab } from './templates-tab';
 import type { DesignSummary, DesignTypeUsage, Quota, TemplateSummary } from '@/lib/types';
 
@@ -28,6 +31,39 @@ export function HomeView({ tab }: { tab: 'home' | 'templates' }) {
   const [filters, setFilters] = useState<SearchFilters>(EMPTY_FILTERS);
   const [focused, setFocused] = useState(false);
   const searching = query.trim() !== '' || JSON.stringify(filters) !== JSON.stringify(EMPTY_FILTERS);
+  const isMobile = useIsMobile();
+  const templatesTab = (
+    <TemplatesTab
+      key={`${params.get('starred')}|${params.get('builtIn')}|${params.get('owner')}`}
+      query={query.trim()}
+      category={category}
+      initialType={params.get('designType') ?? ''}
+      starred={params.get('starred') === 'true'}
+      builtIn={params.get('builtIn') === 'true'}
+      mine={params.get('owner') === 'me'}
+      mobile={isMobile}
+    />
+  );
+
+  // มือถือ: เลย์เอาต์เฉพาะตามภาพบรีฟ "หลัก" และ "เทมเพลต"
+  if (isMobile && tab === 'home') {
+    return (
+      <MobileHome
+        query={query}
+        onQuery={setQuery}
+        searching={searching}
+        results={<SearchResults query={query.trim()} filters={filters} onClear={() => setQuery('')} />}
+      />
+    );
+  }
+
+  if (isMobile && tab === 'templates') {
+    return (
+      <MobileTemplatesShell query={query} onQuery={setQuery} category={category} onCategory={setCategory}>
+        {templatesTab}
+      </MobileTemplatesShell>
+    );
+  }
 
   return (
     <div>
@@ -88,15 +124,7 @@ export function HomeView({ tab }: { tab: 'home' | 'templates' }) {
 
       <div key={tab} className="csmju-fade-in flex flex-col gap-12 px-4 pt-6 pb-12 md:px-10">
         {tab === 'templates' ? (
-          <TemplatesTab
-            key={`${params.get('starred')}|${params.get('builtIn')}|${params.get('owner')}`}
-            query={query.trim()}
-            category={category}
-            initialType={params.get('designType') ?? ''}
-            starred={params.get('starred') === 'true'}
-            builtIn={params.get('builtIn') === 'true'}
-            mine={params.get('owner') === 'me'}
-          />
+          templatesTab
         ) : searching ? (
           <SearchResults query={query.trim()} filters={filters} onClear={() => { setQuery(''); setFilters(EMPTY_FILTERS); }} />
         ) : (

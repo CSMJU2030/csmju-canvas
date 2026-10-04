@@ -166,7 +166,8 @@ function Flyout({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function ThemeSubmenu() {
+/// ตัวเลือกธีม 3 แบบ — ใช้ทั้งในเมนูบัญชี (จอใหญ่) และหน้าเพิ่มเติม (มือถือ)
+export function ThemeOptions() {
   const queryClient = useQueryClient();
   const toast = useToast();
   const prefs = useQuery({ queryKey: ['preferences'], queryFn: () => api.get<Preference>('/preferences') });
@@ -187,7 +188,7 @@ function ThemeSubmenu() {
   ];
 
   return (
-    <Flyout label="ธีม">
+    <>
       {options.map((option) => (
         <button
           key={option.value}
@@ -202,6 +203,14 @@ function ThemeSubmenu() {
           {current === option.value && <Check aria-hidden className="size-5" />}
         </button>
       ))}
+    </>
+  );
+}
+
+function ThemeSubmenu() {
+  return (
+    <Flyout label="ธีม">
+      <ThemeOptions />
     </Flyout>
   );
 }
@@ -236,7 +245,7 @@ function HelpSubmenu({
 }
 
 /// ส่งข้อเสนอแนะหรือรายงานเนื้อหาให้ผู้ดูแลระบบ (เก็บในฐานข้อมูลของ CS Canvas — ไม่ส่งออกนอกระบบ)
-function FeedbackDialog({ kind, onClose }: { kind: 'SUGGESTION' | 'REPORT'; onClose: () => void }) {
+export function FeedbackDialog({ kind, onClose }: { kind: 'SUGGESTION' | 'REPORT'; onClose: () => void }) {
   const [message, setMessage] = useState('');
   const [link, setLink] = useState(() => (typeof window !== 'undefined' ? window.location.pathname + window.location.search : ''));
   const toast = useToast();

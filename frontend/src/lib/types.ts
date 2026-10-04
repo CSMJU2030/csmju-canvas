@@ -35,6 +35,8 @@ export interface TemplateSummary {
   isBuiltIn: boolean;
   isMine: boolean;
   isStarred: boolean;
+  /// จำนวนหน้า (มีในรายการเทมเพลต)
+  pageCount?: number;
   createdAt: string;
   updatedAt: string;
 }
