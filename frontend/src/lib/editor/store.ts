@@ -5,10 +5,35 @@ import type { Guide } from './snapping';
 import {
   blankPage,
   newId,
+  type BrushKind,
   type CanvasElement,
   type DesignDocument,
   type Page,
 } from './types';
+
+export type DrawBrush = BrushKind | 'eraser';
+
+/// โหมดของผืนผ้าใบ: เลือก/ลากชิ้นงาน หรือวาดด้วยมือ (แผง "เครื่องมือ")
+/// ค่าสีและน้ำหนักแยกตามหัวปากกา (ปากกา มาร์กเกอร์ ไฮไลท์ ไม่ใช้สีร่วมกัน)
+export interface DrawTool {
+  mode: 'select' | 'draw';
+  brush: DrawBrush;
+  colors: Record<BrushKind, string>;
+  /// 1–100 ตามแถบ "น้ำหนัก" · แปลงเป็นพิกเซลด้วย brushWidth()
+  weights: Record<DrawBrush, number>;
+}
+
+export const DEFAULT_DRAW_TOOL: DrawTool = {
+  mode: 'select',
+  brush: 'pen',
+  colors: { pen: 'rgb(1 24 78)', marker: 'rgb(34 34 34)', highlighter: 'rgb(255 240 50)' },
+  weights: { pen: 4, marker: 12, highlighter: 60, eraser: 30 },
+};
+
+/// ความหนาจริง (พิกเซลของหน้า) จากค่าน้ำหนัก — เทียบกับด้านยาวของหน้า ให้หน้าใหญ่/เล็กดูหนาเท่ากันบนจอ
+export function brushWidth(weight: number, page: { width: number; height: number }): number {
+  return Math.max(1, (weight * Math.max(page.width, page.height)) / 2500);
+}
 
 const HISTORY_LIMIT = 100;
 
@@ -37,6 +62,8 @@ export interface EditorState extends EditorMeta {
   pan: { x: number; y: number };
   /// สำเนาที่คัดลอกไว้ (ภายในแท็บเดียว ไม่ใช้คลิปบอร์ดของระบบ)
   clipboard: CanvasElement[];
+  /// เครื่องมือวาด (ไม่อยู่ในประวัติ undo และไม่บันทึกลงงาน)
+  tool: DrawTool;
 
   load(meta: EditorMeta, doc: DesignDocument): void;
   setTitle(title: string): void;
@@ -52,7 +79,10 @@ export interface EditorState extends EditorMeta {
   endGesture(): void;
 
   updateElements(ids: string[], patch: (el: CanvasElement) => Partial<CanvasElement>): void;
-  addElements(elements: CanvasElement[]): void;
+  addElements(elements: CanvasElement[], options?: { select?: boolean }): void;
+  /// ลบตาม id (ยางลบ) — ข้ามชิ้นที่ล็อก
+  removeElements(ids: string[]): void;
+  setTool(patch: Partial<DrawTool>): void;
   removeSelected(): void;
   duplicateSelected(): void;
   copySelected(): void;
@@ -70,6 +100,8 @@ export interface EditorState extends EditorMeta {
   duplicatePage(index: number): void;
   deletePage(index: number): void;
   movePage(from: number, to: number): void;
+  /// ต่อหน้าจากงานอื่นท้ายงานนี้ (แผงโปรเจกต์)
+  appendPages(pages: Page[]): void;
 
   undo(): void;
   redo(): void;
@@ -151,6 +183,7 @@ export const useEditor = create<EditorState>((set, get) => {
     zoom: 1,
     pan: { x: 0, y: 0 },
     clipboard: [],
+    tool: DEFAULT_DRAW_TOOL,
 
     load(meta, doc) {
       gestureSnapshot = null;
@@ -164,6 +197,7 @@ export const useEditor = create<EditorState>((set, get) => {
         past: [],
         future: [],
         revision: 0,
+        tool: { ...get().tool, mode: 'select' },
       });
     },
 
@@ -225,12 +259,30 @@ export const useEditor = create<EditorState>((set, get) => {
       }));
     },
 
-    addElements(elements) {
+    addElements(elements, options = {}) {
       const fitted = elements.map(fitText);
 
       mutatePage((page) => ({ ...page, elements: [...page.elements, ...fitted] }), {
-        selection: fitted.map((el) => el.id),
+        selection: options.select === false ? get().selection : fitted.map((el) => el.id),
       });
+    },
+
+    removeElements(ids) {
+      const page = currentPage(get());
+      const removable = new Set(ids.filter((id) => !page.elements.find((el) => el.id === id)?.locked));
+
+      if (removable.size === 0) return;
+
+      mutatePage((p) => ({ ...p, elements: p.elements.filter((el) => !removable.has(el.id)) }), {
+        selection: get().selection.filter((id) => !removable.has(id)),
+      });
+    },
+
+    setTool(patch) {
+      const tool = { ...get().tool, ...patch };
+
+      // เข้าโหมดวาดแล้วเลิกเลือกชิ้นงาน (กรอบเลือกจะบังเส้นที่กำลังวาด)
+      set(tool.mode === 'draw' ? { tool, selection: [], editingTextId: null } : { tool });
     },
 
     removeSelected() {
@@ -412,6 +464,14 @@ export const useEditor = create<EditorState>((set, get) => {
 
       pages.splice(to, 0, moved);
       commit({ ...state.doc, pages }, { pageIndex: to, selection: [] });
+    },
+
+    appendPages(pages) {
+      const state = get();
+
+      if (pages.length === 0) return;
+
+      commit({ ...state.doc, pages: [...state.doc.pages, ...pages] }, { pageIndex: state.doc.pages.length, selection: [] });
     },
 
     undo() {

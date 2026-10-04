@@ -1,3 +1,5 @@
+import type { DesignDocument } from './types';
+
 /// แปลงสี CSS ใด ๆ เป็นรูปที่ <input type="color"> รับได้ (#rrggbb)
 ///
 /// ใช้ canvas ให้เบราว์เซอร์แปลงให้ — รองรับ rgb() hsl() ชื่อสี ฯลฯ โดยไม่ต้องเขียน parser เอง
@@ -58,3 +60,29 @@ export const SWATCHES = [
   'rgb(226 232 240)',
   'rgb(255 255 255)',
 ];
+
+/// สีที่ใช้อยู่ในงานนี้ ("สีในดีไซน์นี้" ของตัวเลือกสี) — เรียงตามที่พบ ไม่ซ้ำ
+export function documentColors(doc: DesignDocument, limit = 10): string[] {
+  const seen = new Map<string, string>();
+  const add = (color: string | null | undefined) => {
+    if (!color) return;
+
+    const key = toInputColor(color);
+
+    if (key && !seen.has(key)) seen.set(key, color);
+  };
+
+  for (const page of doc.pages) {
+    add(page.background);
+
+    for (const el of page.elements) {
+      if (el.type === 'text' || el.type === 'svg' || el.type === 'path') add(el.color);
+      if (el.type === 'shape') {
+        add(el.fill);
+        add(el.stroke);
+      }
+    }
+  }
+
+  return [...seen.values()].slice(0, limit);
+}

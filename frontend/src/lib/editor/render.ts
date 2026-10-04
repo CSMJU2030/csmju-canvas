@@ -1,5 +1,5 @@
 import { cssFamily, ensureFont, isFontReady } from './fonts';
-import type { CanvasElement, ImageElement, Page, ShapeElement, SvgElement, TextElement } from './types';
+import { isLineShape, type CanvasElement, type ImageElement, type Page, type PathElement, type ShapeElement, type SvgElement, type TextElement } from './types';
 
 /// วาดหน้าลง canvas 2D — ใช้ทั้งบนจอ (editor) ภาพย่อ และการส่งออก PNG/JPEG
 ///
@@ -207,6 +207,26 @@ function shapePath(ctx: CanvasRenderingContext2D, el: ShapeElement) {
       ctx.lineTo(x, y + h);
       ctx.closePath();
       break;
+    case 'triangle-down':
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + w, y);
+      ctx.lineTo(x + w / 2, y + h);
+      ctx.closePath();
+      break;
+    case 'diamond':
+      ctx.beginPath();
+      ctx.moveTo(x + w / 2, y);
+      ctx.lineTo(x + w, y + h / 2);
+      ctx.lineTo(x + w / 2, y + h);
+      ctx.lineTo(x, y + h / 2);
+      ctx.closePath();
+      break;
+    case 'pentagon':
+    case 'hexagon':
+    case 'octagon':
+      polygon(ctx, el, el.shape === 'pentagon' ? 5 : el.shape === 'hexagon' ? 6 : 8);
+      break;
     case 'star': {
       ctx.beginPath();
       const cx = x + w / 2;
@@ -231,13 +251,50 @@ function shapePath(ctx: CanvasRenderingContext2D, el: ShapeElement) {
       ctx.moveTo(x, y + h / 2);
       ctx.lineTo(x + w, y + h / 2);
       break;
+    case 'curve':
+      // โค้งจากมุมล่างซ้ายขึ้นไปแตะขอบบนแล้วลงมุมล่างขวา
+      ctx.beginPath();
+      ctx.moveTo(x, y + h);
+      ctx.quadraticCurveTo(x + w / 2, y - h, x + w, y + h);
+      break;
+    case 'elbow': {
+      // เส้นหักศอก: ขอบบนซ้าย → กลาง → ลงล่าง → ขอบล่างขวา (มุมโค้งเล็กน้อย)
+      const r = Math.min(w / 4, h / 2, Math.max(4, el.strokeWidth * 4));
+
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.arcTo(x + w / 2, y, x + w / 2, y + h, r);
+      ctx.arcTo(x + w / 2, y + h, x + w, y + h, r);
+      ctx.lineTo(x + w, y + h);
+      break;
+    }
   }
+}
+
+/// รูปหลายเหลี่ยมด้านเท่า ยอดแรกอยู่บนสุด (แปดเหลี่ยมหมุนครึ่งช่องให้ขอบบนแบน)
+function polygon(ctx: CanvasRenderingContext2D, el: ShapeElement, sides: number) {
+  const cx = el.x + el.width / 2;
+  const cy = el.y + el.height / 2;
+  const start = -Math.PI / 2 + (sides === 8 || sides === 6 ? Math.PI / sides : 0);
+
+  ctx.beginPath();
+
+  for (let i = 0; i < sides; i++) {
+    const angle = start + (i * 2 * Math.PI) / sides;
+    const px = cx + Math.cos(angle) * (el.width / 2);
+    const py = cy + Math.sin(angle) * (el.height / 2);
+
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+
+  ctx.closePath();
 }
 
 function drawShape(ctx: CanvasRenderingContext2D, el: ShapeElement) {
   shapePath(ctx, el);
 
-  const isLine = el.shape === 'line' || el.shape === 'arrow';
+  const isLine = isLineShape(el.shape);
 
   if (el.fill && !isLine) {
     ctx.fillStyle = el.fill;
@@ -262,6 +319,52 @@ function drawShape(ctx: CanvasRenderingContext2D, el: ShapeElement) {
       ctx.lineTo(tipX - size, tipY + size * 0.6);
       ctx.stroke();
     }
+  }
+}
+
+/// ความทึบของปากกาไฮไลท์ — โปร่งให้เห็นสิ่งที่อยู่ข้างใต้
+export const HIGHLIGHTER_ALPHA = 0.45;
+
+/// วาดเส้นหนึ่งเส้นจากพิกัดหน้า [x0, y0, x1, y1, …] ให้โค้งเรียบด้วยจุดกึ่งกลาง (quadratic)
+export function strokeFreehand(ctx: CanvasRenderingContext2D, points: number[]) {
+  if (points.length < 2) return;
+
+  ctx.beginPath();
+  ctx.moveTo(points[0], points[1]);
+
+  if (points.length <= 4) {
+    // จุดเดียว (แตะ) วาดเป็นจุดกลม
+    ctx.lineTo(points[points.length - 2] + 0.01, points[points.length - 1]);
+  } else {
+    for (let i = 2; i < points.length - 2; i += 2) {
+      const mx = (points[i] + points[i + 2]) / 2;
+      const my = (points[i + 1] + points[i + 3]) / 2;
+
+      ctx.quadraticCurveTo(points[i], points[i + 1], mx, my);
+    }
+
+    ctx.lineTo(points[points.length - 2], points[points.length - 1]);
+  }
+
+  ctx.stroke();
+}
+
+export function brushStyle(ctx: CanvasRenderingContext2D, brush: PathElement['brush'], color: string, width: number) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  if (brush === 'highlighter') ctx.globalAlpha *= HIGHLIGHTER_ALPHA;
+}
+
+function drawPath(ctx: CanvasRenderingContext2D, el: PathElement) {
+  brushStyle(ctx, el.brush, el.color, el.strokeWidth);
+
+  for (const stroke of el.strokes) {
+    const points = stroke.map((v, i) => (i % 2 === 0 ? el.x + v * el.width : el.y + v * el.height));
+
+    strokeFreehand(ctx, points);
   }
 }
 
@@ -322,6 +425,9 @@ export function drawElement(ctx: CanvasRenderingContext2D, el: CanvasElement) {
       break;
     case 'svg':
       drawSvg(ctx, el);
+      break;
+    case 'path':
+      drawPath(ctx, el);
       break;
   }
 

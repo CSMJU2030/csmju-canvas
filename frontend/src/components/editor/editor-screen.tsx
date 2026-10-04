@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Copy, Eye, UserPlus,
+  Copy, Eye, Files, Layers, UserPlus,
   ChevronLeft, CloudAlert, CloudCheck, Download, LayoutTemplate, LoaderCircle, Maximize, Redo2, Undo2,
   ZoomIn, ZoomOut,
 } from 'lucide-react';
@@ -18,10 +18,11 @@ import type { Design } from '@/lib/types';
 import { useCreateDesign } from '@/lib/create-design';
 import { ShareDialog } from '@/components/designs/design-actions';
 import { ExportDialog, PublishTemplateDialog } from './dialogs';
-import { PANELS, PanelContent, type PanelKey } from './panels';
+import { PANEL_LABELS, PanelContent, RAIL, StarredIcon, type PanelKey, type RailKey } from './panels';
 import { PropertiesBar } from './properties-bar';
 import { SelectionToolbar } from './selection-toolbar';
 import { Stage, clampZoom, fitToScreen } from './stage';
+import { ToolsPalette } from './tools-palette';
 import { useAutosave, type SaveStatus } from './use-autosave';
 import { useShortcuts } from './use-shortcuts';
 
@@ -71,9 +72,36 @@ export function EditorScreen({ id }: { id: string }) {
 
 function EditorLayout({ needsThumbnail }: { needsThumbnail: boolean }) {
   // จอเล็กเริ่มโดยพับแผงไว้ ให้เห็นผืนผ้าใบเต็มที่ (หน้านี้ render ฝั่ง client เท่านั้น — อยู่หลัง SessionProvider)
-  const [panel, setPanel] = useState<PanelKey | null>(() =>
-    typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches ? null : 'design',
+  const [panel, setPanelState] = useState<PanelKey | null>(() =>
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches ? null : 'templates',
   );
+  const [toolsOpen, setToolsOpen] = useState(false);
+
+  // เปิดแผงอื่น = ปิดแถบเครื่องมือและเลิกโหมดวาด (แบบ Canva ที่แสดงทีละอย่าง)
+  const setPanel = (next: PanelKey | null) => {
+    setPanelState(next);
+    setToolsOpen(false);
+    useEditor.getState().setTool({ mode: 'select' });
+  };
+  const openTools = () => {
+    setPanelState(null);
+    setToolsOpen(true);
+  };
+  const closeTools = () => {
+    setToolsOpen(false);
+    useEditor.getState().setTool({ mode: 'select' });
+  };
+  const onRail = (key: RailKey) => {
+    if (key === 'tools') {
+      if (toolsOpen) closeTools();
+      else openTools();
+      return;
+    }
+
+    setPanel(panel === key ? null : key);
+  };
+  const railActive = (key: RailKey | 'starred') =>
+    key === 'tools' ? toolsOpen || panel === 'signature' : panel === key;
   const [dialog, setDialog] = useState<'export' | 'publish' | 'share' | null>(null);
   const readOnly = useEditor((s) => s.access === 'VIEW');
   const { status, retry } = useAutosave(needsThumbnail && !readOnly);
@@ -97,64 +125,82 @@ function EditorLayout({ needsThumbnail }: { needsThumbnail: boolean }) {
     <div className="flex h-dvh flex-col bg-stage">
       <TopBar status={status} onRetry={retry} onExport={() => setDialog('export')} onPublish={() => setDialog('publish')} onShare={() => setDialog('share')} />
       <div className="flex min-h-0 flex-1">
-        {/* แถบแท็บซ้าย (จอใหญ่) */}
-        <nav aria-label="เครื่องมือ" className="hidden w-20 shrink-0 flex-col items-center gap-1 bg-surface py-3 md:flex">
-          {PANELS.map((p) => (
-            <button
-              key={p.key}
-              type="button"
-              aria-pressed={panel === p.key}
-              onClick={() => setPanel(panel === p.key ? null : p.key)}
-              className="group flex w-16 flex-col items-center gap-1 py-1 text-csmju-caption text-ink"
-            >
-              <span
-                className={cx(
-                  'flex size-10 items-center justify-center rounded-xl transition-colors',
-                  panel === p.key ? 'bg-primary-soft text-primary' : 'text-body group-hover:bg-surface-muted',
-                )}
-              >
-                <p.icon aria-hidden className="csmju-wiggle size-6" />
-              </span>
-              <span className={cx(panel === p.key && 'font-semibold text-primary')}>{p.label}</span>
-            </button>
+        {/* แถบซ้าย (จอใหญ่) แบบ Canva: ไอคอน + ป้าย · ที่เลือกอยู่เป็นกล่องขาวไอคอนสี · "ติดดาวแล้ว" ปักล่างสุด */}
+        <nav aria-label="แผงเครื่องมือ" className="hidden w-22 shrink-0 flex-col items-center gap-1 overflow-y-auto bg-stage py-3 md:flex">
+          {RAIL.map((item) => (
+            <RailButton key={item.key} label={item.label} icon={item.icon} tone={item.tone} active={railActive(item.key)} onClick={() => onRail(item.key)} />
           ))}
+          <span aria-hidden className="mt-auto mb-1 h-px w-8 bg-line-strong" />
+          <RailButton label="ติดดาวแล้ว" icon={StarredIcon} tone="text-type-orange" active={railActive('starred')} onClick={() => setPanel(panel === 'starred' ? null : 'starred')} />
         </nav>
         {panel && (
-          <aside aria-label={PANELS.find((p) => p.key === panel)?.label} className="relative hidden w-88 shrink-0 border-l border-line bg-surface md:flex md:flex-col">
-            <div className="min-h-0 flex-1 overflow-y-auto p-4">
-              <h2 className="sr-only">{PANELS.find((p) => p.key === panel)?.label}</h2>
-              <PanelContent panel={panel} />
-            </div>
+          <aside key={panel} aria-label={PANEL_LABELS[panel]} className="csmju-slide-in relative hidden w-100 shrink-0 bg-surface shadow-csmju-sm md:flex md:flex-col">
+            <PanelContent panel={panel} onNavigate={setPanel} onBackToTools={openTools} onClose={() => setPanel(null)} />
             {/* ปุ่มพับแผงตรงขอบแบบ Canva */}
             <button
               type="button"
               onClick={() => setPanel(null)}
-              aria-label="พับแผงเครื่องมือ"
-              title="พับแผงเครื่องมือ"
-              className="absolute top-1/2 -right-4 z-10 flex h-24 w-4 -translate-y-1/2 items-center justify-center rounded-r-xl border border-l-0 border-line bg-surface text-muted hover:text-ink"
+              aria-label="พับแผง"
+              title="พับแผง"
+              className="absolute top-1/2 -right-4 z-10 flex h-20 w-4 -translate-y-1/2 items-center justify-center rounded-r-xl border border-l-0 border-line bg-surface text-ink shadow-csmju-sm hover:bg-surface-muted"
             >
               <ChevronLeft aria-hidden className="size-4" />
             </button>
           </aside>
         )}
 
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="relative flex min-w-0 flex-1 flex-col">
           <PropertiesBar />
           <div className="relative flex min-h-0 flex-1 flex-col">
             <Stage />
             <SelectionToolbar />
+            {toolsOpen && <ToolsPalette onClose={closeTools} onSignature={() => setPanel('signature')} />}
           </div>
-          <ZoomBar />
+          <ZoomBar panel={panel} onPanel={setPanel} />
         </div>
       </div>
 
       {/* มือถือ: แผงเลื่อนขึ้นจากล่าง + แถบแท็บล่าง */}
-      <MobileSheet panel={panel} onPanel={setPanel} />
+      <MobileSheet panel={panel} onPanel={setPanel} onRail={onRail} railActive={railActive} onBackToTools={openTools} />
 
       <ExportDialog open={dialog === 'export'} onClose={() => setDialog(null)} />
       {dialog === 'publish' && <PublishTemplateDialog open onClose={() => setDialog(null)} />}
       {dialog === 'share' && <EditorShareDialog onClose={() => setDialog(null)} />}
     </div>
+  );
+}
+
+/// ปุ่มบนแถบซ้าย — ไอคอนในกล่องขาวมีเงาเมื่อเลือก (แบบ Canva)
+function RailButton({
+  label,
+  icon: Icon,
+  tone,
+  active,
+  onClick,
+}: {
+  label: string;
+  icon: React.ComponentType<{ className?: string; 'aria-hidden'?: boolean }>;
+  tone: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className="group flex w-20 flex-col items-center gap-1 py-1.5 text-csmju-caption text-ink"
+    >
+      <span
+        className={cx(
+          'flex size-11 items-center justify-center rounded-xl transition-all',
+          active ? cx('bg-surface shadow-csmju-md', tone) : 'text-ink group-hover:bg-surface/70',
+        )}
+      >
+        <Icon aria-hidden className="csmju-wiggle size-6" />
+      </span>
+      <span className={cx('leading-tight', active && 'font-bold')}>{label}</span>
+    </button>
   );
 }
 
@@ -348,7 +394,7 @@ function SaveIndicator({ status, onRetry }: { status: SaveStatus; onRetry: () =>
   );
 }
 
-function ZoomBar() {
+function ZoomBar({ panel, onPanel }: { panel?: PanelKey | null; onPanel?: (panel: PanelKey | null) => void } = {}) {
   const zoom = useEditor((s) => s.zoom);
   const pageIndex = useEditor((s) => s.pageIndex);
   const pageCount = useEditor((s) => s.doc.pages.length);
@@ -418,6 +464,26 @@ function ZoomBar() {
         <IconButton label="ซูมเข้า" onClick={() => zoomBy(1.2)} className="sm:hidden">
           <ZoomIn aria-hidden className="size-5" />
         </IconButton>
+        {onPanel && (
+          <>
+            <button
+              type="button"
+              aria-pressed={panel === 'layers'}
+              onClick={() => onPanel(panel === 'layers' ? null : 'layers')}
+              className={cx('hidden min-h-11 items-center gap-1 rounded-xl px-3 text-csmju-caption font-medium text-ink sm:inline-flex', panel === 'layers' ? 'bg-primary-soft' : 'hover:bg-surface-muted')}
+            >
+              <Layers aria-hidden className="size-5" /> เลเยอร์
+            </button>
+            <button
+              type="button"
+              aria-pressed={panel === 'pages'}
+              onClick={() => onPanel(panel === 'pages' ? null : 'pages')}
+              className={cx('inline-flex min-h-11 items-center gap-1 rounded-xl px-3 text-csmju-caption font-medium text-ink', panel === 'pages' ? 'bg-primary-soft' : 'hover:bg-surface-muted')}
+            >
+              <Files aria-hidden className="size-5" /> หน้า
+            </button>
+          </>
+        )}
         <IconButton label="พอดีจอ" onClick={fit}>
           <Maximize aria-hidden className="size-5" />
         </IconButton>
@@ -426,38 +492,52 @@ function ZoomBar() {
   );
 }
 
-function MobileSheet({ panel, onPanel }: { panel: PanelKey | null; onPanel: (panel: PanelKey | null) => void }) {
+function MobileSheet({
+  panel,
+  onPanel,
+  onRail,
+  railActive,
+  onBackToTools,
+}: {
+  panel: PanelKey | null;
+  onPanel: (panel: PanelKey | null) => void;
+  onRail: (key: RailKey) => void;
+  railActive: (key: RailKey) => boolean;
+  onBackToTools: () => void;
+}) {
   return (
     <div className="md:hidden">
       {panel && (
         <section
-          aria-label={PANELS.find((p) => p.key === panel)?.label}
-          className="fixed inset-x-0 bottom-16 z-30 max-h-sheet overflow-y-auto rounded-t-3xl border-t border-line bg-surface p-4 shadow-csmju-lg"
+          key={panel}
+          aria-label={PANEL_LABELS[panel]}
+          className="csmju-slide-in fixed inset-x-0 bottom-16 z-30 flex h-sheet max-h-sheet flex-col rounded-t-3xl border-t border-line bg-surface shadow-csmju-lg"
         >
-          <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-line-strong" aria-hidden />
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-csmju-h3 font-semibold text-ink">{PANELS.find((p) => p.key === panel)?.label}</h2>
+          <div className="flex shrink-0 items-center justify-between px-4 pt-2">
+            <span className="mx-auto h-1.5 w-12 rounded-full bg-line-strong" aria-hidden />
+          </div>
+          <div className="flex shrink-0 justify-end px-2">
             <button type="button" onClick={() => onPanel(null)} className="min-h-11 px-3 text-csmju-caption font-medium text-primary">
               พับเก็บ
             </button>
           </div>
-          <PanelContent panel={panel} />
+          <PanelContent panel={panel} onNavigate={onPanel} onBackToTools={onBackToTools} onClose={() => onPanel(null)} />
         </section>
       )}
-      <nav aria-label="เครื่องมือ (มือถือ)" className="fixed inset-x-0 bottom-0 z-30 flex border-t border-line bg-surface">
-        {PANELS.map((p) => (
+      <nav aria-label="แผงเครื่องมือ (มือถือ)" className="fixed inset-x-0 bottom-0 z-30 flex border-t border-line bg-surface">
+        {RAIL.map((item) => (
           <button
-            key={p.key}
+            key={item.key}
             type="button"
-            aria-pressed={panel === p.key}
-            onClick={() => onPanel(panel === p.key ? null : p.key)}
+            aria-pressed={railActive(item.key)}
+            onClick={() => onRail(item.key)}
             className={cx(
               'flex min-h-16 flex-1 flex-col items-center justify-center text-csmju-caption',
-              panel === p.key ? 'font-semibold text-primary' : 'text-body',
+              railActive(item.key) ? cx('font-semibold', item.tone) : 'text-body',
             )}
           >
-            <p.icon aria-hidden className="size-5" />
-            {p.label}
+            <item.icon aria-hidden className="size-5" />
+            <span className="truncate">{item.label}</span>
           </button>
         ))}
       </nav>

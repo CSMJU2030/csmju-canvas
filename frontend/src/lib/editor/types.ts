@@ -38,7 +38,25 @@ export interface TextElement extends BaseElement {
   color: string;
 }
 
-export type ShapeKind = 'rect' | 'ellipse' | 'triangle' | 'star' | 'line' | 'arrow';
+export type ShapeKind =
+  | 'rect'
+  | 'ellipse'
+  | 'triangle'
+  | 'triangle-down'
+  | 'diamond'
+  | 'pentagon'
+  | 'hexagon'
+  | 'octagon'
+  | 'star'
+  | 'line'
+  | 'arrow'
+  | 'curve'
+  | 'elbow';
+
+/// รูปทรงที่เป็นเส้น (ไม่มีสีพื้น ลากจากขอบซ้ายไปขอบขวา)
+export function isLineShape(shape: ShapeKind): boolean {
+  return shape === 'line' || shape === 'arrow' || shape === 'curve' || shape === 'elbow';
+}
 
 export interface ShapeElement extends BaseElement {
   type: 'shape';
@@ -66,8 +84,22 @@ export interface SvgElement extends BaseElement {
   color: string;
 }
 
-export type ElementType = 'text' | 'shape' | 'image' | 'svg';
-export type CanvasElement = TextElement | ShapeElement | ImageElement | SvgElement;
+export type BrushKind = 'pen' | 'marker' | 'highlighter';
+
+/// เส้นวาดมือ (เครื่องมือ "วาด" และลายเซ็นแบบเขียน)
+///
+/// `strokes` คือเส้นแต่ละเส้นเป็นพิกัดเรียงกัน [x0, y0, x1, y1, …] ในหน่วยสัดส่วน 0–1 ของกล่อง
+/// จึงย่อขยายกล่องแล้วเส้นยืดตาม · `strokeWidth` เป็นพิกเซลของหน้า
+export interface PathElement extends BaseElement {
+  type: 'path';
+  strokes: number[][];
+  color: string;
+  strokeWidth: number;
+  brush: BrushKind;
+}
+
+export type ElementType = 'text' | 'shape' | 'image' | 'svg' | 'path';
+export type CanvasElement = TextElement | ShapeElement | ImageElement | SvgElement | PathElement;
 
 export interface Page {
   id: string;
@@ -118,7 +150,7 @@ export function normalizeDocument(input: unknown): DesignDocument {
 function isKnownElement(value: unknown): value is CanvasElement {
   const type = (value as { type?: unknown } | null)?.type;
 
-  return type === 'text' || type === 'shape' || type === 'image' || type === 'svg';
+  return type === 'text' || type === 'shape' || type === 'image' || type === 'svg' || type === 'path';
 }
 
 function withDefaults(element: CanvasElement): CanvasElement {

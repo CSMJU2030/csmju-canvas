@@ -419,6 +419,10 @@
 @utility max-h-sheet {
   max-height: 55dvh;
 }
+/* แผงเลื่อนขึ้นจากล่างของหน้าแก้ไขบนมือถือ — สูงคงที่ให้ส่วนหัวของแผงอยู่กับที่ */
+@utility h-sheet {
+  height: 55dvh;
+}
 @utility max-h-dialog {
   max-height: 85dvh;
 }

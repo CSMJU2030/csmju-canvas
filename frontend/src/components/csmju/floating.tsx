@@ -8,7 +8,7 @@ import { createPortal } from 'react-dom';
 /// เหตุผล: แผ่นเนื้อหาหลักตัดขอบ (overflow-hidden) เมนูของการ์ดที่ชิดขอบจึงโดนตัดหรือโดนแถบรองทับ
 /// (ภาพบรีฟ "เหมือนมันทับซ้อน") · ตำแหน่งเขียนลง style ของ DOM ตรง ๆ ไม่ผ่าน state
 /// เพื่อไม่ต้อง render ใหม่ทุกครั้งที่เลื่อนหน้า
-export function useAnchoredMenu(align: 'start' | 'end' = 'end') {
+export function useAnchoredMenu(align: 'start' | 'end' = 'end', side: 'bottom' | 'right' = 'bottom') {
   const [open, setOpen] = useState(false);
   const anchorRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -26,6 +26,17 @@ export function useAnchoredMenu(align: 'start' | 'end' = 'end') {
       const width = menu.offsetWidth;
       const height = menu.offsetHeight;
       const gap = 4;
+
+      // เปิดออกทางขวาของปุ่ม (แผงเครื่องมือแนวตั้งในหน้าแก้ไข) · จัดกึ่งกลางแนวตั้งแล้วดันให้อยู่ในจอ
+      if (side === 'right') {
+        const top = rect.top + rect.height / 2 - height / 2;
+
+        menu.style.top = `${Math.max(8, Math.min(top, window.innerHeight - height - 8))}px`;
+        menu.style.left = `${Math.min(rect.right + gap * 3, window.innerWidth - width - 8)}px`;
+        menu.style.visibility = 'visible';
+        return;
+      }
+
       const fitsBelow = window.innerHeight - rect.bottom >= height + gap + 8;
       const top = fitsBelow || rect.top < height + gap + 8 ? rect.bottom + gap : rect.top - height - gap;
       const preferred = align === 'end' ? rect.right - width : rect.left;
@@ -44,7 +55,7 @@ export function useAnchoredMenu(align: 'start' | 'end' = 'end') {
       window.removeEventListener('resize', place);
       window.removeEventListener('scroll', place, true);
     };
-  }, [open, align]);
+  }, [open, align, side]);
 
   useEffect(() => {
     if (!open) return;
@@ -80,19 +91,22 @@ export function FloatingPanel({
   className,
   children,
   label,
+  role = 'menu',
 }: {
   open: boolean;
   menuRef: React.RefObject<HTMLDivElement | null>;
   className?: string;
   children: ReactNode;
   label: string;
+  /// 'dialog' สำหรับกล่องที่มีตัวควบคุมอื่นนอกจากรายการเมนู (ตัวเลือกสี แถบน้ำหนัก)
+  role?: 'menu' | 'dialog';
 }) {
   if (!open || typeof document === 'undefined') return null;
 
   return createPortal(
     <div
       ref={menuRef}
-      role="menu"
+      role={role}
       aria-label={label}
       style={{ position: 'fixed', top: 0, left: 0, visibility: 'hidden' }}
       className={`csmju-pop z-50 ${className ?? ''}`}

@@ -10,7 +10,7 @@ import { IconButton, cx } from '@/components/csmju/primitives';
 import { SWATCHES, fromInputColor, toInputColor } from '@/lib/editor/color';
 import { FONT_FAMILIES } from '@/lib/editor/fonts';
 import { currentPage, useEditor } from '@/lib/editor/store';
-import type { CanvasElement, TextElement } from '@/lib/editor/types';
+import { isLineShape, type CanvasElement, type TextElement } from '@/lib/editor/types';
 
 /// แถบคุณสมบัติด้านบนผืนผ้าใบ — เปลี่ยนตามชนิดของสิ่งที่เลือก · ไม่ได้เลือกอะไร = ตั้งค่าหน้า
 ///
@@ -148,7 +148,7 @@ function TextProperties({ el }: { el: TextElement }) {
 
 function ShapeProperties({ el }: { el: Extract<CanvasElement, { type: 'shape' }> }) {
   const ids = [el.id];
-  const isLine = el.shape === 'line' || el.shape === 'arrow';
+  const isLine = isLineShape(el.shape);
 
   return (
     <>

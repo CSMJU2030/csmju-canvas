@@ -19,10 +19,11 @@ import {
   type Point,
   type Rect,
 } from '@/lib/editor/geometry';
-import { drawPage, setImageReadyListener } from '@/lib/editor/render';
+import { createPath } from '@/lib/editor/factory';
+import { brushStyle, drawPage, setImageReadyListener, strokeFreehand } from '@/lib/editor/render';
 import { snapRect } from '@/lib/editor/snapping';
-import { currentPage, selectionBox, useEditor } from '@/lib/editor/store';
-import type { CanvasElement, TextElement } from '@/lib/editor/types';
+import { brushWidth, currentPage, selectionBox, useEditor, type DrawBrush } from '@/lib/editor/store';
+import type { CanvasElement, PathElement, TextElement } from '@/lib/editor/types';
 
 /// ผืนผ้าใบหลักของ editor — วาดด้วย Canvas 2D ทุกเฟรมที่มีการเปลี่ยน (requestAnimationFrame)
 ///
@@ -41,7 +42,9 @@ type Gesture =
   | { kind: 'resize'; handle: Handle; id: string; start: CanvasElement; keepAspect: boolean }
   | { kind: 'rotate'; id: string; startAngle: number; startRotation: number }
   | { kind: 'marquee'; start: Point; current: Point; additive: boolean; base: string[] }
-  | { kind: 'pinch'; distance: number; zoom: number; mid: Point; pan: Point };
+  | { kind: 'pinch'; distance: number; zoom: number; mid: Point; pan: Point }
+  | { kind: 'draw'; points: number[] }
+  | { kind: 'erase'; last: Point };
 
 function cssVar(name: string, fallback: string): string {
   if (typeof window === 'undefined') return fallback;
@@ -61,6 +64,8 @@ export function Stage() {
   const [cursor, setCursor] = useState('default');
   const fitted = useRef<string | null>(null);
   const sizeRef = useRef(size);
+  /// ตำแหน่งเมาส์ล่าสุด (พิกัดหน้า) — ใช้วาดวงยางลบ
+  const hover = useRef<Point | null>(null);
 
   const editingTextId = useEditor((s) => s.editingTextId);
 
@@ -116,6 +121,19 @@ export function Stage() {
     drawPage(ctx, page, { width, height }, {
       skipIds: state.editingTextId ? new Set([state.editingTextId]) : undefined,
     });
+
+    // เส้นที่กำลังวาด (ยังไม่เป็น element จนกว่าจะปล่อย)
+    const g = gesture.current;
+
+    if (g.kind === 'draw' && state.tool.brush !== 'eraser') {
+      const brush = state.tool.brush;
+
+      ctx.save();
+      brushStyle(ctx, brush, state.tool.colors[brush], brushWidth(state.tool.weights[brush], state));
+      strokeFreehand(ctx, g.points);
+      ctx.restore();
+    }
+
     ctx.restore();
 
     // ส่วนควบคุม (พิกัดจอ)
@@ -157,6 +175,18 @@ export function Stage() {
         ctx.lineTo(b.x, Math.round(b.y) + 0.5);
       }
 
+      ctx.stroke();
+    }
+
+    if (state.tool.mode === 'draw' && state.tool.brush === 'eraser' && hover.current) {
+      const c = toScreen(hover.current);
+
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, (brushWidth(state.tool.weights.eraser, state) / 2) * zoom, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgb(100 116 139)';
+      ctx.lineWidth = 1;
       ctx.stroke();
     }
 
@@ -271,6 +301,18 @@ export function Stage() {
     return null;
   }, []);
 
+  /// ยางลบ: ลบเส้นวาด (path) ทุกเส้นที่อยู่ใกล้ส่วนของเส้นจาก a ไป b
+  const eraseAlong = (a: Point, b: Point) => {
+    const state = useEditor.getState();
+    const radius = brushWidth(state.tool.weights.eraser, state) / 2;
+    const hits = currentPage(state)
+      .elements.filter((el): el is PathElement => el.type === 'path' && !el.locked && !el.hidden)
+      .filter((el) => pathNear(el, a, b, radius))
+      .map((el) => el.id);
+
+    if (hits.length > 0) state.removeElements(hits);
+  };
+
   const onPointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current!;
 
@@ -281,9 +323,11 @@ export function Stage() {
 
     if (state.editingTextId) state.setEditingText(null);
 
-    // สองนิ้ว = ซูม/เลื่อนมุมมอง (ยกเลิกการลากชิ้นงานที่เริ่มไปแล้ว)
+    // สองนิ้ว = ซูม/เลื่อนมุมมอง (ยกเลิกการลากชิ้นงานหรือเส้นที่เริ่มไปแล้ว)
     if (pointers.current.size === 2) {
-      if (gesture.current.kind === 'move' || gesture.current.kind === 'resize' || gesture.current.kind === 'rotate') {
+      const kind = gesture.current.kind;
+
+      if (kind === 'move' || kind === 'resize' || kind === 'rotate' || kind === 'erase') {
         state.endGesture();
       }
 
@@ -309,6 +353,21 @@ export function Stage() {
     const rect = canvas.getBoundingClientRect();
     const screen = { x: event.clientX - rect.left, y: event.clientY - rect.top };
     const p = toPage(event.clientX, event.clientY);
+
+    // โหมดวาด: ปากกา/มาร์กเกอร์/ไฮไลท์เก็บจุดของเส้น · ยางลบลบเส้นวาดที่ลากผ่าน (รวมเป็น undo ขั้นเดียว)
+    if (state.tool.mode === 'draw') {
+      if (state.tool.brush === 'eraser') {
+        state.beginGesture();
+        gesture.current = { kind: 'erase', last: p };
+        eraseAlong(p, p);
+      } else {
+        gesture.current = { kind: 'draw', points: [p.x, p.y] };
+      }
+
+      requestDraw();
+      return;
+    }
+
     const page = currentPage(state);
     const selected = page.elements.filter((el) => state.selection.includes(el.id));
 
@@ -388,8 +447,35 @@ export function Stage() {
     const g = gesture.current;
     const state = useEditor.getState();
 
+    if (state.tool.mode === 'draw') {
+      hover.current = toPage(event.clientX, event.clientY);
+      if (state.tool.brush === 'eraser') requestDraw();
+    }
+
     if (g.kind === 'none') {
       updateHoverCursor(event);
+      return;
+    }
+
+    if (g.kind === 'draw') {
+      const p = toPage(event.clientX, event.clientY);
+      const lastX = g.points[g.points.length - 2];
+      const lastY = g.points[g.points.length - 1];
+
+      // เก็บจุดเมื่อขยับเกินครึ่งพิกเซลจอ — เส้นเรียบและ JSON ไม่บวม
+      if (Math.hypot(p.x - lastX, p.y - lastY) * state.zoom >= 0.5) {
+        g.points.push(Math.round(p.x * 100) / 100, Math.round(p.y * 100) / 100);
+        requestDraw();
+      }
+
+      return;
+    }
+
+    if (g.kind === 'erase') {
+      const p = toPage(event.clientX, event.clientY);
+
+      eraseAlong(g.last, p);
+      g.last = p;
       return;
     }
 
@@ -508,8 +594,20 @@ export function Stage() {
       return;
     }
 
-    if (g.kind === 'move' || g.kind === 'resize' || g.kind === 'rotate') state.endGesture();
+    if (g.kind === 'move' || g.kind === 'resize' || g.kind === 'rotate' || g.kind === 'erase') state.endGesture();
     if (g.kind === 'pan') setCursor(spaceDown.current ? 'grab' : 'default');
+
+    if (g.kind === 'draw' && state.tool.brush !== 'eraser') {
+      const brush = state.tool.brush;
+      const path = createPath([g.points], {
+        color: state.tool.colors[brush],
+        strokeWidth: brushWidth(state.tool.weights[brush], state),
+        brush,
+      });
+
+      // ไม่เลือกเส้นที่เพิ่งวาด — วาดต่อได้ทันทีโดยไม่มีกรอบเลือกบัง
+      if (path) state.addElements([path], { select: false });
+    }
 
     marquee.current = null;
     gesture.current = { kind: 'none' };
@@ -520,6 +618,9 @@ export function Stage() {
     if (spaceDown.current) return setCursor('grab');
 
     const state = useEditor.getState();
+
+    if (state.tool.mode === 'draw') return setCursor(drawCursor(state.tool.brush));
+
     const page = currentPage(state);
     const selected = page.elements.filter((el) => state.selection.includes(el.id));
     const rect = canvasRef.current!.getBoundingClientRect();
@@ -538,6 +639,8 @@ export function Stage() {
   };
 
   const onDoubleClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (useEditor.getState().tool.mode === 'draw') return;
+
     const hit = topElementAt(toPage(event.clientX, event.clientY));
 
     if (hit?.type === 'text' && !hit.locked && useEditor.getState().access !== 'VIEW') {
@@ -612,6 +715,10 @@ export function Stage() {
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
+        onPointerLeave={() => {
+          hover.current = null;
+          if (useEditor.getState().tool.brush === 'eraser') requestDraw();
+        }}
         onDoubleClick={onDoubleClick}
         className="block outline-none"
       />
@@ -795,6 +902,64 @@ function drawChecker(ctx: CanvasRenderingContext2D, width: number, height: numbe
   }
 
   ctx.restore();
+}
+
+/// เคอร์เซอร์รูปปากกาตามหัวที่เลือก (ภาพบรีฟ "ตอนวาดมี icon ปากกา") · ยางลบใช้วงกลมที่วาดบนผืนผ้าใบแทน
+function drawCursor(brush: DrawBrush): string {
+  if (brush === 'eraser') return 'crosshair';
+
+  const tip = brush === 'highlighter' ? 'rgb(250 204 21)' : brush === 'marker' ? 'rgb(34 34 34)' : 'rgb(1 24 78)';
+  const svg =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">' +
+    `<path d="M21.2 6.8a2.8 2.8 0 0 0-4-4L3.8 16.2a2 2 0 0 0-.5.8l-1.3 4.4a.5.5 0 0 0 .6.6l4.4-1.3a2 2 0 0 0 .8-.5z" fill="rgb(255 255 255)" stroke="rgb(15 23 42)" stroke-width="1.5" stroke-linejoin="round"/>` +
+    `<path d="M3.3 17l-1.3 4.4a.5.5 0 0 0 .6.6l4.4-1.3z" fill="${tip}"/>` +
+    '</svg>';
+
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 2 22, crosshair`;
+}
+
+/// เส้นวาดอยู่ใกล้ส่วนของเส้น a→b ไม่เกิน radius หรือไม่ (คิดในพิกัดของกล่องก่อนหมุน)
+function pathNear(el: PathElement, a: Point, b: Point, radius: number): boolean {
+  const c = center(el);
+  const la = el.rotation ? rotatePoint(a, c, -el.rotation) : a;
+  const lb = el.rotation ? rotatePoint(b, c, -el.rotation) : b;
+  const reach = radius + el.strokeWidth / 2;
+
+  if (
+    Math.max(la.x, lb.x) < el.x - reach ||
+    Math.min(la.x, lb.x) > el.x + el.width + reach ||
+    Math.max(la.y, lb.y) < el.y - reach ||
+    Math.min(la.y, lb.y) > el.y + el.height + reach
+  ) {
+    return false;
+  }
+
+  for (const stroke of el.strokes) {
+    for (let i = 0; i < stroke.length; i += 2) {
+      const px = el.x + stroke[i] * el.width;
+      const py = el.y + stroke[i + 1] * el.height;
+
+      if (distanceToSegment({ x: px, y: py }, la, lb) <= reach) return true;
+
+      if (i + 3 < stroke.length) {
+        const qx = el.x + stroke[i + 2] * el.width;
+        const qy = el.y + stroke[i + 3] * el.height;
+
+        if (distanceToSegment(la, { x: px, y: py }, { x: qx, y: qy }) <= reach) return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+function distanceToSegment(p: Point, a: Point, b: Point): number {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const lengthSq = dx * dx + dy * dy;
+  const t = lengthSq === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lengthSq));
+
+  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
 }
 
 function resizeCursor(handle: Handle, rotation: number): string {
