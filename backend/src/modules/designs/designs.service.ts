@@ -12,6 +12,9 @@ import type {
 
 /// งานในถังขยะถูกลบถาวรเมื่อครบกำหนดนี้ (ล้างตอนผู้ใช้เปิดดูถังขยะ ไม่ต้องมี cron)
 export const TRASH_RETENTION_DAYS = 30;
+/// เก็บเวอร์ชันอัตโนมัติไม่บ่อยกว่านี้ และเก็บไว้สูงสุดงานละกี่เวอร์ชัน
+export const VERSION_INTERVAL_MS = 10 * 60_000;
+export const MAX_VERSIONS = 50;
 
 const EDITED_WITHIN_MS = {
   day: 86_400_000,
@@ -31,6 +34,7 @@ const SUMMARY_SELECT = {
   sourceTemplateId: true,
   tags: true,
   linkAccess: true,
+  starredAt: true,
   coreUserId: true,
   trashedAt: true,
   createdAt: true,
@@ -59,7 +63,10 @@ export class DesignsService {
     const mine: Prisma.DesignWhereInput = { coreUserId, trashedAt: query.trashed ? { not: null } : null };
     const scope = query.trashed ? 'mine' : (query.scope ?? 'mine');
     const where: Prisma.DesignWhereInput = {
-      AND: [scope === 'mine' ? mine : scope === 'shared' ? shared : { OR: [mine, shared] }],
+      AND: [
+        scope === 'mine' ? mine : scope === 'shared' ? shared : { OR: [mine, shared] },
+        ...(query.starred ? [{ coreUserId, starredAt: { not: null } }] : []),
+      ],
       ...(query.q ? { title: { contains: query.q, mode: 'insensitive' } } : {}),
       ...(query.designType
         ? { designType: query.designType }
@@ -100,12 +107,12 @@ export class DesignsService {
 
     if (!row || accessOf(row, coreUserId) === null) throw new NotFoundException('ไม่พบงานนี้ อาจถูกลบไปแล้ว');
 
-    // จดว่าเคยเปิดงานที่แชร์มา → ขึ้นใน "แชร์กับคุณ" ของแผงโปรเจกต์
+    // จดว่าเคยเปิดงานที่แชร์มา → ขึ้นใน "แชร์กับคุณ" ของแผงโปรเจกต์ และนับในสถิติของเจ้าของ
     if (row.coreUserId !== coreUserId) {
       await this.prisma.designVisit.upsert({
         where: { designId_coreUserId: { designId: row.id, coreUserId } },
         create: { designId: row.id, coreUserId },
-        update: { visitedAt: new Date() },
+        update: { visitedAt: new Date(), viewCount: { increment: 1 } },
       });
     }
 
@@ -199,11 +206,11 @@ export class DesignsService {
 
     if (!existing || access === null) throw new NotFoundException('ไม่พบงานนี้ อาจถูกลบไปแล้ว');
 
-    if (access === 'VIEW') throw new ForbiddenException('ลิงก์นี้ให้สิทธิ์ดูอย่างเดียว');
+    if (access === 'VIEW' || access === 'COMMENT') throw new ForbiddenException('ลิงก์นี้ไม่ได้ให้สิทธิ์แก้ไขงาน');
 
-    // คนที่ได้ลิงก์แบบแก้ไขได้ แก้ได้เฉพาะเนื้องาน — ชื่อ โฟลเดอร์ ถังขยะ แท็ก และการแชร์เป็นของเจ้าของ
+    // คนที่ได้ลิงก์แบบแก้ไขได้ แก้ได้เฉพาะเนื้องาน — ชื่อ โฟลเดอร์ ถังขยะ แท็ก ดาว และการแชร์เป็นของเจ้าของ
     if (access === 'EDIT') {
-      const ownerOnly = ['title', 'folderId', 'trashed', 'tags', 'linkAccess'] as const;
+      const ownerOnly = ['title', 'folderId', 'trashed', 'tags', 'linkAccess', 'starred'] as const;
 
       if (ownerOnly.some((key) => dto[key] !== undefined)) {
         throw new ForbiddenException('เฉพาะเจ้าของงานเท่านั้นที่เปลี่ยนชื่อ ย้ายโฟลเดอร์ ลบ ตั้งแท็ก หรือเปลี่ยนการแชร์ได้');
@@ -212,6 +219,9 @@ export class DesignsService {
 
     if (dto.document) assertDocument(dto.document);
     if (dto.folderId) await this.assertFolder(coreUserId, dto.folderId);
+
+    // เก็บเวอร์ชันของเนื้องานก่อนเปลี่ยน (ไม่บ่อยกว่าทุก 10 นาที) — ประวัติเวอร์ชันในเมนูไฟล์
+    if (dto.document) await this.snapshotIfDue(existing, coreUserId);
 
     const row = await this.prisma.design.update({
       where: { id },
@@ -224,6 +234,7 @@ export class DesignsService {
         ...(dto.folderId !== undefined ? { folderId: dto.folderId } : {}),
         ...(dto.tags !== undefined ? { tags: [...new Set(dto.tags.map((tag) => tag.trim()).filter(Boolean))] } : {}),
         ...(dto.linkAccess !== undefined ? { linkAccess: dto.linkAccess } : {}),
+        ...(dto.starred !== undefined ? { starredAt: dto.starred ? (existing.starredAt ?? new Date()) : null } : {}),
         ...(dto.trashed !== undefined
           ? { trashedAt: dto.trashed ? (existing.trashedAt ?? new Date()) : null }
           : {}),
@@ -242,6 +253,67 @@ export class DesignsService {
     }
 
     return { ...toSummary(row, coreUserId), document: row.document as Record<string, unknown> };
+  }
+
+  /// ตรวจสิทธิ์แล้วคืนแถวงาน — ใช้กับเวอร์ชัน ความคิดเห็น และสถิติ
+  async accessible(coreUserId: string, id: string, need: 'read' | 'comment' | 'edit' | 'owner') {
+    const row = await this.prisma.design.findUnique({ where: { id } });
+    const access = row ? accessOf(row, coreUserId) : null;
+
+    if (!row || access === null) throw new NotFoundException('ไม่พบงานนี้ อาจถูกลบไปแล้ว');
+
+    const allowed =
+      need === 'read' ||
+      access === 'OWNER' ||
+      (need === 'edit' && access === 'EDIT') ||
+      (need === 'comment' && (access === 'EDIT' || access === 'COMMENT'));
+
+    if (!allowed) throw new ForbiddenException(need === 'owner' ? 'เฉพาะเจ้าของงานเท่านั้น' : 'ลิงก์นี้ไม่ได้ให้สิทธิ์ทำสิ่งนี้');
+
+    return { row, access };
+  }
+
+  private async snapshotIfDue(existing: { id: string; document: Prisma.JsonValue; width: number; height: number }, coreUserId: string) {
+    const last = await this.prisma.designVersion.findFirst({ where: { designId: existing.id }, orderBy: { createdAt: 'desc' }, select: { createdAt: true } });
+
+    if (last && Date.now() - last.createdAt.getTime() < VERSION_INTERVAL_MS) return;
+
+    await this.saveVersion(existing, coreUserId);
+  }
+
+  /// เก็บเวอร์ชันหนึ่งชุด แล้วตัดของเก่าให้เหลือไม่เกิน MAX_VERSIONS
+  async saveVersion(design: { id: string; document: Prisma.JsonValue; width: number; height: number }, coreUserId: string) {
+    const version = await this.prisma.designVersion.create({
+      data: { designId: design.id, coreUserId, document: design.document as Prisma.InputJsonValue, width: design.width, height: design.height },
+    });
+    const stale = await this.prisma.designVersion.findMany({
+      where: { designId: design.id },
+      orderBy: { createdAt: 'desc' },
+      skip: MAX_VERSIONS,
+      select: { id: true },
+    });
+
+    if (stale.length > 0) await this.prisma.designVersion.deleteMany({ where: { id: { in: stale.map((v) => v.id) } } });
+
+    return version;
+  }
+
+  async stats(coreUserId: string, id: string) {
+    await this.accessible(coreUserId, id, 'owner');
+
+    const [visits, commentCount, versionCount] = await this.prisma.$transaction([
+      this.prisma.designVisit.aggregate({ where: { designId: id }, _count: { _all: true }, _sum: { viewCount: true }, _max: { visitedAt: true } }),
+      this.prisma.designComment.count({ where: { designId: id } }),
+      this.prisma.designVersion.count({ where: { designId: id } }),
+    ]);
+
+    return {
+      uniqueViewers: visits._count._all,
+      totalViews: visits._sum.viewCount ?? 0,
+      lastViewedAt: visits._max.visitedAt?.toISOString() ?? null,
+      commentCount,
+      versionCount,
+    };
   }
 
   async remove(coreUserId: string, id: string) {
@@ -289,15 +361,15 @@ export class DesignsService {
   }
 }
 
-/// สิทธิ์ของผู้เรียกต่องาน: OWNER · EDIT/VIEW (ผ่านลิงก์) · null = ไม่มีสิทธิ์
+/// สิทธิ์ของผู้เรียกต่องาน: OWNER · EDIT/COMMENT/VIEW (ผ่านลิงก์) · null = ไม่มีสิทธิ์
 export function accessOf(
   row: { coreUserId: string; linkAccess: string; trashedAt: Date | null },
   coreUserId: string,
-): 'OWNER' | 'EDIT' | 'VIEW' | null {
+): 'OWNER' | 'EDIT' | 'COMMENT' | 'VIEW' | null {
   if (row.coreUserId === coreUserId) return 'OWNER';
   if (row.trashedAt || row.linkAccess === 'NONE') return null;
 
-  return row.linkAccess === 'EDIT' ? 'EDIT' : 'VIEW';
+  return row.linkAccess === 'EDIT' ? 'EDIT' : row.linkAccess === 'COMMENT' ? 'COMMENT' : 'VIEW';
 }
 
 export function toSummary(row: SummaryRow, coreUserId: string) {
@@ -313,6 +385,8 @@ export function toSummary(row: SummaryRow, coreUserId: string) {
     tags: row.tags,
     linkAccess: row.linkAccess,
     access: accessOf(row, coreUserId) ?? 'VIEW',
+    // ดาวเป็นของเจ้าของ — คนที่ได้ลิงก์ไม่เห็น
+    starred: row.coreUserId === coreUserId && row.starredAt !== null,
     trashedAt: row.trashedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),

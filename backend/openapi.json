@@ -308,6 +308,15 @@
             }
           },
           {
+            "name": "starred",
+            "required": false,
+            "in": "query",
+            "description": "true = เฉพาะงานที่ติดดาวไว้",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
             "name": "scope",
             "required": false,
             "in": "query",
@@ -542,6 +551,50 @@
         ]
       }
     },
+    "/api/v1/designs/{id}/stats": {
+      "get": {
+        "operationId": "DesignsController_stats",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/DesignStatsDto"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "สถิติการเปิดดูงานที่แชร์ (เจ้าของเท่านั้น)",
+        "tags": [
+          "designs"
+        ]
+      }
+    },
     "/api/v1/design-type-usages": {
       "get": {
         "operationId": "DesignTypeUsagesController_list",
@@ -605,6 +658,396 @@
         "summary": "ประเภทงานที่ฉันใช้บ่อย (นับจากงานจริง)",
         "tags": [
           "designs"
+        ]
+      }
+    },
+    "/api/v1/designs/{designId}/versions": {
+      "get": {
+        "operationId": "DesignVersionsController_list",
+        "parameters": [
+          {
+            "name": "designId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "example": 2,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "example": 50,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "สำเร็จ พร้อมข้อมูลแบ่งหน้า",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/DesignVersionSummaryDto"
+                      }
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PaginationMeta"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "เวอร์ชันที่เก็บไว้ของงาน (ใหม่สุดก่อน)",
+        "tags": [
+          "designs"
+        ]
+      },
+      "post": {
+        "operationId": "DesignVersionsController_create",
+        "parameters": [
+          {
+            "name": "designId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/DesignVersionSummaryDto"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "เก็บเวอร์ชันของเนื้องานปัจจุบันทันที (เมนูไฟล์ → บันทึก · ก่อนกู้คืนเวอร์ชันเก่า)",
+        "tags": [
+          "designs"
+        ]
+      }
+    },
+    "/api/v1/designs/{designId}/versions/{versionId}": {
+      "get": {
+        "operationId": "DesignVersionsController_get",
+        "parameters": [
+          {
+            "name": "designId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "versionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/DesignVersionDto"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "เวอร์ชันหนึ่งพร้อม JSON state (ดูตัวอย่าง ทำสำเนา หรือกู้คืน)",
+        "tags": [
+          "designs"
+        ]
+      }
+    },
+    "/api/v1/designs/{designId}/comments": {
+      "get": {
+        "operationId": "DesignCommentsController_list",
+        "parameters": [
+          {
+            "name": "designId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "example": 2,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "example": 50,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "สำเร็จ พร้อมข้อมูลแบ่งหน้า",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/CommentDto"
+                      }
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PaginationMeta"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "ความคิดเห็นทั้งหมดของงาน (เก่าสุดก่อน)",
+        "tags": [
+          "comments"
+        ]
+      },
+      "post": {
+        "operationId": "DesignCommentsController_create",
+        "parameters": [
+          {
+            "name": "designId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCommentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/CommentDto"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "เพิ่มความคิดเห็นหรือตอบกลับ",
+        "tags": [
+          "comments"
+        ]
+      }
+    },
+    "/api/v1/design-comments/{id}": {
+      "patch": {
+        "operationId": "CommentsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCommentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/CommentDto"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "แก้ข้อความ · ทำเครื่องหมายว่าแก้ไขแล้ว · กดอีโมจิ",
+        "tags": [
+          "comments"
+        ]
+      },
+      "delete": {
+        "operationId": "CommentsController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/DeletedDto"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "ลบความคิดเห็น (ผู้เขียนหรือเจ้าของงาน) — การตอบกลับถูกลบตาม",
+        "tags": [
+          "comments"
         ]
       }
     },
@@ -2193,6 +2636,7 @@
             "enum": [
               "NONE",
               "VIEW",
+              "COMMENT",
               "EDIT"
             ]
           },
@@ -2201,9 +2645,14 @@
             "enum": [
               "OWNER",
               "EDIT",
+              "COMMENT",
               "VIEW"
             ],
             "description": "สิทธิ์ของผู้เรียกต่องานนี้"
+          },
+          "starred": {
+            "type": "boolean",
+            "description": "เจ้าของติดดาวไว้"
           },
           "createdAt": {
             "type": "string"
@@ -2221,6 +2670,7 @@
           "tags",
           "linkAccess",
           "access",
+          "starred",
           "createdAt",
           "updatedAt"
         ]
@@ -2274,6 +2724,7 @@
             "enum": [
               "NONE",
               "VIEW",
+              "COMMENT",
               "EDIT"
             ]
           },
@@ -2282,9 +2733,14 @@
             "enum": [
               "OWNER",
               "EDIT",
+              "COMMENT",
               "VIEW"
             ],
             "description": "สิทธิ์ของผู้เรียกต่องานนี้"
+          },
+          "starred": {
+            "type": "boolean",
+            "description": "เจ้าของติดดาวไว้"
           },
           "createdAt": {
             "type": "string"
@@ -2307,6 +2763,7 @@
           "tags",
           "linkAccess",
           "access",
+          "starred",
           "createdAt",
           "updatedAt",
           "document"
@@ -2355,6 +2812,35 @@
           "title"
         ]
       },
+      "DesignStatsDto": {
+        "type": "object",
+        "properties": {
+          "uniqueViewers": {
+            "type": "number",
+            "description": "จำนวนคนที่เปิดงานนี้ผ่านลิงก์ (ไม่นับเจ้าของ)"
+          },
+          "totalViews": {
+            "type": "number",
+            "description": "จำนวนครั้งที่เปิดทั้งหมด (ไม่นับเจ้าของ)"
+          },
+          "lastViewedAt": {
+            "type": "object",
+            "nullable": true
+          },
+          "commentCount": {
+            "type": "number"
+          },
+          "versionCount": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "uniqueViewers",
+          "totalViews",
+          "commentCount",
+          "versionCount"
+        ]
+      },
       "UpdateDesignDto": {
         "type": "object",
         "properties": {
@@ -2401,9 +2887,14 @@
             "enum": [
               "NONE",
               "VIEW",
+              "COMMENT",
               "EDIT"
             ],
-            "description": "NONE = เจ้าของเท่านั้น · VIEW/EDIT = ทุกคนที่มีลิงก์ (ต้องเข้าสู่ระบบ CSMJU2030)"
+            "description": "NONE = เจ้าของเท่านั้น · VIEW/COMMENT/EDIT = ทุกคนที่มีลิงก์ดูได้/แสดงความคิดเห็นได้/แก้ไขได้ (ต้องเข้าสู่ระบบ CSMJU2030)"
+          },
+          "starred": {
+            "type": "boolean",
+            "description": "true = ติดดาว · false = เลิกติดดาว (เจ้าของเท่านั้น)"
           }
         }
       },
@@ -2444,6 +2935,248 @@
           "count",
           "lastUsedAt"
         ]
+      },
+      "DesignVersionSummaryDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "designId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "author": {
+            "type": "string",
+            "enum": [
+              "me",
+              "owner",
+              "collaborator"
+            ],
+            "description": "ใครเป็นคนแก้จนเกิดเวอร์ชันนี้ (เทียบกับผู้เรียก)"
+          },
+          "width": {
+            "type": "number"
+          },
+          "height": {
+            "type": "number"
+          },
+          "pageCount": {
+            "type": "number",
+            "description": "จำนวนหน้าในเวอร์ชันนี้"
+          },
+          "createdAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "designId",
+          "author",
+          "width",
+          "height",
+          "pageCount",
+          "createdAt"
+        ]
+      },
+      "DesignVersionDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "designId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "author": {
+            "type": "string",
+            "enum": [
+              "me",
+              "owner",
+              "collaborator"
+            ],
+            "description": "ใครเป็นคนแก้จนเกิดเวอร์ชันนี้ (เทียบกับผู้เรียก)"
+          },
+          "width": {
+            "type": "number"
+          },
+          "height": {
+            "type": "number"
+          },
+          "pageCount": {
+            "type": "number",
+            "description": "จำนวนหน้าในเวอร์ชันนี้"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "document": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "id",
+          "designId",
+          "author",
+          "width",
+          "height",
+          "pageCount",
+          "createdAt",
+          "document"
+        ]
+      },
+      "CommentReactionDto": {
+        "type": "object",
+        "properties": {
+          "emoji": {
+            "type": "string"
+          },
+          "count": {
+            "type": "number"
+          },
+          "mine": {
+            "type": "boolean",
+            "description": "ผู้เรียกกดอีโมจินี้แล้ว"
+          }
+        },
+        "required": [
+          "emoji",
+          "count",
+          "mine"
+        ]
+      },
+      "CommentDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "designId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "pageId": {
+            "type": "string"
+          },
+          "elementId": {
+            "type": "object",
+            "nullable": true
+          },
+          "parentId": {
+            "type": "object",
+            "format": "uuid",
+            "nullable": true
+          },
+          "body": {
+            "type": "string"
+          },
+          "author": {
+            "type": "string",
+            "enum": [
+              "me",
+              "owner",
+              "collaborator"
+            ]
+          },
+          "authorTag": {
+            "type": "string",
+            "description": "รหัสสั้นของผู้เขียน (ไม่ระบุตัวตน) ใช้แยกผู้ร่วมงานแต่ละคน",
+            "example": "A1B2"
+          },
+          "reactions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CommentReactionDto"
+            }
+          },
+          "resolvedAt": {
+            "type": "object",
+            "nullable": true
+          },
+          "canEdit": {
+            "type": "boolean"
+          },
+          "canDelete": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "designId",
+          "pageId",
+          "body",
+          "author",
+          "authorTag",
+          "reactions",
+          "canEdit",
+          "canDelete",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "CreateCommentDto": {
+        "type": "object",
+        "properties": {
+          "body": {
+            "type": "string",
+            "example": "ตัวอักษรหัวข้อใหญ่ไปนิด"
+          },
+          "pageId": {
+            "type": "string",
+            "example": "page-1a2b3c4d",
+            "description": "id ของหน้าใน JSON state"
+          },
+          "elementId": {
+            "type": "string",
+            "example": "el-1a2b3c4d",
+            "description": "id ของชิ้นงาน · ไม่ส่ง = ทั้งหน้า"
+          },
+          "parentId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ตอบกลับความคิดเห็นนี้"
+          }
+        },
+        "required": [
+          "body",
+          "pageId"
+        ]
+      },
+      "UpdateCommentDto": {
+        "type": "object",
+        "properties": {
+          "body": {
+            "type": "string",
+            "description": "แก้ข้อความ (ผู้เขียนเท่านั้น)"
+          },
+          "resolved": {
+            "type": "boolean",
+            "description": "true = ทำเครื่องหมายว่าแก้ไขแล้ว · false = เปิดใหม่"
+          },
+          "reaction": {
+            "type": "string",
+            "enum": [
+              "❤️",
+              "👍",
+              "👏",
+              "😂",
+              "😮",
+              "🤔"
+            ],
+            "description": "กดอีโมจิ (กดซ้ำ = ยกเลิก)"
+          }
+        }
       },
       "TemplateSummaryDto": {
         "type": "object",

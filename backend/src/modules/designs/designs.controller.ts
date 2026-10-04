@@ -21,6 +21,7 @@ import {
   DeletedDto,
   DesignDto,
   DesignSummaryDto,
+  DesignStatsDto,
   DesignTypeUsageDto,
   ListDesignsQuery,
   UpdateDesignDto,
@@ -53,6 +54,13 @@ export class DesignsController {
   @ApiEnvelope(DesignDto)
   get(@CurrentUser() user: CoreHubUser, @Param('id', UUID) id: string) {
     return this.designs.get(user.coreUserId, id);
+  }
+
+  @Get(':id/stats')
+  @ApiOperation({ summary: 'สถิติการเปิดดูงานที่แชร์ (เจ้าของเท่านั้น)' })
+  @ApiEnvelope(DesignStatsDto)
+  stats(@CurrentUser() user: CoreHubUser, @Param('id', UUID) id: string) {
+    return this.designs.stats(user.coreUserId, id);
   }
 
   @Patch(':id')

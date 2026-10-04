@@ -35,6 +35,7 @@ enum ThemeMode {
 enum LinkAccess {
   NONE
   VIEW
+  COMMENT
   EDIT
 }
 
@@ -46,6 +47,7 @@ enum FeedbackKind {
 enum NotificationKind {
   DESIGN_TRASHED
   TEMPLATE_USED
+  COMMENT_ADDED
 }
 
 /// โฟลเดอร์ในหน้า "โปรเจกต์" ของผู้ใช้แต่ละคน
@@ -80,13 +82,17 @@ model Design {
   /// แท็กที่ผู้ใช้ตั้งเอง (แผงรายละเอียด)
   tags             String[]   @default([])
   linkAccess       LinkAccess @default(NONE) @map("link_access")
+  /// เจ้าของติดดาวไว้ (เมนูไฟล์ → ติดดาว)
+  starredAt        DateTime?  @map("starred_at") @db.Timestamptz(3)
   trashedAt        DateTime?  @map("trashed_at") @db.Timestamptz(3)
   createdAt        DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt        DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   folder         Folder?       @relation("FolderDesigns", fields: [folderId], references: [id], onDelete: SetNull)
   sourceTemplate Template?     @relation("TemplateDesigns", fields: [sourceTemplateId], references: [id], onDelete: SetNull)
-  visits         DesignVisit[] @relation("DesignVisits")
+  visits         DesignVisit[]   @relation("DesignVisits")
+  versions       DesignVersion[] @relation("DesignVersions")
+  comments       DesignComment[] @relation("DesignComments")
 
   @@index([coreUserId, trashedAt, updatedAt])
   @@map("designs")
@@ -160,12 +166,56 @@ model DesignVisit {
   designId   String   @map("design_id") @db.Uuid
   coreUserId String   @map("core_user_id")
   visitedAt  DateTime @default(now()) @map("visited_at") @db.Timestamptz(3)
+  /// จำนวนครั้งที่เปิด (สถิติในหน้าต่างการวิเคราะห์)
+  viewCount  Int      @default(1) @map("view_count")
 
   design Design @relation("DesignVisits", fields: [designId], references: [id], onDelete: Cascade)
 
   @@unique([designId, coreUserId])
   @@index([coreUserId, visitedAt])
   @@map("design_visits")
+}
+
+/// ประวัติเวอร์ชันของงาน — เก็บอัตโนมัติไม่บ่อยกว่าทุก 10 นาทีที่มีการแก้ และเมื่อกด "บันทึก" ในเมนูไฟล์
+model DesignVersion {
+  id         String   @id @default(uuid()) @db.Uuid
+  designId   String   @map("design_id") @db.Uuid
+  /// คนที่แก้จนเกิดเวอร์ชันนี้ (เจ้าของ หรือคนที่ได้ลิงก์แก้ไขได้)
+  coreUserId String   @map("core_user_id")
+  document   Json
+  width      Int
+  height     Int
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  design Design @relation("DesignVersions", fields: [designId], references: [id], onDelete: Cascade)
+
+  @@index([designId, createdAt])
+  @@map("design_versions")
+}
+
+/// ความคิดเห็นบนงาน (ปุ่มความคิดเห็นบนแถบบน) — ปักกับหน้าหรือชิ้นงาน · ตอบกลับได้หนึ่งชั้น
+model DesignComment {
+  id         String    @id @default(uuid()) @db.Uuid
+  designId   String    @map("design_id") @db.Uuid
+  coreUserId String    @map("core_user_id")
+  /// id ของหน้าใน JSON state
+  pageId     String    @map("page_id") @db.VarChar(80)
+  /// id ของชิ้นงาน · null = ทั้งหน้า
+  elementId  String?   @map("element_id") @db.VarChar(80)
+  parentId   String?   @map("parent_id") @db.Uuid
+  body       String    @db.VarChar(2000)
+  /// { "👍": ["core_user_id", …] }
+  reactions  Json      @default("{}")
+  resolvedAt DateTime? @map("resolved_at") @db.Timestamptz(3)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  design  Design          @relation("DesignComments", fields: [designId], references: [id], onDelete: Cascade)
+  parent  DesignComment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies DesignComment[] @relation("CommentReplies")
+
+  @@index([designId, createdAt])
+  @@map("design_comments")
 }
 
 model Notification {

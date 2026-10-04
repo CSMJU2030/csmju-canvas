@@ -32,7 +32,7 @@ export const THUMBNAIL_PATTERN = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9
 export const MAX_THUMBNAIL_CHARS = 280_000;
 
 export const EDITED_WITHIN = ['day', 'week', 'month', 'year'] as const;
-export const LINK_ACCESS = ['NONE', 'VIEW', 'EDIT'] as const;
+export const LINK_ACCESS = ['NONE', 'VIEW', 'COMMENT', 'EDIT'] as const;
 export const MAX_TAGS = 20;
 export const DESIGN_SORTS = ['updated', 'created', 'title'] as const;
 export const DESIGN_SCOPES = ['mine', 'shared', 'all'] as const;
@@ -75,6 +75,12 @@ export class ListDesignsQuery extends PaginationQuery {
   @IsOptional()
   @IsIn(DESIGN_SORTS, { message: 'sort ต้องเป็น updated, created หรือ title' })
   sort?: (typeof DESIGN_SORTS)[number];
+
+  @ApiPropertyOptional({ description: 'true = เฉพาะงานที่ติดดาวไว้' })
+  @IsOptional()
+  @BooleanQuery()
+  @IsBoolean({ message: 'starred ต้องเป็น true หรือ false' })
+  starred?: boolean;
 
   @ApiPropertyOptional({
     enum: DESIGN_SCOPES,
@@ -187,10 +193,15 @@ export class UpdateDesignDto {
   @MaxLength(30, { each: true, message: 'แท็กยาวได้ไม่เกิน 30 ตัวอักษร' })
   tags?: string[];
 
-  @ApiPropertyOptional({ enum: LINK_ACCESS, description: 'NONE = เจ้าของเท่านั้น · VIEW/EDIT = ทุกคนที่มีลิงก์ (ต้องเข้าสู่ระบบ CSMJU2030)' })
+  @ApiPropertyOptional({ enum: LINK_ACCESS, description: 'NONE = เจ้าของเท่านั้น · VIEW/COMMENT/EDIT = ทุกคนที่มีลิงก์ดูได้/แสดงความคิดเห็นได้/แก้ไขได้ (ต้องเข้าสู่ระบบ CSMJU2030)' })
   @IsOptional()
-  @IsEnum(LINK_ACCESS, { message: 'linkAccess ต้องเป็น NONE, VIEW หรือ EDIT' })
+  @IsEnum(LINK_ACCESS, { message: 'linkAccess ต้องเป็น NONE, VIEW, COMMENT หรือ EDIT' })
   linkAccess?: (typeof LINK_ACCESS)[number];
+
+  @ApiPropertyOptional({ description: 'true = ติดดาว · false = เลิกติดดาว (เจ้าของเท่านั้น)' })
+  @IsOptional()
+  @IsBoolean()
+  starred?: boolean;
 }
 
 export class DesignSummaryDto {
@@ -205,7 +216,8 @@ export class DesignSummaryDto {
   @ApiPropertyOptional({ nullable: true }) trashedAt!: string | null;
   @ApiProperty({ type: [String] }) tags!: string[];
   @ApiProperty({ enum: LINK_ACCESS }) linkAccess!: string;
-  @ApiProperty({ enum: ['OWNER', 'EDIT', 'VIEW'], description: 'สิทธิ์ของผู้เรียกต่องานนี้' }) access!: string;
+  @ApiProperty({ enum: ['OWNER', 'EDIT', 'COMMENT', 'VIEW'], description: 'สิทธิ์ของผู้เรียกต่องานนี้' }) access!: string;
+  @ApiProperty({ description: 'เจ้าของติดดาวไว้' }) starred!: boolean;
   @ApiProperty() createdAt!: string;
   @ApiProperty() updatedAt!: string;
 }
@@ -213,6 +225,14 @@ export class DesignSummaryDto {
 export class DesignDto extends DesignSummaryDto {
   @ApiProperty({ description: 'JSON state ของผืนผ้าใบ', type: 'object', additionalProperties: true })
   document!: Record<string, unknown>;
+}
+
+export class DesignStatsDto {
+  @ApiProperty({ description: 'จำนวนคนที่เปิดงานนี้ผ่านลิงก์ (ไม่นับเจ้าของ)' }) uniqueViewers!: number;
+  @ApiProperty({ description: 'จำนวนครั้งที่เปิดทั้งหมด (ไม่นับเจ้าของ)' }) totalViews!: number;
+  @ApiPropertyOptional({ nullable: true }) lastViewedAt!: string | null;
+  @ApiProperty() commentCount!: number;
+  @ApiProperty() versionCount!: number;
 }
 
 export class DeletedDto {

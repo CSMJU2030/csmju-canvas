@@ -384,4 +384,109 @@ describe('CS Canvas API (e2e)', () => {
     await http().get('/api/v1/templates?colors=magenta').set('Authorization', bearer(student, 'student')).expect(400);
     await http().get('/api/v1/templates?language=jp').set('Authorization', bearer(student, 'student')).expect(400);
   });
+
+  const newDesign = async (title: string) =>
+    (
+      await http()
+        .post('/api/v1/designs')
+        .set('Authorization', bearer(student, 'student'))
+        .send({ title, designType: 'presentation', width: 1920, height: 1080 })
+        .expect(201)
+    ).body.data.id as string;
+
+  it('ประวัติเวอร์ชัน: เก็บตอนบันทึกเนื้องานและตอนสั่งเก็บ · คนดูอย่างเดียวเข้าไม่ได้', async () => {
+    const id = await newDesign('งานมีเวอร์ชัน');
+
+    await http().patch(`/api/v1/designs/${id}`).set('Authorization', bearer(student, 'student')).send({ document: doc }).expect(200);
+
+    const auto = await http().get(`/api/v1/designs/${id}/versions`).set('Authorization', bearer(student, 'student')).expect(200);
+
+    expect(auto.body.meta.total).toBe(1);
+    expect(auto.body.data[0]).toMatchObject({ author: 'me', pageCount: 1, width: 1920 });
+
+    // บันทึกซ้ำภายใน 10 นาทีไม่เก็บเพิ่ม · สั่งเก็บเองได้เสมอ
+    await http().patch(`/api/v1/designs/${id}`).set('Authorization', bearer(student, 'student')).send({ document: doc }).expect(200);
+    await http().post(`/api/v1/designs/${id}/versions`).set('Authorization', bearer(student, 'student')).expect(201);
+
+    const list = await http().get(`/api/v1/designs/${id}/versions`).set('Authorization', bearer(student, 'student')).expect(200);
+
+    expect(list.body.meta.total).toBe(2);
+
+    const one = await http().get(`/api/v1/designs/${id}/versions/${list.body.data[0].id}`).set('Authorization', bearer(student, 'student')).expect(200);
+
+    expect(one.body.data.document.version).toBe(1);
+
+    await http().patch(`/api/v1/designs/${id}`).set('Authorization', bearer(student, 'student')).send({ linkAccess: 'VIEW' }).expect(200);
+    await http().get(`/api/v1/designs/${id}/versions`).set('Authorization', bearer(other, 'student')).expect(403);
+    await http().get(`/api/v1/designs/${id}/versions/${randomUUID()}`).set('Authorization', bearer(student, 'student')).expect(404);
+  });
+
+  it('ความคิดเห็น: ลิงก์แสดงความคิดเห็นได้เขียนได้แต่แก้งานไม่ได้ · ตอบกลับ รีแอกชัน แก้ไขแล้ว ลบ · แจ้งเตือนเจ้าของ', async () => {
+    const id = await newDesign('งานรอความเห็น');
+
+    await http().post(`/api/v1/designs/${id}/comments`).set('Authorization', bearer(other, 'student')).send({ body: 'ลองดู', pageId: 'p1' }).expect(404);
+    await http().patch(`/api/v1/designs/${id}`).set('Authorization', bearer(student, 'student')).send({ linkAccess: 'COMMENT' }).expect(200);
+
+    const opened = await http().get(`/api/v1/designs/${id}`).set('Authorization', bearer(other, 'student')).expect(200);
+
+    expect(opened.body.data.access).toBe('COMMENT');
+    await http().patch(`/api/v1/designs/${id}`).set('Authorization', bearer(other, 'student')).send({ document: doc }).expect(403);
+
+    const created = await http()
+      .post(`/api/v1/designs/${id}/comments`)
+      .set('Authorization', bearer(other, 'student'))
+      .send({ body: 'หัวข้อใหญ่ไปนิด', pageId: 'p1', elementId: 'el-1' })
+      .expect(201);
+    const commentId = created.body.data.id as string;
+
+    expect(created.body.data).toMatchObject({ author: 'me', canDelete: true, elementId: 'el-1' });
+    expect(created.body.data.authorTag).toMatch(/^[0-9A-F]{4}$/);
+
+    await http()
+      .post(`/api/v1/designs/${id}/comments`)
+      .set('Authorization', bearer(student, 'student'))
+      .send({ body: 'แก้แล้วครับ', pageId: 'p1', parentId: commentId })
+      .expect(201);
+
+    const reacted = await http().patch(`/api/v1/design-comments/${commentId}`).set('Authorization', bearer(student, 'student')).send({ reaction: '👍', resolved: true }).expect(200);
+
+    expect(reacted.body.data.reactions).toEqual([{ emoji: '👍', count: 1, mine: true }]);
+    expect(reacted.body.data.resolvedAt).not.toBeNull();
+    await http().patch(`/api/v1/design-comments/${commentId}`).set('Authorization', bearer(student, 'student')).send({ body: 'แก้ข้อความคนอื่น' }).expect(403);
+    await http().patch(`/api/v1/design-comments/${commentId}`).set('Authorization', bearer(student, 'student')).send({ reaction: '🍕' }).expect(400);
+
+    const listed = await http().get(`/api/v1/designs/${id}/comments`).set('Authorization', bearer(student, 'student')).expect(200);
+
+    expect(listed.body.data.map((c: { author: string }) => c.author)).toEqual(['collaborator', 'me']);
+
+    const notes = await http().get('/api/v1/notifications?limit=50').set('Authorization', bearer(student, 'student')).expect(200);
+
+    expect(notes.body.data.some((n: { kind: string }) => n.kind === 'COMMENT_ADDED')).toBe(true);
+
+    await http().delete(`/api/v1/design-comments/${commentId}`).set('Authorization', bearer(student, 'student')).expect(200);
+
+    const after = await http().get(`/api/v1/designs/${id}/comments`).set('Authorization', bearer(student, 'student')).expect(200);
+
+    expect(after.body.meta.total).toBe(0);
+  });
+
+  it('ติดดาวงาน กรองเฉพาะที่ติดดาว · สถิติการเปิดดูนับเฉพาะคนอื่น', async () => {
+    const id = await newDesign('งานติดดาว');
+
+    await http().patch(`/api/v1/designs/${id}`).set('Authorization', bearer(student, 'student')).send({ starred: true, linkAccess: 'VIEW' }).expect(200);
+
+    const starred = await http().get('/api/v1/designs?starred=true&limit=100').set('Authorization', bearer(student, 'student')).expect(200);
+
+    expect(starred.body.data.find((d: { id: string }) => d.id === id)?.starred).toBe(true);
+
+    await http().get(`/api/v1/designs/${id}`).set('Authorization', bearer(other, 'student')).expect(200);
+    await http().get(`/api/v1/designs/${id}`).set('Authorization', bearer(other, 'student')).expect(200);
+    await http().get(`/api/v1/designs/${id}`).set('Authorization', bearer(student, 'student')).expect(200);
+
+    const stats = await http().get(`/api/v1/designs/${id}/stats`).set('Authorization', bearer(student, 'student')).expect(200);
+
+    expect(stats.body.data).toMatchObject({ uniqueViewers: 1, totalViews: 2 });
+    await http().get(`/api/v1/designs/${id}/stats`).set('Authorization', bearer(other, 'student')).expect(403);
+    await http().patch(`/api/v1/designs/${id}`).set('Authorization', bearer(other, 'student')).send({ starred: true }).expect(403);
+  });
 });
