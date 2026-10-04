@@ -197,6 +197,14 @@ export interface Page {
   notes?: string;
   /// เวลาแสดงตอนเล่นอัตโนมัติ (วินาที)
   duration?: number;
+  /// ขนาดเฉพาะหน้านี้ (หน้าต่างขนาดในงานเดียวกัน) · ไม่มี = ใช้ขนาดของงาน
+  width?: number;
+  height?: number;
+}
+
+/// ขนาดจริงของหน้า — หน้าที่ไม่ได้กำหนดเองใช้ขนาดของงาน
+export function pageSizeOf(page: Pick<Page, 'width' | 'height'>, base: { width: number; height: number }): { width: number; height: number } {
+  return { width: page.width ?? base.width, height: page.height ?? base.height };
 }
 
 export interface DesignDocument {

@@ -2,13 +2,12 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Copy, Eye, Files, Layers, UserPlus,
-  ChevronLeft, CloudAlert, CloudCheck, Download, LayoutTemplate, LoaderCircle, Maximize, Redo2, Undo2,
-  ZoomIn, ZoomOut,
+  Copy, Eye, UserPlus,
+  ChevronLeft, CloudAlert, CloudCheck, Download, LayoutTemplate, LoaderCircle, Redo2, Undo2,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
-import { ErrorState, IconButton, Spinner, cx, errorMessage, useToast } from '@/components/csmju/primitives';
+import { ErrorState, Spinner, cx, errorMessage, useToast } from '@/components/csmju/primitives';
 import { api, ApiError } from '@/lib/csmju/api';
 import { useMe } from '@/lib/csmju/session';
 import { designTypeLabel } from '@/lib/design-types';
@@ -24,8 +23,11 @@ import { Wallpaper } from 'lucide-react';
 import { ContextMenu } from './context-menu';
 import { ContextToolbar } from './context-toolbar';
 import { SelectionToolbar } from './selection-toolbar';
-import { Stage, clampZoom, fitToScreen } from './stage';
+import { Stage } from './stage';
 import { ToolsPalette } from './tools-palette';
+import { BottomBar, PagesGrid } from './page-strip';
+import { PresentButton, Presenter, presentFromCurrent } from './presenter';
+import { TimerWidget, stopTimerAudio } from './timer';
 import { useAutosave, type SaveStatus } from './use-autosave';
 import { useShortcuts } from './use-shortcuts';
 
@@ -41,6 +43,12 @@ export function EditorScreen({ id }: { id: string }) {
         { designId: d.id, title: d.title, designType: d.designType, width: d.width, height: d.height, access: d.access, linkAccess: d.linkAccess },
         normalizeDocument(d.document),
       );
+
+      // ลิงก์ "คัดลอกลิงก์ไปที่หน้านี้" (?page=3) เปิดที่หน้านั้น
+      const wanted = Number(new URLSearchParams(window.location.search).get('page'));
+      const pages = useEditor.getState().doc.pages.length;
+
+      if (Number.isInteger(wanted) && wanted >= 1 && wanted <= pages) useEditor.getState().setPageIndex(wanted - 1);
 
       return d;
     },
@@ -82,8 +90,27 @@ function EditorLayout({ needsThumbnail }: { needsThumbnail: boolean }) {
   useEffect(() => {
     useEditorUi.getState().setPanel(window.matchMedia('(max-width: 767px)').matches ? null : 'templates');
 
-    return () => useEditorUi.getState().setPanel(null);
+    return () => {
+      useEditorUi.getState().setPanel(null);
+      stopTimerAudio();
+    };
   }, []);
+
+  // Ctrl+Alt+P = พรีเซนต์เต็มจอ
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.altKey && event.key.toLowerCase() === 'p') {
+        event.preventDefault();
+        presentFromCurrent();
+      }
+    };
+
+    window.addEventListener('keydown', onKey);
+
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const pagesView = useEditorUi((s) => s.pagesView);
 
   // เปิดแผงอื่น = ปิดแถบเครื่องมือและเลิกโหมดวาด (แบบ Canva ที่แสดงทีละอย่าง)
   const setPanel = (next: PanelKey | null) => {
@@ -122,9 +149,11 @@ function EditorLayout({ needsThumbnail }: { needsThumbnail: boolean }) {
         <TopBar status="saved" readOnly onRetry={retry} onExport={() => setDialog('export')} onPublish={() => setDialog('publish')} onShare={() => setDialog('share')} />
         <div className="relative flex min-h-0 flex-1 flex-col">
           <Stage />
+          <TimerWidget />
         </div>
-        <ZoomBar />
+        <BottomBar readOnly onPresent={() => presentFromCurrent()} />
         <ExportDialog open={dialog === 'export'} onClose={() => setDialog(null)} />
+        <Presenter />
       </div>
     );
   }
@@ -164,8 +193,10 @@ function EditorLayout({ needsThumbnail }: { needsThumbnail: boolean }) {
             <ContextToolbar />
             <SelectionToolbar />
             {toolsOpen && <ToolsPalette onClose={closeTools} onSignature={() => setPanel('signature')} />}
+            <TimerWidget />
+            {pagesView === 'grid' && <PagesGrid />}
           </div>
-          <ZoomBar panel={panel} onPanel={setPanel} />
+          <BottomBar onPresent={() => presentFromCurrent()} />
         </div>
       </div>
 
@@ -176,6 +207,7 @@ function EditorLayout({ needsThumbnail }: { needsThumbnail: boolean }) {
       {dialog === 'publish' && <PublishTemplateDialog open onClose={() => setDialog(null)} />}
       {dialog === 'share' && <EditorShareDialog onClose={() => setDialog(null)} />}
       <ContextMenu />
+      <Presenter />
     </div>
   );
 }
@@ -296,6 +328,7 @@ function TopBar({
             <Copy aria-hidden className="size-4" /> ทำสำเนาเป็นของฉัน
           </button>
         )}
+        <PresentButton />
         {access === 'OWNER' && (
           <button type="button" onClick={onShare} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-surface/15 px-4 text-csmju-caption font-semibold hover:bg-surface/25">
             <UserPlus aria-hidden className="size-4" /> <span className="hidden sm:inline">แชร์</span>
@@ -401,104 +434,6 @@ function SaveIndicator({ status, onRetry }: { status: SaveStatus; onRetry: () =>
       {status === 'saved' ? <CloudCheck aria-hidden className="size-5" /> : <LoaderCircle aria-hidden className="size-4 animate-spin" />}
       <span className="hidden sm:inline">{status === 'saved' ? 'บันทึกแล้ว' : 'กำลังบันทึก…'}</span>
     </span>
-  );
-}
-
-function ZoomBar({ panel, onPanel }: { panel?: PanelKey | null; onPanel?: (panel: PanelKey | null) => void } = {}) {
-  const zoom = useEditor((s) => s.zoom);
-  const pageIndex = useEditor((s) => s.pageIndex);
-  const pageCount = useEditor((s) => s.doc.pages.length);
-
-  const zoomBy = (factor: number) => {
-    const state = useEditor.getState();
-    const stage = document.querySelector('canvas[aria-label^="ผืนผ้าใบ"]') as HTMLCanvasElement | null;
-    const w = stage?.clientWidth ?? 800;
-    const h = stage?.clientHeight ?? 600;
-    const next = clampZoom(state.zoom * factor);
-    const world = { x: (w / 2 - state.pan.x) / state.zoom, y: (h / 2 - state.pan.y) / state.zoom };
-
-    state.setViewport(next, { x: w / 2 - world.x * next, y: h / 2 - world.y * next });
-  };
-
-  const fit = () => {
-    const stage = document.querySelector('canvas[aria-label^="ผืนผ้าใบ"]') as HTMLCanvasElement | null;
-
-    if (stage) fitToScreen({ width: stage.clientWidth, height: stage.clientHeight });
-  };
-
-  const setZoomPercent = (percent: number) => zoomBy(clampZoom(percent / 100) / useEditor.getState().zoom);
-
-  return (
-    <div className="mb-16 flex min-h-12 items-center justify-between gap-2 border-t border-line bg-surface px-3 md:mb-0">
-      <div className="flex items-center gap-1">
-        <IconButton label="หน้าก่อนหน้า" disabled={pageIndex === 0} onClick={() => useEditor.getState().setPageIndex(pageIndex - 1)}>
-          <ChevronLeft aria-hidden className="size-5" />
-        </IconButton>
-        <span className="text-csmju-caption text-ink tabular-nums">
-          หน้า {pageIndex + 1} / {pageCount}
-        </span>
-        <IconButton label="หน้าถัดไป" disabled={pageIndex >= pageCount - 1} onClick={() => useEditor.getState().setPageIndex(pageIndex + 1)}>
-          <ChevronLeft aria-hidden className="size-5 rotate-180" />
-        </IconButton>
-        <button
-          type="button"
-          onClick={() => useEditor.getState().addPage()}
-          className="ml-1 hidden min-h-11 items-center gap-1 rounded-xl px-3 text-csmju-caption font-medium text-ink hover:bg-surface-muted sm:inline-flex"
-        >
-          + เพิ่มหน้า
-        </button>
-      </div>
-      <div className="flex items-center gap-2">
-        <label htmlFor="zoom-slider" className="sr-only">ระดับการซูม</label>
-        <input
-          id="zoom-slider"
-          type="range"
-          min={10}
-          max={400}
-          step={1}
-          value={Math.round(zoom * 100)}
-          onChange={(event) => setZoomPercent(Number(event.target.value))}
-          className="hidden w-36 accent-primary sm:block"
-        />
-        <button
-          type="button"
-          onClick={fit}
-          title="พอดีจอ"
-          className="min-h-11 min-w-16 rounded-xl px-2 text-csmju-caption font-medium text-ink tabular-nums hover:bg-surface-muted"
-        >
-          {Math.round(zoom * 100)}%
-        </button>
-        <IconButton label="ซูมออก" onClick={() => zoomBy(1 / 1.2)} className="sm:hidden">
-          <ZoomOut aria-hidden className="size-5" />
-        </IconButton>
-        <IconButton label="ซูมเข้า" onClick={() => zoomBy(1.2)} className="sm:hidden">
-          <ZoomIn aria-hidden className="size-5" />
-        </IconButton>
-        {onPanel && (
-          <>
-            <button
-              type="button"
-              aria-pressed={panel === 'layers'}
-              onClick={() => onPanel(panel === 'layers' ? null : 'layers')}
-              className={cx('hidden min-h-11 items-center gap-1 rounded-xl px-3 text-csmju-caption font-medium text-ink sm:inline-flex', panel === 'layers' ? 'bg-primary-soft' : 'hover:bg-surface-muted')}
-            >
-              <Layers aria-hidden className="size-5" /> เลเยอร์
-            </button>
-            <button
-              type="button"
-              aria-pressed={panel === 'pages'}
-              onClick={() => onPanel(panel === 'pages' ? null : 'pages')}
-              className={cx('inline-flex min-h-11 items-center gap-1 rounded-xl px-3 text-csmju-caption font-medium text-ink', panel === 'pages' ? 'bg-primary-soft' : 'hover:bg-surface-muted')}
-            >
-              <Files aria-hidden className="size-5" /> หน้า
-            </button>
-          </>
-        )}
-        <IconButton label="พอดีจอ" onClick={fit}>
-          <Maximize aria-hidden className="size-5" />
-        </IconButton>
-      </div>
-    </div>
   );
 }
 

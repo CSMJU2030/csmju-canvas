@@ -34,14 +34,14 @@ export function useAutosave(needsThumbnail = false) {
       setStatus('saving');
 
       try {
-        const thumbnail = await thumbnailOf(state.doc.pages[0], { width: state.width, height: state.height }).catch(
+        const thumbnail = await thumbnailOf(state.doc.pages[0], { width: state.baseWidth, height: state.baseHeight }).catch(
           () => undefined,
         );
 
         await api.patch(`/designs/${state.designId}`, {
           document: state.doc,
-          width: state.width,
-          height: state.height,
+          width: state.baseWidth,
+          height: state.baseHeight,
           ...(thumbnail ? { thumbnail } : {}),
         });
         savedRevision.current = revision;

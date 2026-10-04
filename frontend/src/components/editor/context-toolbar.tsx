@@ -162,7 +162,13 @@ function PageTools() {
     const nw = Math.round(Number(w));
     const nh = Math.round(Number(h));
 
-    if (nw >= 16 && nh >= 16 && nw <= 8000 && nh <= 8000) useEditor.getState().resize(nw, nh);
+    if (nw >= 16 && nh >= 16 && nw <= 8000 && nh <= 8000) {
+      const state = useEditor.getState();
+
+      // หน้าเดียวในงาน = เปลี่ยนขนาดของงาน · หลายหน้า = ขนาดเฉพาะหน้านี้ (แบบ Canva "ปรับขนาดหน้า")
+      if (state.doc.pages.length === 1) state.resize(nw, nh);
+      else state.resizePage(state.pageIndex, nw === state.baseWidth && nh === state.baseHeight ? null : { width: nw, height: nh });
+    }
     else {
       setW(String(width));
       setH(String(height));
@@ -192,7 +198,7 @@ function PageTools() {
               close();
             }}
           >
-            <p className="text-csmju-caption font-semibold text-ink">ขนาดหน้า (ทุกหน้า)</p>
+            <p className="text-csmju-caption font-semibold text-ink">ขนาดหน้านี้</p>
             <div className="flex items-end gap-2">
               <SizeField label="กว้าง" value={w} onChange={setW} />
               <span aria-hidden className="pb-3 text-muted">×</span>

@@ -20,7 +20,7 @@ import {
   type Rect,
 } from '@/lib/editor/geometry';
 import { createPath } from '@/lib/editor/factory';
-import { brushStyle, drawPage, setImageReadyListener, strokeFreehand } from '@/lib/editor/render';
+import { brushStyle, drawPage, strokeFreehand, subscribeImageReady } from '@/lib/editor/render';
 import { snapRect } from '@/lib/editor/snapping';
 import { brushWidth, currentPage, selectionBox, useEditor, type DrawBrush } from '@/lib/editor/store';
 import type { CanvasElement, PathElement, TextElement } from '@/lib/editor/types';
@@ -261,7 +261,7 @@ export function Stage() {
   }, [size, requestDraw]);
 
   useEffect(() => {
-    setImageReadyListener(requestDraw);
+    const unsubscribeImages = subscribeImageReady(requestDraw);
 
     const unsubscribeUi = useEditorUi.subscribe((ui, prev) => {
       if (ui.preview !== prev.preview) requestDraw();
@@ -278,7 +278,7 @@ export function Stage() {
     return () => {
       unsubscribe();
       unsubscribeUi();
-      setImageReadyListener(null);
+      unsubscribeImages();
     };
   }, [requestDraw]);
 

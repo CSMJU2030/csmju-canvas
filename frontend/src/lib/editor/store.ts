@@ -5,6 +5,7 @@ import type { Guide } from './snapping';
 import {
   blankPage,
   newId,
+  pageSizeOf,
   type BrushKind,
   type CanvasElement,
   type DesignDocument,
@@ -49,6 +50,9 @@ export interface EditorMeta {
 }
 
 export interface EditorState extends EditorMeta {
+  /// ขนาดของงาน (ที่บันทึกลงหลังบ้าน) · `width`/`height` คือขนาดของหน้าที่เปิดอยู่
+  baseWidth: number;
+  baseHeight: number;
   doc: DesignDocument;
   pageIndex: number;
   selection: string[];
@@ -66,10 +70,17 @@ export interface EditorState extends EditorMeta {
   tool: DrawTool;
   /// สไตล์ที่คัดลอกไว้ (ปุ่มคัดลอกสไตล์ / Ctrl+Alt+C)
   styleClipboard: StyleSnapshot | null;
+  /// หน้าที่คัดลอกไว้ (เมนู … ของภาพย่อหน้า)
+  pageClipboard: Page | null;
 
   load(meta: EditorMeta, doc: DesignDocument): void;
   setTitle(title: string): void;
+  /// เปลี่ยนขนาดทั้งงาน (หน้าที่มีขนาดของตัวเองไม่เปลี่ยน)
   resize(width: number, height: number): void;
+  /// ขนาดเฉพาะหน้า · null = กลับไปใช้ขนาดของงาน
+  resizePage(index: number, size: { width: number; height: number } | null): void;
+  /// เพิ่มหน้าว่างต่อจากหน้าปัจจุบัน (กำหนดขนาดเองได้)
+  addPageWithSize(size: { width: number; height: number } | null): void;
   setPageIndex(index: number): void;
   select(ids: string[]): void;
   setEditingText(id: string | null): void;
@@ -113,6 +124,12 @@ export interface EditorState extends EditorMeta {
   movePage(from: number, to: number): void;
   /// ต่อหน้าจากงานอื่นท้ายงานนี้ (แผงโปรเจกต์)
   appendPages(pages: Page[]): void;
+  copyPage(index: number): void;
+  /// วางหน้าที่คัดลอกไว้ต่อจากหน้าที่ระบุ
+  pastePage(afterIndex: number): void;
+  /// ลบหลายหน้าพร้อมกัน (มุมมองตาราง) — เหลืออย่างน้อย 1 หน้าเสมอ
+  deletePages(indexes: number[]): void;
+  duplicatePages(indexes: number[]): void;
 
   undo(): void;
   redo(): void;
@@ -152,11 +169,20 @@ function fitText(el: CanvasElement): CanvasElement {
 
 export const useEditor = create<EditorState>((set, get) => {
   /// เปลี่ยน doc แล้วบันทึกประวัติ (ยกเว้นระหว่างลาก ซึ่งบันทึกตอนปล่อย)
+  /// ขนาดของหน้าที่เปิด (หลังเปลี่ยนหน้า/เปลี่ยนงาน) ให้ผืนผ้าใบและเครื่องมือทุกตัวใช้ค่าเดียวกัน
+  function sized(doc: DesignDocument, pageIndex: number) {
+    const state = get();
+    const page = doc.pages[Math.min(pageIndex, doc.pages.length - 1)];
+
+    return pageSizeOf(page, { width: state.baseWidth, height: state.baseHeight });
+  }
+
   function commit(next: DesignDocument, extra: Partial<EditorState> = {}) {
     const state = get();
+    const size = sized(next, extra.pageIndex ?? state.pageIndex);
 
     if (gestureSnapshot) {
-      set({ doc: next, revision: state.revision + 1, ...extra });
+      set({ doc: next, revision: state.revision + 1, ...size, ...extra });
       return;
     }
 
@@ -165,6 +191,7 @@ export const useEditor = create<EditorState>((set, get) => {
       past: [...state.past, state.doc].slice(-HISTORY_LIMIT),
       future: [],
       revision: state.revision + 1,
+      ...size,
       ...extra,
     });
   }
@@ -183,6 +210,8 @@ export const useEditor = create<EditorState>((set, get) => {
     linkAccess: 'NONE',
     width: 1080,
     height: 1080,
+    baseWidth: 1080,
+    baseHeight: 1080,
     doc: { version: 1, pages: [blankPage()] },
     pageIndex: 0,
     selection: [],
@@ -196,11 +225,15 @@ export const useEditor = create<EditorState>((set, get) => {
     clipboard: [],
     tool: DEFAULT_DRAW_TOOL,
     styleClipboard: null,
+    pageClipboard: null,
 
     load(meta, doc) {
       gestureSnapshot = null;
       set({
         ...meta,
+        baseWidth: meta.width,
+        baseHeight: meta.height,
+        ...pageSizeOf(doc.pages[0], meta),
         doc,
         pageIndex: 0,
         selection: [],
@@ -219,11 +252,29 @@ export const useEditor = create<EditorState>((set, get) => {
 
     resize(width, height) {
       // ขนาดอยู่นอก doc จึงไม่อยู่ในประวัติ undo — แค่ทำให้ตัวบันทึกอัตโนมัติรู้ว่าต้องบันทึก
-      set({ width, height, revision: get().revision + 1 });
+      const state = get();
+      const page = state.doc.pages[state.pageIndex];
+
+      set({ baseWidth: width, baseHeight: height, ...pageSizeOf(page, { width, height }), revision: state.revision + 1 });
+    },
+
+    resizePage(index, size) {
+      const state = get();
+
+      commit(withPage(state.doc, index, (page) => ({ ...page, width: size?.width, height: size?.height })));
+    },
+
+    addPageWithSize(size) {
+      const state = get();
+      const pages = [...state.doc.pages];
+      const page: Page = size ? { ...blankPage(), width: size.width, height: size.height } : blankPage();
+
+      pages.splice(state.pageIndex + 1, 0, page);
+      commit({ ...state.doc, pages }, { pageIndex: state.pageIndex + 1, selection: [] });
     },
 
     setPageIndex(index) {
-      set({ pageIndex: index, selection: [], editingTextId: null });
+      set({ pageIndex: index, selection: [], editingTextId: null, ...sized(get().doc, index) });
     },
 
     select(ids) {
@@ -560,6 +611,47 @@ export const useEditor = create<EditorState>((set, get) => {
       commit({ ...state.doc, pages }, { pageIndex: to, selection: [] });
     },
 
+    copyPage(index) {
+      const page = get().doc.pages[index];
+
+      if (page) set({ pageClipboard: page });
+    },
+
+    pastePage(afterIndex) {
+      const state = get();
+      const source = state.pageClipboard;
+
+      if (!source) return;
+
+      const pages = [...state.doc.pages];
+
+      pages.splice(afterIndex + 1, 0, { ...source, id: newId('page'), elements: cloneElements(source.elements, 0) });
+      commit({ ...state.doc, pages }, { pageIndex: afterIndex + 1, selection: [] });
+    },
+
+    deletePages(indexes) {
+      const state = get();
+      const drop = new Set(indexes);
+      const pages = state.doc.pages.filter((_, i) => !drop.has(i));
+
+      if (pages.length === 0 || drop.size === 0) return;
+
+      commit({ ...state.doc, pages }, { pageIndex: Math.min(state.pageIndex, pages.length - 1), selection: [] });
+    },
+
+    duplicatePages(indexes) {
+      const state = get();
+      const pick = new Set(indexes);
+      const pages: Page[] = [];
+
+      state.doc.pages.forEach((page, i) => {
+        pages.push(page);
+        if (pick.has(i)) pages.push({ ...page, id: newId('page'), elements: cloneElements(page.elements, 0) });
+      });
+
+      commit({ ...state.doc, pages }, { selection: [] });
+    },
+
     appendPages(pages) {
       const state = get();
 
@@ -579,6 +671,7 @@ export const useEditor = create<EditorState>((set, get) => {
         past: state.past.slice(0, -1),
         future: [state.doc, ...state.future].slice(0, HISTORY_LIMIT),
         pageIndex: Math.min(state.pageIndex, previous.pages.length - 1),
+        ...sized(previous, Math.min(state.pageIndex, previous.pages.length - 1)),
         selection: [],
         editingTextId: null,
         revision: state.revision + 1,
@@ -596,6 +689,7 @@ export const useEditor = create<EditorState>((set, get) => {
         past: [...state.past, state.doc].slice(-HISTORY_LIMIT),
         future: state.future.slice(1),
         pageIndex: Math.min(state.pageIndex, next.pages.length - 1),
+        ...sized(next, Math.min(state.pageIndex, next.pages.length - 1)),
         selection: [],
         editingTextId: null,
         revision: state.revision + 1,

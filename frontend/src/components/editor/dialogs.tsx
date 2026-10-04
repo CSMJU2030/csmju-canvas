@@ -29,7 +29,7 @@ export function ExportDialog({ open, onClose }: { open: boolean; onClose: () => 
     setBusy(true);
 
     try {
-      const count = await exportPages(state.doc, { width: state.width, height: state.height }, state.title, {
+      const count = await exportPages(state.doc, { width: state.baseWidth, height: state.baseHeight }, state.title, {
         format,
         scale,
         transparent,
@@ -118,15 +118,15 @@ export function PublishTemplateDialog({ open, onClose }: { open: boolean; onClos
   const publish = useMutation({
     mutationFn: async () => {
       const state = useEditor.getState();
-      const thumbnail = await thumbnailOf(state.doc.pages[0], { width: state.width, height: state.height });
+      const thumbnail = await thumbnailOf(state.doc.pages[0], { width: state.baseWidth, height: state.baseHeight });
 
       return api.post<Template>('/templates', {
         title: name.trim(),
         description: description.trim(),
         designType: state.designType,
         category,
-        width: state.width,
-        height: state.height,
+        width: state.baseWidth,
+        height: state.baseHeight,
         document: state.doc,
         thumbnail,
       });

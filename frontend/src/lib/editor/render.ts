@@ -3,6 +3,7 @@ import { applyAdjust, effectiveAdjust, findFilter, isNeutral } from './image-fil
 import { canvasPaint } from './paint';
 import {
   isLineShape,
+  pageSizeOf,
   type CanvasElement,
   type ImageElement,
   type Page,
@@ -21,11 +22,17 @@ import {
 // ── แคชรูป ──────────────────────────────────────────────────────────
 
 const images = new Map<string, HTMLImageElement>();
-let onImageReady: (() => void) | null = null;
+const imageListeners = new Set<() => void>();
 
-/// ให้ editor วาดใหม่เมื่อรูปที่ยังโหลดไม่เสร็จพร้อมแล้ว
-export function setImageReadyListener(listener: (() => void) | null) {
-  onImageReady = listener;
+/// แจ้งทุกผืนที่วาดอยู่ (หน้าแก้ไข พรีเซนต์) ให้วาดใหม่เมื่อรูป/ฟอนต์ที่ยังโหลดไม่เสร็จพร้อมแล้ว
+function onImageReady() {
+  for (const listener of imageListeners) listener();
+}
+
+export function subscribeImageReady(listener: () => void): () => void {
+  imageListeners.add(listener);
+
+  return () => imageListeners.delete(listener);
 }
 
 export function getImage(src: string): HTMLImageElement | null {
@@ -36,7 +43,7 @@ export function getImage(src: string): HTMLImageElement | null {
   const img = new Image();
 
   img.decoding = 'async';
-  img.onload = () => onImageReady?.();
+  img.onload = () => onImageReady();
   img.src = src;
   images.set(src, img);
 
@@ -240,7 +247,7 @@ function drawText(ctx: CanvasRenderingContext2D, el: TextElement) {
     pendingFonts.add(key);
     void ensureFont(el.fontFamily, el.fontWeight).then(() => {
       pendingFonts.delete(key);
-      onImageReady?.();
+      onImageReady();
     });
   }
 
@@ -925,6 +932,9 @@ export async function renderPageToCanvas(
   options: { transparent?: boolean; background?: string } = {},
 ): Promise<HTMLCanvasElement> {
   await preloadPage(page);
+
+  // หน้าที่มีขนาดของตัวเองวาดตามขนาดนั้นเสมอ
+  size = pageSizeOf(page, size);
 
   const canvas = document.createElement('canvas');
 
