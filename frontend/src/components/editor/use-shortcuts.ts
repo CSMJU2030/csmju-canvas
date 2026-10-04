@@ -69,6 +69,11 @@ export function useShortcuts() {
         return;
       }
 
+      if (event.key === 'Escape' && useEditorUi.getState().imageErase) {
+        useEditorUi.getState().set({ imageErase: null });
+        return;
+      }
+
       if (event.key === 'Escape' && useEditorUi.getState().painting) {
         useEditorUi.getState().setPainting(false);
         return;

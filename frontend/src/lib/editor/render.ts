@@ -1,5 +1,5 @@
 import { cssFamily, ensureFont, isFontReady } from './fonts';
-import { applyAdjust, effectiveAdjust, findFilter, isNeutral } from './image-filters';
+import { applyAdjust, applyColorEdits, effectiveAdjust, findFilter, isNeutral } from './image-filters';
 import { canvasPaint } from './paint';
 import {
   isLineShape,
@@ -9,6 +9,7 @@ import {
   type Page,
   type PathElement,
   type ShapeElement,
+  type EraseStroke,
   type StrokeStyle,
   type SvgElement,
   type TextElement,
@@ -675,16 +676,35 @@ function sourceRect(el: ImageElement, img: HTMLImageElement) {
   };
 }
 
+/// ลายนิ้วมือของรอยลบทั้งหมด (ใช้เป็นคีย์แคช) — เปลี่ยนเมื่อจุดหรือขนาดใดเปลี่ยน
+function eraseHash(strokes: EraseStroke[]): string {
+  let h = 2166136261;
+
+  for (const stroke of strokes) {
+    for (const v of [stroke.size, ...stroke.points]) {
+      h ^= Math.round(v * 100000);
+      h = Math.imul(h, 16777619);
+    }
+
+    h ^= 0x9e37;
+  }
+
+  return `${strokes.length}:${(h >>> 0).toString(36)}`;
+}
+
 function processedImage(el: ImageElement, img: HTMLImageElement): { source: CanvasImageSource; sx: number; sy: number; sw: number; sh: number } {
   const rect = sourceRect(el, img);
   const filter = findFilter(el.filter);
   const intensity = el.filterIntensity ?? 100;
   const adjust = effectiveAdjust(el.adjust, filter, intensity);
   const pixelWork = { ...adjust, blur: 0 };
+  const colorEdits = (el.colorEdits ?? []).filter((e) => e.hue || e.saturation || e.lightness);
+  const erase = el.erase ?? [];
+  const pixels = !isNeutral(pixelWork, filter) || colorEdits.length > 0;
 
-  if (isNeutral(pixelWork, filter) || typeof document === 'undefined') return { source: img, ...rect };
+  if ((!pixels && erase.length === 0) || typeof document === 'undefined') return { source: img, ...rect };
 
-  const key = `${el.src}|${JSON.stringify(el.crop ?? null)}|${JSON.stringify(pixelWork)}|${el.filter ?? ''}|${intensity}`;
+  const key = `${el.src}|${JSON.stringify(el.crop ?? null)}|${JSON.stringify(pixelWork)}|${el.filter ?? ''}|${intensity}|${JSON.stringify(colorEdits)}|${eraseHash(erase)}`;
   let canvas = processed.get(key);
 
   if (!canvas) {
@@ -698,13 +718,39 @@ function processedImage(el: ImageElement, img: HTMLImageElement): { source: Canv
 
     c.drawImage(img, rect.sx, rect.sy, rect.sw, rect.sh, 0, 0, canvas.width, canvas.height);
 
-    try {
-      const data = c.getImageData(0, 0, canvas.width, canvas.height);
+    if (pixels) {
+      try {
+        const data = c.getImageData(0, 0, canvas.width, canvas.height);
 
-      applyAdjust(data, pixelWork, filter, intensity);
-      c.putImageData(data, 0, 0);
-    } catch {
-      // อ่านพิกเซลไม่ได้ (รูปข้ามโดเมน) — แสดงรูปเดิม
+        if (!isNeutral(pixelWork, filter)) applyAdjust(data, pixelWork, filter, intensity);
+        if (colorEdits.length) applyColorEdits(data, colorEdits);
+        c.putImageData(data, 0, 0);
+      } catch {
+        // อ่านพิกเซลไม่ได้ (รูปข้ามโดเมน) — แสดงรูปเดิม
+      }
+    }
+
+    if (erase.length) {
+      // พิกัดรอยลบอิงรูปเต็ม → แปลงเป็นพิกัดของผืนที่ครอปและย่อแล้ว
+      c.save();
+      c.globalCompositeOperation = 'destination-out';
+      c.lineCap = 'round';
+      c.lineJoin = 'round';
+      c.setTransform(scale, 0, 0, scale, -rect.sx * scale, -rect.sy * scale);
+
+      for (const stroke of erase) {
+        const pts = stroke.points;
+
+        c.lineWidth = Math.max(1, stroke.size * img.naturalWidth);
+        c.beginPath();
+        c.moveTo(pts[0] * img.naturalWidth, pts[1] * img.naturalHeight);
+        // จุดเดียว = วงกลม (ลากเส้นยาวศูนย์ให้ปลายมนวาดออกมา)
+        if (pts.length === 2) c.lineTo(pts[0] * img.naturalWidth + 0.01, pts[1] * img.naturalHeight);
+        for (let i = 2; i < pts.length; i += 2) c.lineTo(pts[i] * img.naturalWidth, pts[i + 1] * img.naturalHeight);
+        c.stroke();
+      }
+
+      c.restore();
     }
 
     if (processed.size > 24) processed.delete(processed.keys().next().value!);

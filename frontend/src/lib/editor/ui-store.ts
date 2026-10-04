@@ -41,6 +41,8 @@ interface EditorUi {
   stripOpen: boolean;
   /// หน้าต่าง/มุมมองเต็มจอที่เปิดอยู่
   overlay: 'versions' | 'find' | 'accessibility' | 'analytics' | 'resize' | 'move' | null;
+  /// โหมดยางลบพิกเซลของรูป · size = เส้นผ่านศูนย์กลางแปรงเป็นพิกเซลของหน้า
+  imageErase: { id: string; size: number } | null;
 
   setPanel(panel: PanelKey | null): void;
   togglePanel(panel: PanelKey): void;
@@ -53,7 +55,7 @@ interface EditorUi {
   toggleRulers(): void;
   addGuide(guide: { axis: 'x' | 'y'; at: number }): void;
   moveGuide(index: number, at: number | null): void;
-  set(patch: Partial<Pick<EditorUi, 'margins' | 'bleed' | 'commentsOpen' | 'commentPins' | 'overlay' | 'stripOpen'>>): void;
+  set(patch: Partial<Pick<EditorUi, 'margins' | 'bleed' | 'commentsOpen' | 'commentPins' | 'overlay' | 'stripOpen' | 'imageErase'>>): void;
 }
 
 export const useEditorUi = create<EditorUi>((set, get) => ({
@@ -72,6 +74,7 @@ export const useEditorUi = create<EditorUi>((set, get) => ({
   commentPins: true,
   stripOpen: true,
   overlay: null,
+  imageErase: null,
 
   setPanel(panel) {
     set({ panel, toolsOpen: false });

@@ -1,8 +1,8 @@
 'use client';
 
 import {
-  AlignCenter, AlignJustify, AlignLeft, AlignRight, Bold, CaseSensitive, Clock, FlipHorizontal2, FlipVertical2,
-  Group, Italic, List, ListOrdered, Minus, PaintRoller, Plus, Trash2, Underline, Ungroup, Strikethrough,
+  AlignCenter, AlignJustify, AlignLeft, AlignRight, Bold, CaseSensitive, Clock, Eraser, FlipHorizontal2, FlipVertical2,
+  Group, Italic, List, ListOrdered, Minus, PaintRoller, Plus, RotateCcw, Trash2, Underline, Undo2, Ungroup, Strikethrough,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cx } from '@/components/csmju/primitives';
@@ -23,10 +23,13 @@ export function ContextToolbar() {
   const selected = elements.filter((el) => selection.includes(el.id));
   const types = new Set(selected.map((el) => el.type));
   const only = types.size === 1 ? selected[0].type : null;
+  const imageErase = useEditorUi((s) => s.imageErase);
+  const erasing = imageErase && selected.length === 1 && selected[0].id === imageErase.id ? (selected[0] as ImageElement) : null;
 
   let content: React.ReactNode;
 
-  if (selected.length === 0) content = <PageTools />;
+  if (erasing) content = <EraseTools el={erasing} size={imageErase!.size} />;
+  else if (selected.length === 0) content = <PageTools />;
   else if (only === 'text') content = <TextTools els={selected as TextElement[]} />;
   else if (only === 'shape') content = <ShapeTools els={selected as ShapeElement[]} />;
   else if (only === 'image' && selected.length === 1) content = <ImageTools el={selected[0] as ImageElement} />;
@@ -463,6 +466,44 @@ function ShapeTools({ els }: { els: ShapeElement[] }) {
 
 // ── รูปภาพ ─────────────────────────────────────────────────────────
 
+/// แถบของโหมดยางลบพิกเซล: ขนาดแปรง · ย้อนรอยล่าสุด · ล้างรอยลบ · เสร็จแล้ว
+function EraseTools({ el, size }: { el: ImageElement; size: number }) {
+  const strokes = el.erase ?? [];
+  const done = () => useEditorUi.getState().set({ imageErase: null });
+
+  return (
+    <>
+      <span className="flex items-center gap-2 px-2 text-csmju-caption font-semibold text-ink">
+        <Eraser aria-hidden className="size-5" /> ยางลบพิกเซล
+      </span>
+      <ToolbarDivider />
+      <label className="flex items-center gap-2 px-2 text-csmju-caption text-ink">
+        ขนาดแปรง
+        <input
+          type="range"
+          min={5}
+          max={200}
+          value={size}
+          onChange={(e) => useEditorUi.getState().set({ imageErase: { id: el.id, size: Number(e.target.value) } })}
+          className="w-28 accent-primary"
+        />
+        <span className="w-8 tabular-nums">{size}</span>
+      </label>
+      <ToolbarDivider />
+      <ToolbarButton label="ย้อนรอยลบล่าสุด" wide disabled={strokes.length === 0} onClick={() => patch([el.id], { erase: strokes.slice(0, -1) })}>
+        <Undo2 aria-hidden className="size-5" /> ย้อนรอย
+      </ToolbarButton>
+      <ToolbarButton label="คืนรูปเดิมทั้งหมด" wide disabled={strokes.length === 0} onClick={() => patch([el.id], { erase: null })}>
+        <RotateCcw aria-hidden className="size-5" /> คืนรูปเดิม
+      </ToolbarButton>
+      <ToolbarDivider />
+      <button type="button" onClick={done} className="min-h-10 rounded-lg bg-primary px-4 text-csmju-caption font-semibold text-on-inverse hover:bg-primary-hover">
+        เสร็จแล้ว
+      </button>
+    </>
+  );
+}
+
 function ImageTools({ el }: { el: ImageElement }) {
   const ids = [el.id];
   const border = el.border;
@@ -472,6 +513,9 @@ function ImageTools({ el }: { el: ImageElement }) {
     <>
       <PanelButton panel="image-edit" label="แก้ไข" />
       <PanelButton panel="replace" label="แทนที่" />
+      <ToolbarButton label="ยางลบพิกเซล — ลากบนรูปเพื่อลบส่วนนั้น" wide disabled={el.locked} onClick={() => useEditorUi.getState().set({ imageErase: { id: el.id, size: 40 } })}>
+        <Eraser aria-hidden className="size-5" /> ยางลบ
+      </ToolbarButton>
       <ToolbarDivider />
       <BorderPopover
         style={style}

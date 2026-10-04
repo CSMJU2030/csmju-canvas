@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, ChevronRight, Search, SlidersHorizontal, Upload } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { ErrorState, Spinner, cx, errorMessage, useToast } from '@/components/csmju/primitives';
 import { api, qs } from '@/lib/csmju/api';
 import { FONT_SETS } from '@/lib/editor/factory';
@@ -318,6 +318,58 @@ function useFilterThumbs(el: ImageElement | undefined) {
   return thumbs;
 }
 
+/// แก้ไขสี: เลือกสีเด่นของรูป แล้วหมุนเฉดสี ปรับความอิ่มตัว และความสว่างเฉพาะช่วงสีนั้น
+function SelectiveColor({ el, colors }: { el: ImageElement; colors: string[] }) {
+  const [picked, setPicked] = useState<string | null>(null);
+
+  if (colors.length === 0) return null;
+
+  const edits = el.colorEdits ?? [];
+  const current = picked ? (edits.find((e) => e.color === picked) ?? { color: picked, hue: 0, saturation: 0, lightness: 0 }) : null;
+  const set = (key: 'hue' | 'saturation' | 'lightness', value: number) => {
+    if (!current) return;
+
+    const next = { ...current, [key]: value };
+
+    patch([el.id], { colorEdits: [...edits.filter((e) => e.color !== next.color), next] });
+  };
+
+  return (
+    <section className="mb-6 flex flex-col gap-3">
+      <h3 className="text-csmju-body font-bold text-ink">แก้ไขสี</h3>
+      <div className="flex flex-wrap gap-2">
+        {colors.map((color) => {
+          const edited = edits.some((e) => e.color === color && (e.hue || e.saturation || e.lightness));
+
+          return (
+            <button
+              key={color}
+              type="button"
+              aria-pressed={picked === color}
+              aria-label={`แก้ไขช่วงสี ${color}${edited ? ' (แก้แล้ว)' : ''}`}
+              title={color}
+              onClick={() => setPicked(picked === color ? null : color)}
+              className={cx('relative size-10 rounded-full border-2', picked === color ? 'border-primary ring-2 ring-primary-soft' : 'border-line')}
+              style={{ background: color }}
+            >
+              {edited && <span aria-hidden className="absolute -top-0.5 -right-0.5 size-3 rounded-full border-2 border-surface bg-primary" />}
+            </button>
+          );
+        })}
+      </div>
+      {current ? (
+        <div className="flex flex-col gap-4 rounded-xl bg-surface-muted p-3">
+          <RangeField label="สี" value={current.hue} min={-100} max={100} trackClassName="csmju-track-hue" onChange={(v) => set('hue', v)} />
+          <RangeField label="ความอิ่มตัวของสี" value={current.saturation} min={-100} max={100} trackClassName="csmju-track-sat" onChange={(v) => set('saturation', v)} />
+          <RangeField label="ความสว่าง" value={current.lightness} min={-100} max={100} onChange={(v) => set('lightness', v)} />
+        </div>
+      ) : (
+        <p className="text-csmju-caption text-muted">กดสีจากรูปเพื่อปรับเฉพาะส่วนที่เป็นสีนั้น</p>
+      )}
+    </section>
+  );
+}
+
 export function ImageEditPanel() {
   const selected = useSelected();
   const el = selected.find((e): e is ImageElement => e.type === 'image');
@@ -358,24 +410,27 @@ export function ImageEditPanel() {
         <PanelHeader title="ปรับ" onBack={() => setView('main')} onClose={close} />
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-2 pb-6">
           {ADJUST_GROUPS.map((group) => (
-            <section key={group.title} className="mb-6 flex flex-col gap-4">
-              <h3 className="text-csmju-body font-bold text-ink">{group.title}</h3>
-              {group.fields.map((field) => (
-                <RangeField
-                  key={field.key}
-                  label={field.label}
-                  value={adjust[field.key]}
-                  min={field.min ?? -100}
-                  max={100}
-                  trackClassName={field.track}
-                  onChange={(v) => patch(ids, { adjust: { ...(el.adjust ?? {}), [field.key]: v } })}
-                />
-              ))}
-            </section>
+            <Fragment key={group.title}>
+              <section className="mb-6 flex flex-col gap-4">
+                <h3 className="text-csmju-body font-bold text-ink">{group.title}</h3>
+                {group.fields.map((field) => (
+                  <RangeField
+                    key={field.key}
+                    label={field.label}
+                    value={adjust[field.key]}
+                    min={field.min ?? -100}
+                    max={100}
+                    trackClassName={field.track}
+                    onChange={(v) => patch(ids, { adjust: { ...(el.adjust ?? {}), [field.key]: v } })}
+                  />
+                ))}
+              </section>
+              {group.title === 'สี' && <SelectiveColor el={el} colors={colors} />}
+            </Fragment>
           ))}
         </div>
         <div className="shrink-0 border-t border-line p-3">
-          <button type="button" onClick={() => patch(ids, { adjust: null })} className="min-h-11 w-full rounded-xl border border-line-strong text-csmju-caption font-semibold text-ink hover:bg-surface-muted">
+          <button type="button" onClick={() => patch(ids, { adjust: null, colorEdits: null })} className="min-h-11 w-full rounded-xl border border-line-strong text-csmju-caption font-semibold text-ink hover:bg-surface-muted">
             รีเซ็ตการปรับค่า
           </button>
         </div>

@@ -1,4 +1,4 @@
-import type { ImageAdjust } from './types';
+import type { ColorEdit, ImageAdjust } from './types';
 
 /// การปรับรูปและฟิลเตอร์สำเร็จรูป (แผง "แก้ไขรูปภาพ" → ปรับ / ฟิลเตอร์)
 ///
@@ -260,5 +260,93 @@ export function dominantColors(img: CanvasImageSource, count = 6): string[] {
   } catch {
     // รูปข้ามโดเมน (canvas ถูก taint) อ่านพิกเซลไม่ได้
     return [];
+  }
+}
+
+// ── แก้ไขสีเฉพาะช่วง ────────────────────────────────────────────────
+
+function rgbToHsl(r: number, g: number, b: number): [number, number, number] {
+  r /= 255;
+  g /= 255;
+  b /= 255;
+
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+
+  if (max === min) return [0, 0, l];
+
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  let h: number;
+
+  if (max === r) h = (g - b) / d + (g < b ? 6 : 0);
+  else if (max === g) h = (b - r) / d + 2;
+  else h = (r - g) / d + 4;
+
+  return [h * 60, s, l];
+}
+
+function hslToRgb(h: number, s: number, l: number): [number, number, number] {
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const hp = (((h % 360) + 360) % 360) / 60;
+  const x = c * (1 - Math.abs((hp % 2) - 1));
+  const [r, g, b] = hp < 1 ? [c, x, 0] : hp < 2 ? [x, c, 0] : hp < 3 ? [0, c, x] : hp < 4 ? [0, x, c] : hp < 5 ? [x, 0, c] : [c, 0, x];
+  const m = l - c / 2;
+
+  return [(r + m) * 255, (g + m) * 255, (b + m) * 255];
+}
+
+/// "rgb(r g b)" หรือ "rgb(r, g, b)" → [r, g, b]
+function parseRgb(color: string): [number, number, number] | null {
+  const m = color.match(/rgba?\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)/);
+
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+}
+
+const HUE_RANGE = 35;
+
+/// ปรับเฉพาะพิกเซลที่เฉดสีใกล้สีที่เลือก (ห่างไม่เกิน ±35° ค่อยๆ จางลง) · สีเทาแทบไม่ถูกแตะ
+export function applyColorEdits(data: ImageData, edits: ColorEdit[]) {
+  const targets = edits
+    .filter((e) => e.hue || e.saturation || e.lightness)
+    .map((e) => {
+      const rgb = parseRgb(e.color);
+
+      return rgb ? { hue: rgbToHsl(...rgb)[0], edit: e } : null;
+    })
+    .filter((t): t is { hue: number; edit: ColorEdit } => t !== null);
+
+  if (targets.length === 0) return;
+
+  const px = data.data;
+
+  for (let i = 0; i < px.length; i += 4) {
+    let [h, s, l] = rgbToHsl(px[i], px[i + 1], px[i + 2]);
+
+    if (s < 0.08) continue;
+
+    let changed = false;
+
+    for (const { hue, edit } of targets) {
+      const dist = Math.abs(((h - hue + 540) % 360) - 180);
+
+      if (dist >= HUE_RANGE) continue;
+
+      const w = (1 - dist / HUE_RANGE) * Math.min(1, s / 0.25);
+
+      h += edit.hue * 0.6 * w;
+      s = Math.max(0, Math.min(1, s * (1 + (edit.saturation / 100) * w)));
+      l = Math.max(0, Math.min(1, l + (edit.lightness / 100) * 0.35 * w));
+      changed = true;
+    }
+
+    if (!changed) continue;
+
+    const [r, g, b] = hslToRgb(h, s, l);
+
+    px[i] = r;
+    px[i + 1] = g;
+    px[i + 2] = b;
   }
 }

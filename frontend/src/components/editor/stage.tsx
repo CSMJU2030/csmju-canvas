@@ -23,7 +23,7 @@ import { createPath } from '@/lib/editor/factory';
 import { brushStyle, drawPage, strokeFreehand, subscribeImageReady } from '@/lib/editor/render';
 import { snapRect } from '@/lib/editor/snapping';
 import { brushWidth, canEditDoc, currentPage, selectionBox, useEditor, type DrawBrush } from '@/lib/editor/store';
-import type { CanvasElement, PathElement, TextElement } from '@/lib/editor/types';
+import type { CanvasElement, ImageElement, PathElement, TextElement } from '@/lib/editor/types';
 import { PREVIEW_MS, useEditorUi } from '@/lib/editor/ui-store';
 
 /// ผืนผ้าใบหลักของ editor — วาดด้วย Canvas 2D ทุกเฟรมที่มีการเปลี่ยน (requestAnimationFrame)
@@ -45,7 +45,8 @@ type Gesture =
   | { kind: 'marquee'; start: Point; current: Point; additive: boolean; base: string[] }
   | { kind: 'pinch'; distance: number; zoom: number; mid: Point; pan: Point }
   | { kind: 'draw'; points: number[] }
-  | { kind: 'erase'; last: Point };
+  | { kind: 'erase'; last: Point }
+  | { kind: 'image-erase'; id: string };
 
 function cssVar(name: string, fallback: string): string {
   if (typeof window === 'undefined') return fallback;
@@ -189,11 +190,14 @@ export function Stage() {
       ctx.stroke();
     }
 
-    if (state.tool.mode === 'draw' && state.tool.brush === 'eraser' && hover.current) {
+    const imageErase = useEditorUi.getState().imageErase;
+
+    if (((state.tool.mode === 'draw' && state.tool.brush === 'eraser') || imageErase) && hover.current) {
       const c = toScreen(hover.current);
+      const radius = imageErase ? imageErase.size / 2 : brushWidth(state.tool.weights.eraser, state) / 2;
 
       ctx.beginPath();
-      ctx.arc(c.x, c.y, (brushWidth(state.tool.weights.eraser, state) / 2) * zoom, 0, Math.PI * 2);
+      ctx.arc(c.x, c.y, radius * zoom, 0, Math.PI * 2);
       ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
       ctx.fill();
       ctx.strokeStyle = 'rgb(100 116 139)';
@@ -264,9 +268,16 @@ export function Stage() {
     const unsubscribeImages = subscribeImageReady(requestDraw);
 
     const unsubscribeUi = useEditorUi.subscribe((ui, prev) => {
-      if (ui.preview !== prev.preview) requestDraw();
+      if (ui.preview !== prev.preview || ui.imageErase !== prev.imageErase) requestDraw();
     });
     const unsubscribe = useEditor.subscribe((state, prev) => {
+      const erasing = useEditorUi.getState().imageErase;
+
+      // เลือกชิ้นอื่นหรือเปลี่ยนหน้า = ออกจากโหมดยางลบพิกเซล
+      if (erasing && (state.selection.length !== 1 || state.selection[0] !== erasing.id || state.pageIndex !== prev.pageIndex)) {
+        useEditorUi.getState().set({ imageErase: null });
+      }
+
       if (state.width !== prev.width || state.height !== prev.height) {
         fitted.current = `${state.designId}:${state.width}x${state.height}`;
         fitToScreen(sizeRef.current);
@@ -384,6 +395,29 @@ export function Stage() {
     const screen = { x: event.clientX - rect.left, y: event.clientY - rect.top };
     const p = toPage(event.clientX, event.clientY);
 
+    // ยางลบพิกเซล: ลากบนรูปที่เลือกเพื่อลบส่วนนั้นให้โปร่งใส (หนึ่งรอยลาก = undo หนึ่งขั้น)
+    const imageErase = useEditorUi.getState().imageErase;
+
+    if (imageErase) {
+      const target = currentPage(state).elements.find((el): el is ImageElement => el.id === imageErase.id && el.type === 'image');
+
+      if (!target || target.locked) {
+        useEditorUi.getState().set({ imageErase: null });
+      } else {
+        const point = imagePoint(target, p);
+
+        if (point) {
+          state.beginGesture();
+          state.updateElements([target.id], () => ({
+            erase: [...(target.erase ?? []), { points: [point.u, point.v], size: (imageErase.size / target.width) * (target.crop?.width ?? 1) }],
+          }));
+          gesture.current = { kind: 'image-erase', id: target.id };
+        }
+      }
+
+      return;
+    }
+
     // โหมดวาด: ปากกา/มาร์กเกอร์/ไฮไลท์เก็บจุดของเส้น · ยางลบลบเส้นวาดที่ลากผ่าน (รวมเป็น undo ขั้นเดียว)
     if (state.tool.mode === 'draw') {
       if (state.tool.brush === 'eraser') {
@@ -488,9 +522,23 @@ export function Stage() {
     const g = gesture.current;
     const state = useEditor.getState();
 
-    if (state.tool.mode === 'draw') {
+    if (state.tool.mode === 'draw' || useEditorUi.getState().imageErase) {
       hover.current = toPage(event.clientX, event.clientY);
-      if (state.tool.brush === 'eraser') requestDraw();
+      if (state.tool.brush === 'eraser' || useEditorUi.getState().imageErase) requestDraw();
+    }
+
+    if (g.kind === 'image-erase') {
+      const target = currentPage(state).elements.find((el): el is ImageElement => el.id === g.id && el.type === 'image');
+      const point = target && imagePoint(target, toPage(event.clientX, event.clientY), true);
+
+      if (target && point) {
+        const strokes = target.erase ?? [];
+        const last = strokes[strokes.length - 1];
+
+        state.updateElements([target.id], () => ({ erase: [...strokes.slice(0, -1), { ...last, points: [...last.points, point.u, point.v] }] }));
+      }
+
+      return;
     }
 
     if (g.kind === 'none') {
@@ -638,7 +686,7 @@ export function Stage() {
       return;
     }
 
-    if (g.kind === 'move' || g.kind === 'resize' || g.kind === 'rotate' || g.kind === 'erase') state.endGesture();
+    if (g.kind === 'move' || g.kind === 'resize' || g.kind === 'rotate' || g.kind === 'erase' || g.kind === 'image-erase') state.endGesture();
     if (g.kind === 'pan') setCursor(spaceDown.current ? 'grab' : 'default');
 
     if (g.kind === 'draw' && state.tool.brush !== 'eraser') {
@@ -664,6 +712,7 @@ export function Stage() {
     const state = useEditor.getState();
 
     if (state.tool.mode === 'draw') return setCursor(drawCursor(state.tool.brush));
+    if (useEditorUi.getState().imageErase) return setCursor('crosshair');
     if (useEditorUi.getState().painting) return setCursor(PAINT_CURSOR);
 
     const page = currentPage(state);
@@ -777,7 +826,7 @@ export function Stage() {
         onPointerCancel={onPointerUp}
         onPointerLeave={() => {
           hover.current = null;
-          if (useEditor.getState().tool.brush === 'eraser') requestDraw();
+          if (useEditor.getState().tool.brush === 'eraser' || useEditorUi.getState().imageErase) requestDraw();
         }}
         onDoubleClick={onDoubleClick}
         onContextMenu={onContextMenu}
@@ -1038,4 +1087,19 @@ function resizeCursor(handle: Handle, rotation: number): string {
   const cursors = ['ew-resize', 'nwse-resize', 'ns-resize', 'nesw-resize'];
 
   return cursors[Math.round(angle / 45) % 4];
+}
+
+/// จุดบนหน้า → พิกัดสัดส่วน 0–1 บนรูปเต็มก่อนครอป (ย้อนการหมุน พลิก และครอป) · null ถ้าอยู่นอกรูป
+function imagePoint(el: ImageElement, p: Point, allowOutside = false): { u: number; v: number } | null {
+  const local = el.rotation ? rotatePoint(p, center(el), -el.rotation) : p;
+  let u = (local.x - el.x) / el.width;
+  let v = (local.y - el.y) / el.height;
+
+  if (!allowOutside && (u < 0 || u > 1 || v < 0 || v > 1)) return null;
+  if (el.flipX) u = 1 - u;
+  if (el.flipY) v = 1 - v;
+
+  const crop = el.crop ?? { x: 0, y: 0, width: 1, height: 1 };
+
+  return { u: crop.x + u * crop.width, v: crop.y + v * crop.height };
 }

@@ -142,6 +142,20 @@ export interface Border {
   color: string;
 }
 
+/// แก้ไขสีเฉพาะช่วงสีที่เลือก (แผงปรับ → แก้ไขสี) · hue −100..100 = หมุนเฉดสี ±60° · ค่าอื่น −100..100
+export interface ColorEdit {
+  color: string;
+  hue: number;
+  saturation: number;
+  lightness: number;
+}
+
+/// รอยยางลบพิกเซล: `points` = [x0, y0, x1, y1, …] สัดส่วน 0–1 ของรูปเต็มก่อนครอป · `size` = เส้นผ่านศูนย์กลางเป็นสัดส่วนของความกว้างรูป
+export interface EraseStroke {
+  points: number[];
+  size: number;
+}
+
 export interface ImageElement extends BaseElement {
   type: 'image';
   /// asset ของผู้ใช้ (null = รูปที่ฝังเป็น data URL)
@@ -156,6 +170,8 @@ export interface ImageElement extends BaseElement {
   filter?: string | null;
   filterIntensity?: number;
   border?: Border | null;
+  colorEdits?: ColorEdit[] | null;
+  erase?: EraseStroke[] | null;
 }
 
 export interface SvgElement extends BaseElement {

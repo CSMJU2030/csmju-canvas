@@ -583,7 +583,9 @@
 
 /* แถบเลื่อนไล่สีของแผงปรับรูป (อุณหภูมิ · เฉดสี) แบบ Canva */
 .csmju-track-temperature,
-.csmju-track-tint {
+.csmju-track-tint,
+.csmju-track-hue,
+.csmju-track-sat {
   appearance: none;
   height: 8px;
   border-radius: 9999px;
@@ -594,8 +596,17 @@
 .csmju-track-tint {
   background: linear-gradient(90deg, rgb(60 200 90), rgb(235 235 235), rgb(220 80 220));
 }
+/* แก้ไขสี: เฉดสี (รุ้ง) · ความอิ่มตัว (เทา → แดงสด) */
+.csmju-track-hue {
+  background: linear-gradient(90deg, rgb(0 200 255), rgb(120 90 255), rgb(255 60 160), rgb(255 70 50), rgb(255 200 0), rgb(80 210 90), rgb(0 200 255));
+}
+.csmju-track-sat {
+  background: linear-gradient(90deg, rgb(200 200 200), rgb(240 80 70));
+}
 .csmju-track-temperature::-webkit-slider-thumb,
-.csmju-track-tint::-webkit-slider-thumb {
+.csmju-track-tint::-webkit-slider-thumb,
+.csmju-track-hue::-webkit-slider-thumb,
+.csmju-track-sat::-webkit-slider-thumb {
   appearance: none;
   width: 18px;
   height: 18px;
@@ -605,7 +616,9 @@
   box-shadow: var(--csmju-shadow-sm);
 }
 .csmju-track-temperature::-moz-range-thumb,
-.csmju-track-tint::-moz-range-thumb {
+.csmju-track-tint::-moz-range-thumb,
+.csmju-track-hue::-moz-range-thumb,
+.csmju-track-sat::-moz-range-thumb {
   width: 16px;
   height: 16px;
   border-radius: 9999px;
