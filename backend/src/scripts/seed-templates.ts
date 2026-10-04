@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient, type Prisma } from '../generated/prisma/client.js';
+import { templateTags } from '../modules/templates/template-tags.js';
 import { BUILTIN_TEMPLATES } from './builtin-templates.js';
 
 /// ใส่เทมเพลตตั้งต้นของทีม CS Canvas ลงฐานข้อมูล (รันซ้ำได้ — upsert ตาม id คงที่)
@@ -26,6 +27,7 @@ async function main(): Promise<void> {
         width: t.width,
         height: t.height,
         document: t.document as Prisma.InputJsonValue,
+        ...templateTags(t.document),
       };
 
       await prisma.template.upsert({

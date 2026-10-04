@@ -36,6 +36,7 @@ export class AssetsService {
       trashedAt: query.trashed ? { not: null } : null,
       ...(query.q ? { fileName: { contains: query.q, mode: 'insensitive' as const } } : {}),
       ...(query.mimeType ? { mimeType: query.mimeType } : {}),
+      ...(query.folderId ? { folderId: query.folderId } : {}),
     };
     const orderBy =
       query.sort === 'name'
@@ -113,13 +114,22 @@ export class AssetsService {
     }
   }
 
-  async update(coreUserId: string, id: string, patch: { trashed?: boolean; fileName?: string }) {
+  async update(coreUserId: string, id: string, patch: { trashed?: boolean; fileName?: string; folderId?: string | null }) {
     const row = await this.find(coreUserId, id);
+
+    // ย้ายได้เฉพาะเข้าโฟลเดอร์ของตัวเอง
+    if (patch.folderId) {
+      const folder = await this.prisma.assetFolder.findFirst({ where: { id: patch.folderId, coreUserId }, select: { id: true } });
+
+      if (!folder) throw new NotFoundException('ไม่พบโฟลเดอร์นี้');
+    }
+
     const updated = await this.prisma.asset.update({
       where: { id: row.id },
       data: {
         ...(patch.trashed !== undefined ? { trashedAt: patch.trashed ? (row.trashedAt ?? new Date()) : null } : {}),
         ...(patch.fileName !== undefined ? { fileName: cleanFileName(Buffer.from(patch.fileName, 'utf8').toString('latin1')) } : {}),
+        ...(patch.folderId !== undefined ? { folderId: patch.folderId } : {}),
       },
     });
 
@@ -201,6 +211,7 @@ export function toDto(row: Asset) {
     mimeType: row.mimeType,
     sizeBytes: row.sizeBytes,
     contentUrl: `/api/v1/assets/${row.id}/content`,
+    folderId: row.folderId,
     trashedAt: row.trashedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
   };

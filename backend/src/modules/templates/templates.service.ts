@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException, type OnModuleInit } from '@nestjs/common';
 import type { Prisma, Template } from '../../generated/prisma/client.js';
 import { subsystemRoleFor } from '../../auth/role-mapping.js';
 import type { CoreHubUser } from '../../common/auth/core-user.js';
@@ -10,10 +10,27 @@ import type {
   ListTemplatesQuery,
   UpdateTemplateDto,
 } from './dto/template.dto.js';
+import { templateTags } from './template-tags.js';
 
 @Injectable()
-export class TemplatesService {
+export class TemplatesService implements OnModuleInit {
   constructor(private readonly prisma: PrismaService) {}
+
+  /// เทมเพลตที่มีอยู่ก่อนมีตัวกรองสี/ภาษา (หรือเพิ่มตรงลงฐาน) — คำนวณป้ายให้ตอนบูต
+  async onModuleInit() {
+    const rows = await this.prisma.template.findMany({
+      where: { colorTags: { isEmpty: true }, languageTags: { isEmpty: true } },
+      select: { id: true, document: true },
+    });
+
+    for (const row of rows) {
+      const tags = templateTags(row.document);
+
+      if (tags.colorTags.length > 0 || tags.languageTags.length > 0) {
+        await this.prisma.template.update({ where: { id: row.id }, data: tags });
+      }
+    }
+  }
 
   async list(user: CoreHubUser, query: ListTemplatesQuery) {
     const and: Prisma.TemplateWhereInput[] = [];
@@ -30,6 +47,8 @@ export class TemplatesService {
     if (query.starred) and.push({ favorites: { some: { coreUserId: user.coreUserId } } });
     if (query.builtIn) and.push({ createdByCoreUserId: null });
     if (query.category) and.push({ category: query.category });
+    if (query.colors) and.push({ colorTags: { hasSome: query.colors.split(',') } });
+    if (query.language) and.push({ languageTags: { has: query.language } });
     if (query.owner === 'me') and.push({ createdByCoreUserId: user.coreUserId });
     if (query.owner === 'others') {
       and.push({
@@ -98,6 +117,7 @@ export class TemplatesService {
         height: dto.height,
         document: dto.document as Prisma.InputJsonValue,
         thumbnail: dto.thumbnail ?? null,
+        ...templateTags(dto.document),
       },
     });
 

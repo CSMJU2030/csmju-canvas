@@ -61,6 +61,48 @@ export const SWATCHES = [
   'rgb(255 255 255)',
 ];
 
+/// กลุ่มสีของตัวกรองเทมเพลต (ภาพบรีฟ "พรีเซนเทชั่น 1.1") — key ตรงกับ colorTags ของหลังบ้าน
+export const COLOR_FILTERS: { key: string; label: string; swatch: string }[] = [
+  { key: 'gray', label: 'เทา', swatch: 'rgb(115 115 115)' },
+  { key: 'blue', label: 'น้ำเงิน', swatch: 'rgb(79 110 247)' },
+  { key: 'sky', label: 'ฟ้า', swatch: 'rgb(56 182 255)' },
+  { key: 'teal', label: 'เขียวอมฟ้า', swatch: 'rgb(92 225 230)' },
+  { key: 'green', label: 'เขียว', swatch: 'rgb(126 217 87)' },
+  { key: 'lime', label: 'เขียวมะนาว', swatch: 'rgb(201 226 101)' },
+  { key: 'yellow', label: 'เหลือง', swatch: 'rgb(255 222 89)' },
+  { key: 'orange', label: 'ส้ม', swatch: 'rgb(255 145 77)' },
+  { key: 'red', label: 'แดง', swatch: 'rgb(255 87 87)' },
+  { key: 'pink', label: 'ชมพู', swatch: 'rgb(255 102 196)' },
+  { key: 'purple', label: 'ม่วง', swatch: 'rgb(140 82 255)' },
+  { key: 'white', label: 'ขาว', swatch: 'rgb(255 255 255)' },
+  { key: 'black', label: 'ดำ', swatch: 'rgb(0 0 0)' },
+];
+
+/// สีใด ๆ → กลุ่มสีของตัวกรอง (เกณฑ์เดียวกับ backend/src/modules/templates/template-tags.ts)
+export function colorFilterOf(color: string): string {
+  const hex = toInputColor(color).replace(/^#/, '');
+  const r = parseInt(hex.slice(0, 2), 16) / 255;
+  const g = parseInt(hex.slice(2, 4), 16) / 255;
+  const b = parseInt(hex.slice(4, 6), 16) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  const d = max - min;
+  const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+
+  if (l >= 0.93) return 'white';
+  if (l <= 0.12) return 'black';
+  if (s < 0.15) return l > 0.85 ? 'white' : 'gray';
+
+  let h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+
+  h = (h * 60 + 360) % 360;
+
+  const bands: [number, string][] = [[15, 'red'], [40, 'orange'], [62, 'yellow'], [85, 'lime'], [160, 'green'], [185, 'teal'], [215, 'sky'], [255, 'blue'], [290, 'purple'], [345, 'pink']];
+
+  return bands.find(([edge]) => h < edge)?.[1] ?? 'red';
+}
+
 /// สีที่ใช้อยู่ในงานนี้ ("สีในดีไซน์นี้" ของตัวเลือกสี) — เรียงตามที่พบ ไม่ซ้ำ
 export function documentColors(doc: DesignDocument, limit = 10): string[] {
   const seen = new Map<string, string>();

@@ -8,6 +8,7 @@ import { DataExportsModule } from './modules/data-exports/data-exports.js';
 import { DesignsModule } from './modules/designs/designs.module.js';
 import { FeedbacksModule } from './modules/feedbacks/feedbacks.js';
 import { FoldersModule } from './modules/folders/folders.js';
+import { AssetFoldersModule } from './modules/asset-folders/asset-folders.js';
 import { NotificationsModule } from './modules/notifications/notifications.module.js';
 import { PreferencesModule } from './modules/preferences/preferences.js';
 import { QuotasModule } from './modules/quotas/quotas.js';
@@ -25,6 +26,7 @@ import { TemplatesModule } from './modules/templates/templates.module.js';
     TemplatesModule,
     AssetsModule,
     FoldersModule,
+    AssetFoldersModule,
     PreferencesModule,
     QuotasModule,
     DataExportsModule,

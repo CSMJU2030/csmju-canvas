@@ -25,6 +25,7 @@ import {
 
 export const TEMPLATE_SORTS = ['popular', 'recent'] as const;
 export const TEMPLATE_OWNERS = ['me', 'others'] as const;
+const COLOR_LIST = /^(gray|blue|sky|teal|green|lime|yellow|orange|red|pink|purple|white|black)(,(gray|blue|sky|teal|green|lime|yellow|orange|red|pink|purple|white|black)){0,12}$/;
 
 export class ListTemplatesQuery extends PaginationQuery {
   @ApiPropertyOptional({ example: 'เกียรติบัตร' })
@@ -65,6 +66,16 @@ export class ListTemplatesQuery extends PaginationQuery {
   @BooleanQuery()
   @IsBoolean({ message: 'builtIn ต้องเป็น true หรือ false' })
   builtIn?: boolean;
+
+  @ApiPropertyOptional({ example: 'blue,yellow', description: 'กลุ่มสีคั่นด้วยจุลภาค — เทมเพลตที่มีสีใดสีหนึ่งในรายการ' })
+  @IsOptional()
+  @Matches(COLOR_LIST, { message: 'colors ต้องเป็นชื่อกลุ่มสีคั่นด้วยจุลภาค' })
+  colors?: string;
+
+  @ApiPropertyOptional({ enum: ['th', 'en'], description: 'ภาษาของข้อความในเทมเพลต' })
+  @IsOptional()
+  @IsIn(['th', 'en'], { message: 'language ต้องเป็น th หรือ en' })
+  language?: 'th' | 'en';
 }
 
 export class CreateFavoriteDto {

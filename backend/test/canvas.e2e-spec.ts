@@ -44,6 +44,8 @@ describe('CS Canvas API (e2e)', () => {
     await prisma.template.deleteMany({ where: { createdByCoreUserId: owners } });
     await prisma.asset.deleteMany({ where: { coreUserId: owners } });
     await prisma.folder.deleteMany({ where: { coreUserId: owners } });
+    await prisma.assetFolder.deleteMany({ where: { coreUserId: owners } });
+    await prisma.designVisit.deleteMany({ where: { coreUserId: owners } });
     await prisma.notification.deleteMany({ where: { coreUserId: owners } });
     await prisma.preference.deleteMany({ where: { coreUserId: owners } });
     await prisma.feedback.deleteMany({ where: { coreUserId: owners } });
@@ -281,5 +283,105 @@ describe('CS Canvas API (e2e)', () => {
 
     await http().delete(`/api/v1/template-favorites/${templateId}`).set('Authorization', bearer(student, 'student')).expect(200);
     await http().delete(`/api/v1/template-favorites/${templateId}`).set('Authorization', bearer(student, 'student')).expect(404);
+  });
+
+  it('โฟลเดอร์รูป: สร้าง ย้ายรูปเข้า กรอง และลบโฟลเดอร์แล้วรูปยังอยู่ · ย้ายเข้าโฟลเดอร์คนอื่นไม่ได้', async () => {
+    const folder = await http().post('/api/v1/asset-folders').set('Authorization', bearer(student, 'student')).send({ name: 'รูปกิจกรรม' }).expect(201);
+    const folderId = folder.body.data.id as string;
+    const asset = await http()
+      .post('/api/v1/assets')
+      .set('Authorization', bearer(student, 'student'))
+      .attach('file', PNG, { filename: 'in-folder.png', contentType: 'image/png' })
+      .expect(201);
+    const assetId = asset.body.data.id as string;
+
+    await http().patch(`/api/v1/assets/${assetId}`).set('Authorization', bearer(student, 'student')).send({ folderId }).expect(200);
+
+    const inFolder = await http().get(`/api/v1/assets?folderId=${folderId}`).set('Authorization', bearer(student, 'student')).expect(200);
+
+    expect(inFolder.body.data.map((a: { id: string }) => a.id)).toEqual([assetId]);
+    expect(inFolder.body.data[0].folderId).toBe(folderId);
+
+    const folders = await http().get('/api/v1/asset-folders').set('Authorization', bearer(student, 'student')).expect(200);
+
+    expect(folders.body.data.find((f: { id: string }) => f.id === folderId).assetCount).toBe(1);
+
+    // โฟลเดอร์ของคนอื่น = 404 ทั้งย้ายเข้าและลบ
+    const foreign = await http().post('/api/v1/asset-folders').set('Authorization', bearer(other, 'student')).send({ name: 'ของคนอื่น' }).expect(201);
+
+    await http().patch(`/api/v1/assets/${assetId}`).set('Authorization', bearer(student, 'student')).send({ folderId: foreign.body.data.id }).expect(404);
+    await http().delete(`/api/v1/asset-folders/${folderId}`).set('Authorization', bearer(other, 'student')).expect(404);
+
+    await http().delete(`/api/v1/asset-folders/${folderId}`).set('Authorization', bearer(student, 'student')).expect(200);
+
+    const after = await http().get('/api/v1/assets?q=in-folder').set('Authorization', bearer(student, 'student')).expect(200);
+
+    expect(after.body.data[0]).toMatchObject({ id: assetId, folderId: null });
+  });
+
+  it('แชร์กับคุณ: ขึ้นหลังเปิดลิงก์แชร์ · หายเมื่อเจ้าของปิดลิงก์', async () => {
+    const created = await http()
+      .post('/api/v1/designs')
+      .set('Authorization', bearer(student, 'student'))
+      .send({ title: 'งานแชร์ให้เพื่อน', designType: 'poster', width: 1123, height: 1587 })
+      .expect(201);
+    const id = created.body.data.id as string;
+    const sharedList = () => http().get('/api/v1/designs?scope=shared').set('Authorization', bearer(other, 'student')).expect(200);
+
+    await http().patch(`/api/v1/designs/${id}`).set('Authorization', bearer(student, 'student')).send({ linkAccess: 'VIEW' }).expect(200);
+    expect((await sharedList()).body.data.map((d: { id: string }) => d.id)).not.toContain(id);
+
+    await http().get(`/api/v1/designs/${id}`).set('Authorization', bearer(other, 'student')).expect(200);
+
+    const shared = await sharedList();
+
+    expect(shared.body.data.map((d: { id: string }) => d.id)).toContain(id);
+    expect(shared.body.data.find((d: { id: string }) => d.id === id).access).toBe('VIEW');
+
+    // scope=all ของคนที่ได้แชร์มีทั้งงานตัวเองและงานที่แชร์ · งานของฉัน (ค่าเริ่มต้น) ไม่มีงานคนอื่น
+    const all = await http().get('/api/v1/designs?scope=all&limit=100').set('Authorization', bearer(other, 'student')).expect(200);
+    const mine = await http().get('/api/v1/designs?limit=100').set('Authorization', bearer(other, 'student')).expect(200);
+
+    expect(all.body.data.map((d: { id: string }) => d.id)).toContain(id);
+    expect(mine.body.data.map((d: { id: string }) => d.id)).not.toContain(id);
+
+    await http().patch(`/api/v1/designs/${id}`).set('Authorization', bearer(student, 'student')).send({ linkAccess: 'NONE' }).expect(200);
+    expect((await sharedList()).body.data.map((d: { id: string }) => d.id)).not.toContain(id);
+
+    await http().get('/api/v1/designs?scope=everyone').set('Authorization', bearer(other, 'student')).expect(400);
+  });
+
+  it('กรองเทมเพลตตามสีและภาษาที่คำนวณจากงาน', async () => {
+    const document = {
+      version: 1,
+      pages: [
+        {
+          id: 'p1',
+          background: 'rgb(255 255 255)',
+          elements: [
+            { id: 't1', type: 'text', name: '', x: 0, y: 0, width: 100, height: 20, rotation: 0, opacity: 1, locked: false, hidden: false, groupId: null, text: 'ประกาศ Notice', color: 'rgb(220 38 38)' },
+          ],
+        },
+      ],
+    };
+    const created = await http()
+      .post('/api/v1/templates')
+      .set('Authorization', bearer(staff, 'staff'))
+      .send({ title: `ตัวกรองสี ${run}`, designType: 'poster', category: 'event', width: 1123, height: 1587, document })
+      .expect(201);
+    const id = created.body.data.id as string;
+    const ids = async (query: string) =>
+      (await http().get(`/api/v1/templates?limit=100&q=${run}&${query}`).set('Authorization', bearer(student, 'student')).expect(200)).body.data.map(
+        (t: { id: string }) => t.id,
+      );
+
+    expect(await ids('colors=red,blue')).toContain(id);
+    expect(await ids('colors=white')).toContain(id);
+    expect(await ids('colors=green')).not.toContain(id);
+    expect(await ids('language=th')).toContain(id);
+    expect(await ids('language=en&colors=red')).toContain(id);
+
+    await http().get('/api/v1/templates?colors=magenta').set('Authorization', bearer(student, 'student')).expect(400);
+    await http().get('/api/v1/templates?language=jp').set('Authorization', bearer(student, 'student')).expect(400);
   });
 });

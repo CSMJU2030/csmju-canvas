@@ -49,9 +49,17 @@ export class DesignsService {
   async list(coreUserId: string, query: ListDesignsQuery) {
     if (query.trashed) await this.purgeExpiredTrash(coreUserId);
 
+    // งานที่แชร์กับฉัน = เจ้าของยังเปิดลิงก์อยู่ ไม่อยู่ในถังขยะ และฉันเคยเปิดดู (ถังขยะมีแต่งานของฉัน)
+    const shared: Prisma.DesignWhereInput = {
+      coreUserId: { not: coreUserId },
+      linkAccess: { not: 'NONE' },
+      trashedAt: null,
+      visits: { some: { coreUserId } },
+    };
+    const mine: Prisma.DesignWhereInput = { coreUserId, trashedAt: query.trashed ? { not: null } : null };
+    const scope = query.trashed ? 'mine' : (query.scope ?? 'mine');
     const where: Prisma.DesignWhereInput = {
-      coreUserId,
-      trashedAt: query.trashed ? { not: null } : null,
+      AND: [scope === 'mine' ? mine : scope === 'shared' ? shared : { OR: [mine, shared] }],
       ...(query.q ? { title: { contains: query.q, mode: 'insensitive' } } : {}),
       ...(query.designType
         ? { designType: query.designType }
@@ -91,6 +99,15 @@ export class DesignsService {
     const row = await this.prisma.design.findUnique({ where: { id } });
 
     if (!row || accessOf(row, coreUserId) === null) throw new NotFoundException('ไม่พบงานนี้ อาจถูกลบไปแล้ว');
+
+    // จดว่าเคยเปิดงานที่แชร์มา → ขึ้นใน "แชร์กับคุณ" ของแผงโปรเจกต์
+    if (row.coreUserId !== coreUserId) {
+      await this.prisma.designVisit.upsert({
+        where: { designId_coreUserId: { designId: row.id, coreUserId } },
+        create: { designId: row.id, coreUserId },
+        update: { visitedAt: new Date() },
+      });
+    }
 
     return { ...toSummary(row, coreUserId), document: row.document as Record<string, unknown> };
   }

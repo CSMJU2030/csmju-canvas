@@ -35,6 +35,7 @@ export const EDITED_WITHIN = ['day', 'week', 'month', 'year'] as const;
 export const LINK_ACCESS = ['NONE', 'VIEW', 'EDIT'] as const;
 export const MAX_TAGS = 20;
 export const DESIGN_SORTS = ['updated', 'created', 'title'] as const;
+export const DESIGN_SCOPES = ['mine', 'shared', 'all'] as const;
 
 export class ListDesignsQuery extends PaginationQuery {
   @ApiPropertyOptional({ description: 'ค้นจากชื่องาน', example: 'โปสเตอร์' })
@@ -74,6 +75,15 @@ export class ListDesignsQuery extends PaginationQuery {
   @IsOptional()
   @IsIn(DESIGN_SORTS, { message: 'sort ต้องเป็น updated, created หรือ title' })
   sort?: (typeof DESIGN_SORTS)[number];
+
+  @ApiPropertyOptional({
+    enum: DESIGN_SCOPES,
+    default: 'mine',
+    description: 'mine = งานของฉัน · shared = งานของคนอื่นที่ฉันเคยเปิดจากลิงก์แชร์ · all = ทั้งสองอย่าง',
+  })
+  @IsOptional()
+  @IsIn(DESIGN_SCOPES, { message: 'scope ต้องเป็น mine, shared หรือ all' })
+  scope?: (typeof DESIGN_SCOPES)[number];
 }
 
 export class CreateDesignDto {

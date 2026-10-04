@@ -51,8 +51,18 @@ export interface Asset {
   mimeType: string;
   sizeBytes: number;
   contentUrl: string;
+  /// โฟลเดอร์รูป (แผงอัปโหลด) · null = ไม่อยู่ในโฟลเดอร์
+  folderId: string | null;
   trashedAt: string | null;
   createdAt: string;
+}
+
+export interface AssetFolder {
+  id: string;
+  name: string;
+  assetCount: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Folder {

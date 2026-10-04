@@ -1,8 +1,11 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Folder as FolderIcon, LayoutGrid, Plus, Search, Star } from 'lucide-react';
-import { useId, useState } from 'react';
+import { ArrowLeft, Check, ChevronDown, Folder as FolderIcon, Folders, LayoutGrid, Plus, Search, Star, UsersRound } from 'lucide-react';
+import { useId, useState, type ReactNode } from 'react';
+import { FloatingPanel, useAnchoredMenu } from '@/components/csmju/floating';
+import { Avatar } from '@/components/shell/avatar';
+import { useMe } from '@/lib/csmju/session';
 import { Button, Dialog, ErrorState, Spinner, cx, errorMessage, inputClass, useToast } from '@/components/csmju/primitives';
 import { Thumbnail } from '@/components/designs/cards';
 import { api, qs } from '@/lib/csmju/api';
@@ -18,6 +21,7 @@ import type { Asset, Design, DesignSummary, Folder, Template, TemplateSummary } 
 /// แท็บ ทั้งหมด · ดีไซน์ · โฟลเดอร์ · รูปภาพ — กดดีไซน์ = ต่อหน้าของงานนั้นท้ายงานนี้ · กดรูป = ใส่รูปลงหน้า
 
 type Tab = 'all' | 'designs' | 'folders' | 'images';
+type Scope = 'all' | 'mine' | 'shared';
 type View = { kind: 'tabs' } | { kind: 'folder'; folder: Folder } | { kind: 'starred' };
 
 export function ProjectsPanel({ initialView }: { initialView?: 'starred' }) {
@@ -25,8 +29,11 @@ export function ProjectsPanel({ initialView }: { initialView?: 'starred' }) {
   const [view, setView] = useState<View>(initialView === 'starred' ? { kind: 'starred' } : { kind: 'tabs' });
   const [q, setQ] = useState('');
   const [creating, setCreating] = useState(false);
+  const [scope, setScope] = useState<Scope>('mine');
   const searchId = useId();
   const term = q.trim();
+  // งานที่แชร์มามีแต่ดีไซน์ (โฟลเดอร์และรูปเป็นของเราเท่านั้น)
+  const sharedOnly = scope === 'shared';
 
   if (view.kind === 'starred') return <StarredView onBack={() => setView({ kind: 'tabs' })} />;
 
@@ -35,7 +42,7 @@ export function ProjectsPanel({ initialView }: { initialView?: 'starred' }) {
       <div className="flex min-h-0 flex-1 flex-col">
         <BackHeader title={view.folder.name} onBack={() => setView({ kind: 'tabs' })} />
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
-          <DesignGrid folderId={view.folder.id} q="" emptyText="โฟลเดอร์นี้ยังไม่มีดีไซน์" />
+          <DesignGrid folderId={view.folder.id} q="" scope="mine" emptyText="โฟลเดอร์นี้ยังไม่มีดีไซน์" />
         </div>
       </div>
     );
@@ -63,8 +70,15 @@ export function ProjectsPanel({ initialView }: { initialView?: 'starred' }) {
             className="min-h-14 w-full rounded-2xl border border-line-strong bg-surface pr-4 pl-12 text-csmju-body text-ink placeholder:text-muted focus:border-primary focus:outline-none"
           />
         </div>
+        <ScopeMenu
+          value={scope}
+          onChange={(next) => {
+            setScope(next);
+            if (next === 'shared') setTab('all');
+          }}
+        />
         <div role="tablist" aria-label="ชนิดคอนเทนต์" className="mt-3 flex">
-          {tabs.map((t) => (
+          {(sharedOnly ? tabs.filter((t) => t.key === 'all' || t.key === 'designs') : tabs).map((t) => (
             <button
               key={t.key}
               type="button"
@@ -87,8 +101,10 @@ export function ProjectsPanel({ initialView }: { initialView?: 'starred' }) {
           <div className="flex flex-col gap-6">
             <section>
               <SectionHeading title="ดีไซน์" onSeeAll={() => setTab('designs')} />
-              <DesignGrid q={term} limit={4} emptyText={term ? 'ไม่พบดีไซน์ที่ค้นหา' : 'ยังไม่มีดีไซน์อื่น'} />
+              <DesignGrid q={term} scope={scope} limit={sharedOnly ? 30 : 4} emptyText={emptyDesigns(scope, term)} />
             </section>
+            {!sharedOnly && (
+            <>
             <section>
               <SectionHeading title="โฟลเดอร์" />
               <FolderList q={term} onOpen={(folder) => setView({ kind: 'folder', folder })} onStarred={() => setView({ kind: 'starred' })} onCreate={() => setCreating(true)} />
@@ -97,17 +113,77 @@ export function ProjectsPanel({ initialView }: { initialView?: 'starred' }) {
               <SectionHeading title="รูปภาพ" onSeeAll={() => setTab('images')} />
               <ImageGrid q={term} limit={6} />
             </section>
+            </>
+            )}
           </div>
         )}
-        {tab === 'designs' && <DesignGrid q={term} emptyText={term ? 'ไม่พบดีไซน์ที่ค้นหา' : 'ยังไม่มีดีไซน์อื่น'} />}
+        {tab === 'designs' && <DesignGrid q={term} scope={scope} emptyText={emptyDesigns(scope, term)} />}
         {tab === 'folders' && (
           <FolderList q={term} onOpen={(folder) => setView({ kind: 'folder', folder })} onStarred={() => setView({ kind: 'starred' })} onCreate={() => setCreating(true)} />
         )}
         {tab === 'images' && <ImageGrid q={term} />}
       </div>
 
-      {creating && <CreateFolderDialog onClose={() => setCreating(false)} />}
+      {creating && <CreateFolderDialog endpoint="/folders" queryKey="folders" onClose={() => setCreating(false)} />}
     </div>
+  );
+}
+
+function emptyDesigns(scope: Scope, term: string): string {
+  if (term) return 'ไม่พบดีไซน์ที่ค้นหา';
+  if (scope === 'shared') return 'ยังไม่มีงานที่แชร์กับคุณ — งานที่เพื่อนส่งลิงก์มาและคุณเปิดดูแล้วจะแสดงที่นี่';
+
+  return 'ยังไม่มีดีไซน์อื่น';
+}
+
+/// "โปรเจกต์ของคุณ ⌄" (ภาพบรีฟ "พรีเซนเทชั่น โปรเจกต์ 1"): ทั้งหมด · ของคุณ · แชร์กับคุณ
+function ScopeMenu({ value, onChange }: { value: Scope; onChange: (scope: Scope) => void }) {
+  const me = useMe();
+  const { open, setOpen, anchorRef, menuRef } = useAnchoredMenu('start');
+  const options: { key: Scope; label: string; icon: ReactNode }[] = [
+    { key: 'all', label: 'โปรเจกต์ทั้งหมด', icon: <Folders aria-hidden className="size-6 text-ink" /> },
+    { key: 'mine', label: 'โปรเจกต์ของคุณ', icon: <Avatar email={me.email} size="sm" /> },
+    { key: 'shared', label: 'แชร์กับคุณ', icon: <UsersRound aria-hidden className="size-6 text-ink" /> },
+  ];
+  const current = options.find((o) => o.key === value)!;
+
+  return (
+    <>
+      <button
+        ref={anchorRef}
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className={cx(
+          'mt-3 flex min-h-12 w-full items-center gap-3 rounded-xl border bg-surface px-4 text-left text-csmju-body text-ink',
+          open ? 'border-primary' : 'border-line-strong hover:bg-surface-muted',
+        )}
+      >
+        {current.icon}
+        <span className="flex-1">{current.label}</span>
+        <ChevronDown aria-hidden className={cx('size-5 transition-transform', open && 'rotate-180')} />
+      </button>
+      <FloatingPanel open={open} menuRef={menuRef} label="เลือกขอบเขตโปรเจกต์" className="w-88 rounded-2xl border border-line bg-surface py-2 shadow-csmju-lg">
+        {options.map((option) => (
+          <button
+            key={option.key}
+            type="button"
+            role="menuitemradio"
+            aria-checked={value === option.key}
+            onClick={() => {
+              onChange(option.key);
+              setOpen(false);
+            }}
+            className={cx('flex min-h-12 w-full items-center gap-3 px-4 text-left text-csmju-body text-ink', value === option.key ? 'bg-surface-muted' : 'hover:bg-surface-muted')}
+          >
+            {option.icon}
+            <span className="flex-1">{option.label}</span>
+            {value === option.key && <Check aria-hidden className="size-5" />}
+          </button>
+        ))}
+      </FloatingPanel>
+    </>
   );
 }
 
@@ -136,12 +212,12 @@ function SectionHeading({ title, onSeeAll }: { title: string; onSeeAll?: () => v
 }
 
 /// ดีไซน์ของฉัน (ไม่รวมงานที่เปิดอยู่) — กดแล้วต่อหน้าของงานนั้นท้ายงานนี้
-function DesignGrid({ q, folderId, limit = 30, emptyText }: { q: string; folderId?: string; limit?: number; emptyText: string }) {
+function DesignGrid({ q, folderId, scope, limit = 30, emptyText }: { q: string; folderId?: string; scope: Scope; limit?: number; emptyText: string }) {
   const designId = useEditor((s) => s.designId);
   const toast = useToast();
   const designs = useQuery({
-    queryKey: ['designs', 'editor-projects', q, folderId ?? '', limit],
-    queryFn: () => api.list<DesignSummary>(`/designs${qs({ q: q || undefined, folderId, sort: 'updated', limit: limit + 1 })}`),
+    queryKey: ['designs', 'editor-projects', scope, q, folderId ?? '', limit],
+    queryFn: () => api.list<DesignSummary>(`/designs${qs({ q: q || undefined, folderId, scope, sort: 'updated', limit: limit + 1 })}`),
   });
 
   const insert = async (design: DesignSummary) => {
@@ -328,15 +404,16 @@ function StarredView({ onBack }: { onBack: () => void }) {
   );
 }
 
-function CreateFolderDialog({ onClose }: { onClose: () => void }) {
+/// สร้างโฟลเดอร์ — ใช้ทั้งโฟลเดอร์ดีไซน์ (/folders) และโฟลเดอร์รูป (/asset-folders)
+export function CreateFolderDialog({ endpoint, queryKey, onClose }: { endpoint: '/folders' | '/asset-folders'; queryKey: string; onClose: () => void }) {
   const [name, setName] = useState('โฟลเดอร์ที่ไม่มีชื่อ');
   const nameId = useId();
   const toast = useToast();
   const queryClient = useQueryClient();
   const create = useMutation({
-    mutationFn: () => api.post<Folder>('/folders', { name: name.trim().slice(0, 80) }),
+    mutationFn: () => api.post<Folder>(endpoint, { name: name.trim().slice(0, 80) }),
     onSuccess: (folder) => {
-      void queryClient.invalidateQueries({ queryKey: ['folders'] });
+      void queryClient.invalidateQueries({ queryKey: [queryKey] });
       toast(`สร้างโฟลเดอร์ “${folder.name}” แล้ว`);
       onClose();
     },

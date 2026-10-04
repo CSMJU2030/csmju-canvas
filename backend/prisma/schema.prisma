@@ -84,8 +84,9 @@ model Design {
   createdAt        DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt        DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  folder         Folder?   @relation("FolderDesigns", fields: [folderId], references: [id], onDelete: SetNull)
-  sourceTemplate Template? @relation("TemplateDesigns", fields: [sourceTemplateId], references: [id], onDelete: SetNull)
+  folder         Folder?       @relation("FolderDesigns", fields: [folderId], references: [id], onDelete: SetNull)
+  sourceTemplate Template?     @relation("TemplateDesigns", fields: [sourceTemplateId], references: [id], onDelete: SetNull)
+  visits         DesignVisit[] @relation("DesignVisits")
 
   @@index([coreUserId, trashedAt, updatedAt])
   @@map("designs")
@@ -105,6 +106,10 @@ model Template {
   document            Json
   thumbnail           String?
   usageCount          Int      @default(0) @map("usage_count")
+  /// กลุ่มสีที่ใช้ในเทมเพลต (red · blue · …) คำนวณจาก document ตอนบันทึก — ตัวกรอง "สี" ในหน้าแก้ไข
+  colorTags           String[] @default([]) @map("color_tags")
+  /// ภาษาของข้อความในเทมเพลต (th · en) — ตัวกรอง "ภาษา"
+  languageTags        String[] @default([]) @map("language_tags")
   createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -124,11 +129,43 @@ model Asset {
   mimeType    String    @map("mime_type") @db.VarChar(60)
   sizeBytes   Int       @map("size_bytes")
   storagePath String    @map("storage_path") @db.VarChar(200)
+  folderId    String?   @map("folder_id") @db.Uuid
   trashedAt   DateTime? @map("trashed_at") @db.Timestamptz(3)
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
 
+  folder AssetFolder? @relation("AssetFolderAssets", fields: [folderId], references: [id], onDelete: SetNull)
+
   @@index([coreUserId, trashedAt])
+  @@index([folderId])
   @@map("assets")
+}
+
+/// โฟลเดอร์จัดระเบียบรูปที่อัปโหลด (แผงอัปโหลด → แท็บโฟลเดอร์) — ลบโฟลเดอร์แล้วรูปยังอยู่
+model AssetFolder {
+  id         String   @id @default(uuid()) @db.Uuid
+  coreUserId String   @map("core_user_id")
+  name       String   @db.VarChar(80)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  assets Asset[] @relation("AssetFolderAssets")
+
+  @@index([coreUserId])
+  @@map("asset_folders")
+}
+
+/// ผู้ใช้คนอื่นเปิดงานที่แชร์ด้วยลิงก์ (ใช้ทำ "แชร์กับคุณ") — เก็บแค่ core_user_id กับเวลาเปิดล่าสุด
+model DesignVisit {
+  id         String   @id @default(uuid()) @db.Uuid
+  designId   String   @map("design_id") @db.Uuid
+  coreUserId String   @map("core_user_id")
+  visitedAt  DateTime @default(now()) @map("visited_at") @db.Timestamptz(3)
+
+  design Design @relation("DesignVisits", fields: [designId], references: [id], onDelete: Cascade)
+
+  @@unique([designId, coreUserId])
+  @@index([coreUserId, visitedAt])
+  @@map("design_visits")
 }
 
 model Notification {

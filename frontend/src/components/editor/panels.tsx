@@ -2,17 +2,20 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  ArrowDown, ArrowLeft, ArrowUp, Copy, Ellipsis, Eye, EyeOff, Folder as FolderIcon, FolderOpen, ImageIcon,
-  LayoutPanelLeft, Lock, LockOpen, PenLine, Plus, Search, Shapes, Smile, Spline, Star, StickyNote, Trash2, Type, CloudUpload,
+  ArrowDown, ArrowLeft, ArrowUp, ChevronDown, Copy, Ellipsis, Eye, EyeOff, Folder as FolderIcon, FolderInput, FolderMinus,
+  FolderOpen, FolderPlus, Globe, ImageIcon, LayoutPanelLeft, Lock, LockOpen, PenLine, Pencil, Plus, Search, Shapes,
+  SlidersHorizontal, Smile, Spline, Star, StickyNote, Trash2, Type, CloudUpload,
 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Button, EmptyState, ErrorState, IconButton, Spinner, cx, errorMessage, useToast } from '@/components/csmju/primitives';
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { FloatingPanel, useAnchoredMenu } from '@/components/csmju/floating';
+import { Button, EmptyState, ErrorState, IconButton, Menu, Spinner, cx, errorMessage, useToast } from '@/components/csmju/primitives';
 import { Thumbnail } from '@/components/designs/cards';
 import { api, qs } from '@/lib/csmju/api';
 import {
   FONT_SETS, STICKY_COLORS, createFontSet, createImage, createShape, createSticky, createSvg, createText, layerLabel,
   textPresetText, type FontSet, type TextPreset,
 } from '@/lib/editor/factory';
+import { COLOR_FILTERS, colorFilterOf } from '@/lib/editor/color';
 import { fitTemplate } from '@/lib/editor/fit-template';
 import { cssFamily, ensureFont } from '@/lib/editor/fonts';
 import { ICONS, iconSvg } from '@/lib/editor/icons';
@@ -20,9 +23,10 @@ import { pushRecent, useRecent } from '@/lib/editor/recent';
 import { measureTextHeight, renderPageToCanvas } from '@/lib/editor/render';
 import { currentPage, useEditor } from '@/lib/editor/store';
 import { normalizeDocument, type ShapeKind } from '@/lib/editor/types';
-import type { Asset, Template, TemplateSummary } from '@/lib/types';
+import type { Asset, AssetFolder, Template, TemplateSummary } from '@/lib/types';
+import { ColorPicker, RainbowSwatch, Swatch } from './color-picker';
 import { matchFonts, usePreloadFonts } from './font-picker';
-import { ProjectsPanel } from './project-panel';
+import { CreateFolderDialog, ProjectsPanel } from './project-panel';
 import { SignaturePanel } from './signature-panel';
 import { LINES, SHAPES, ShapeGlyph } from './tools-palette';
 
@@ -133,7 +137,21 @@ function usePageSize() {
 }
 
 /// ช่องค้นหาบนสุดของแผง (กรอบขาวมุมมน แบบ Canva)
-function PanelSearch({ id, label, value, onChange, onSubmit }: { id: string; label: string; value: string; onChange: (v: string) => void; onSubmit?: () => void }) {
+function PanelSearch({
+  id,
+  label,
+  value,
+  onChange,
+  onSubmit,
+  trailing,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  onSubmit?: () => void;
+  trailing?: ReactNode;
+}) {
   return (
     <form
       role="search"
@@ -151,8 +169,12 @@ function PanelSearch({ id, label, value, onChange, onSubmit }: { id: string; lab
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={label}
-        className="min-h-14 w-full rounded-2xl border border-line-strong bg-surface pr-4 pl-12 text-csmju-body text-ink placeholder:text-muted focus:border-primary focus:outline-none"
+        className={cx(
+          'min-h-14 w-full rounded-2xl border border-line-strong bg-surface pl-12 text-csmju-body text-ink placeholder:text-muted focus:border-primary focus:outline-none',
+          trailing ? 'pr-16' : 'pr-4',
+        )}
       />
+      {trailing && <div className="absolute top-1/2 right-2 -translate-y-1/2">{trailing}</div>}
     </form>
   );
 }
@@ -180,15 +202,18 @@ function TemplatesPanel() {
   const [draft, setDraft] = useState('');
   const [q, setQ] = useState('');
   const [showAllRecent, setShowAllRecent] = useState(false);
+  const [filters, setFilters] = useState<TemplateFilters>(NO_FILTERS);
   const recent = useRecent<RecentTemplate>('templates');
   const toast = useToast();
+  const filterParams = { colors: filters.colors.join(',') || undefined, language: filters.language || undefined };
+  const filtering = Boolean(q || filterParams.colors || filterParams.language);
   const sameType = useQuery({
-    queryKey: ['templates', 'editor', designType],
-    queryFn: () => api.list<TemplateSummary>(`/templates${qs({ designType, sort: 'popular', limit: 30 })}`),
+    queryKey: ['templates', 'editor', designType, filterParams],
+    queryFn: () => api.list<TemplateSummary>(`/templates${qs({ designType, sort: 'popular', limit: 30, ...filterParams })}`),
   });
   const all = useQuery({
-    queryKey: ['templates', 'editor-all', q],
-    queryFn: () => api.list<TemplateSummary>(`/templates${qs({ q: q || undefined, sort: 'popular', limit: 40 })}`),
+    queryKey: ['templates', 'editor-all', q, filterParams],
+    queryFn: () => api.list<TemplateSummary>(`/templates${qs({ q: q || undefined, sort: 'popular', limit: 40, ...filterParams })}`),
   });
 
   const apply = async (template: RecentTemplate) => {
@@ -228,7 +253,14 @@ function TemplatesPanel() {
     <PanelFrame
       header={
         <>
-          <PanelSearch id="template-search" label="ค้นหาเทมเพลต" value={draft} onChange={setDraft} onSubmit={() => setQ(draft.trim())} />
+          <PanelSearch
+            id="template-search"
+            label="ค้นหาเทมเพลต"
+            value={draft}
+            onChange={setDraft}
+            onSubmit={() => setQ(draft.trim())}
+            trailing={<TemplateFilterButton value={filters} onApply={setFilters} />}
+          />
           <div className="flex gap-2">
             <button
               type="button"
@@ -237,12 +269,13 @@ function TemplatesPanel() {
             >
               ค้นหา
             </button>
-            {q && (
+            {filtering && (
               <button
                 type="button"
                 onClick={() => {
                   setQ('');
                   setDraft('');
+                  setFilters(NO_FILTERS);
                 }}
                 className="min-h-12 rounded-xl border border-line-strong px-4 text-csmju-caption font-semibold text-ink hover:bg-surface-muted"
               >
@@ -253,7 +286,7 @@ function TemplatesPanel() {
         </>
       }
     >
-      {!q && recent.length > 0 && (
+      {!filtering && recent.length > 0 && (
         <section className="mb-6">
           <SectionHeading onSeeAll={recent.length > 2 ? () => setShowAllRecent((v) => !v) : undefined} seeAllLabel={showAllRecent ? 'ย่อ' : 'ดูทั้งหมด'}>
             ใช้งานล่าสุด
@@ -262,7 +295,7 @@ function TemplatesPanel() {
         </section>
       )}
       <section>
-        <SectionHeading>{q ? `ผลการค้นหา “${q}”` : 'เทมเพลตอื่นๆ ที่เหมาะกับคุณ'}</SectionHeading>
+        <SectionHeading>{q ? `ผลการค้นหา “${q}”` : filtering ? 'เทมเพลตตามตัวกรอง' : 'เทมเพลตอื่นๆ ที่เหมาะกับคุณ'}</SectionHeading>
         {all.isLoading || sameType.isLoading ? (
           <Spinner />
         ) : all.isError ? (
@@ -289,6 +322,121 @@ function TemplateGrid({ items, onPick }: { items: RecentTemplate[]; onPick: (t: 
         </li>
       ))}
     </ul>
+  );
+}
+
+interface TemplateFilters {
+  colors: string[];
+  language: '' | 'th' | 'en';
+}
+
+const NO_FILTERS: TemplateFilters = { colors: [], language: '' };
+
+/// ปุ่มตัวกรองในช่องค้นหาเทมเพลต (ภาพบรีฟ "พรีเซนเทชั่น 1.1"): สี · ภาษา · ล้างทั้งหมด · นำไปใช้
+///
+/// สีและภาษาคำนวณจากงานจริงของเทมเพลตแต่ละชิ้นที่หลังบ้าน (colorTags · languageTags)
+function TemplateFilterButton({ value, onApply }: { value: TemplateFilters; onApply: (next: TemplateFilters) => void }) {
+  const { open, setOpen, anchorRef, menuRef } = useAnchoredMenu('start');
+  const [draft, setDraft] = useState<TemplateFilters>(value);
+  const [custom, setCustom] = useState(false);
+  const [customColor, setCustomColor] = useState('rgb(0 76 153)');
+  const languageId = useId();
+  const active = value.colors.length + (value.language ? 1 : 0);
+  const count = draft.colors.length + (draft.language ? 1 : 0);
+  const toggleColor = (key: string) =>
+    setDraft((d) => ({ ...d, colors: d.colors.includes(key) ? d.colors.filter((c) => c !== key) : [...d.colors, key] }));
+
+  return (
+    <>
+      <button
+        ref={anchorRef}
+        type="button"
+        aria-label={active ? `ตัวกรอง (ใช้อยู่ ${active})` : 'ตัวกรอง'}
+        title="ตัวกรอง"
+        aria-expanded={open}
+        onClick={() => {
+          setDraft(value);
+          setCustom(false);
+          setOpen((v) => !v);
+        }}
+        className={cx('relative inline-flex size-11 items-center justify-center rounded-full text-ink', open || active ? 'bg-surface-muted' : 'hover:bg-surface-muted')}
+      >
+        <SlidersHorizontal aria-hidden className="size-5" />
+        {active > 0 && (
+          <span className="absolute -top-1 -right-1 flex size-5 items-center justify-center rounded-full bg-primary text-csmju-caption leading-none font-bold text-on-inverse">
+            {active}
+          </span>
+        )}
+      </button>
+      <FloatingPanel open={open} menuRef={menuRef} role="dialog" label="ตัวกรองเทมเพลต" className="w-96 max-w-full rounded-2xl border border-line bg-surface shadow-csmju-lg">
+        <div className="p-5">
+          <h3 className="mb-3 text-csmju-body font-bold text-ink">สี</h3>
+          {custom ? (
+            <div className="flex flex-col gap-3">
+              <ColorPicker value={customColor} onChange={setCustomColor} />
+              <div className="flex gap-2">
+                <Button onClick={() => setCustom(false)}>ยกเลิก</Button>
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    const key = colorFilterOf(customColor);
+
+                    setDraft((d) => (d.colors.includes(key) ? d : { ...d, colors: [...d.colors, key] }));
+                    setCustom(false);
+                  }}
+                >
+                  ใช้สีนี้ (กลุ่ม{COLOR_FILTERS.find((c) => c.key === colorFilterOf(customColor))?.label})
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-7 gap-2">
+              <RainbowSwatch label="เลือกสีเอง" onClick={() => setCustom(true)} />
+              {COLOR_FILTERS.map((color) => (
+                <Swatch key={color.key} color={color.swatch} label={`สี${color.label}`} selected={draft.colors.includes(color.key)} onClick={() => toggleColor(color.key)} />
+              ))}
+            </div>
+          )}
+          <label htmlFor={languageId} className="mt-5 mb-2 block text-csmju-body font-bold text-ink">
+            ภาษา
+          </label>
+          <div className="relative">
+            <Globe aria-hidden className="pointer-events-none absolute top-1/2 left-3 size-5 -translate-y-1/2 text-ink" />
+            <select
+              id={languageId}
+              value={draft.language}
+              onChange={(event) => setDraft((d) => ({ ...d, language: event.target.value as TemplateFilters['language'] }))}
+              className="min-h-12 w-full appearance-none rounded-xl border border-line-strong bg-surface pr-10 pl-11 text-csmju-body text-ink focus:border-primary focus:outline-none"
+            >
+              <option value="">ทุกภาษา</option>
+              <option value="th">ไทย</option>
+              <option value="en">อังกฤษ</option>
+            </select>
+            <ChevronDown aria-hidden className="pointer-events-none absolute top-1/2 right-3 size-5 -translate-y-1/2 text-ink" />
+          </div>
+        </div>
+        <div className="flex gap-3 border-t border-line p-4">
+          <button
+            type="button"
+            disabled={count === 0}
+            onClick={() => setDraft(NO_FILTERS)}
+            className="min-h-12 flex-1 rounded-xl border border-line-strong text-csmju-body font-semibold text-ink hover:bg-surface-muted disabled:text-muted"
+          >
+            ล้างทั้งหมด ({count})
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              onApply(draft);
+              setOpen(false);
+            }}
+            className="min-h-12 flex-1 rounded-xl bg-primary text-csmju-body font-semibold text-on-inverse hover:bg-primary-hover"
+          >
+            นำไปใช้
+          </button>
+        </div>
+      </FloatingPanel>
+    </>
   );
 }
 
@@ -646,18 +794,21 @@ function FontSetGrid({ sets, onPick }: { sets: FontSet[]; onPick: (set: FontSet)
 
 const ACCEPTED = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/svg+xml'];
 
+type UploadView = { kind: 'library' } | { kind: 'options' } | { kind: 'folder'; folder: AssetFolder };
+
+/// แผง "อัปโหลด" (ภาพบรีฟ "พรีเซนเทชั่น 3"): แท็บรูป · โฟลเดอร์ · ปุ่ม "…" = ตัวเลือกการอัปโหลด
 function UploadsPanel() {
   const page = usePageSize();
   const [q, setQ] = useState('');
-  const [view, setView] = useState<'library' | 'options'>('library');
+  const [tab, setTab] = useState<'images' | 'folders'>('images');
+  const [view, setView] = useState<UploadView>({ kind: 'library' });
+  const [creating, setCreating] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
   const toast = useToast();
-  const assets = useQuery({
-    queryKey: ['assets', 'library', q.trim()],
-    queryFn: () => api.list<Asset>(`/assets${qs({ q: q.trim() || undefined, limit: 60 })}`),
-  });
+  const folders = useQuery({ queryKey: ['asset-folders'], queryFn: () => api.list<AssetFolder>('/asset-folders?limit=100') });
+  const targetFolder = view.kind === 'folder' ? view.folder.id : undefined;
 
   // อัปโหลดทั้งโฟลเดอร์ต้องใช้ attribute ที่ React ไม่รู้จัก — ตั้งตรงที่ DOM
   useEffect(() => {
@@ -681,32 +832,34 @@ function UploadsPanel() {
     img.src = asset.contentUrl;
   };
 
+  const refresh = () => {
+    void queryClient.invalidateQueries({ queryKey: ['assets'] });
+    void queryClient.invalidateQueries({ queryKey: ['asset-folders'] });
+  };
+
   const upload = useMutation({
-    mutationFn: async ({ files, insertFirst }: { files: File[]; insertFirst: boolean }) => {
+    // อัปโหลดขณะเปิดโฟลเดอร์อยู่ = ใส่รูปไว้ในโฟลเดอร์นั้นเลย
+    mutationFn: async ({ files, insertFirst, folderId }: { files: File[]; insertFirst: boolean; folderId?: string }) => {
       const done: Asset[] = [];
 
-      for (const file of files) done.push(await api.upload<Asset>('/assets', file));
+      for (const file of files) {
+        const asset = await api.upload<Asset>('/assets', file);
+
+        done.push(folderId ? await api.patch<Asset>(`/assets/${asset.id}`, { folderId }) : asset);
+      }
 
       return { done, insertFirst };
     },
     onSuccess: ({ done, insertFirst }) => {
-      void queryClient.invalidateQueries({ queryKey: ['assets'] });
+      refresh();
       void queryClient.invalidateQueries({ queryKey: ['quotas'] });
       if (insertFirst && done.length === 1) insert(done[0]);
       else toast(`อัปโหลดแล้ว ${done.length} รูป`);
     },
     onError: (error) => {
-      void queryClient.invalidateQueries({ queryKey: ['assets'] });
+      refresh();
       toast(errorMessage(error), 'error');
     },
-  });
-  const trash = useMutation({
-    mutationFn: (id: string) => api.patch(`/assets/${id}`, { trashed: true }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['assets'] });
-      toast('ย้ายรูปไปถังขยะแล้ว');
-    },
-    onError: (error) => toast(errorMessage(error), 'error'),
   });
 
   const pickFiles = (list: FileList | null, fromFolder: boolean) => {
@@ -719,8 +872,8 @@ function UploadsPanel() {
     }
 
     if (fromFolder && images.length < files.length) toast(`ข้าม ${files.length - images.length} ไฟล์ที่ไม่ใช่รูป`);
-    upload.mutate({ files: images, insertFirst: !fromFolder });
-    setView('library');
+    upload.mutate({ files: images, insertFirst: !fromFolder, folderId: targetFolder });
+    if (view.kind === 'options') setView({ kind: 'library' });
   };
 
   const inputs = (
@@ -751,9 +904,31 @@ function UploadsPanel() {
     </>
   );
 
-  if (view === 'options') {
+  const uploadButtons = (
+    <div className="flex gap-2">
+      <button
+        type="button"
+        disabled={upload.isPending}
+        onClick={() => input.current?.click()}
+        className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-primary text-csmju-body font-semibold text-on-inverse hover:bg-primary-hover disabled:opacity-60"
+      >
+        {upload.isPending ? 'กำลังอัปโหลด…' : 'อัปโหลดไฟล์'}
+      </button>
+      <button
+        type="button"
+        onClick={() => setView({ kind: 'options' })}
+        aria-label="ตัวเลือกการอัปโหลด"
+        title="ตัวเลือกการอัปโหลด"
+        className="inline-flex size-12 items-center justify-center rounded-xl bg-primary text-on-inverse hover:bg-primary-hover"
+      >
+        <Ellipsis aria-hidden className="size-6" />
+      </button>
+    </div>
+  );
+
+  if (view.kind === 'options') {
     return (
-      <PanelFrame header={<BackHeader title="ตัวเลือกการอัปโหลด" onBack={() => setView('library')} />}>
+      <PanelFrame header={<BackHeader title="ตัวเลือกการอัปโหลด" onBack={() => setView({ kind: 'library' })} />}>
         {inputs}
         <button
           type="button"
@@ -768,71 +943,230 @@ function UploadsPanel() {
     );
   }
 
+  if (view.kind === 'folder') {
+    return (
+      <PanelFrame
+        header={
+          <>
+            <BackHeader title={view.folder.name} onBack={() => setView({ kind: 'library' })} />
+            {inputs}
+            {uploadButtons}
+          </>
+        }
+      >
+        <AssetGrid q="" folderId={view.folder.id} folders={folders.data?.items ?? []} onInsert={insert} emptyText="โฟลเดอร์นี้ยังว่าง — อัปโหลดตอนเปิดโฟลเดอร์อยู่ หรือย้ายรูปเข้ามาจากเมนู … ของรูป" />
+      </PanelFrame>
+    );
+  }
+
   return (
     <PanelFrame
       header={
         <>
           <PanelSearch id="upload-search" label="ค้นหาชื่อไฟล์" value={q} onChange={setQ} />
           {inputs}
-          <div className="flex gap-2">
-            <button
-              type="button"
-              disabled={upload.isPending}
-              onClick={() => input.current?.click()}
-              className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-primary text-csmju-body font-semibold text-on-inverse hover:bg-primary-hover disabled:opacity-60"
-            >
-              {upload.isPending ? 'กำลังอัปโหลด…' : 'อัปโหลดไฟล์'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setView('options')}
-              aria-label="ตัวเลือกการอัปโหลด"
-              title="ตัวเลือกการอัปโหลด"
-              className="inline-flex size-12 items-center justify-center rounded-xl bg-primary text-on-inverse hover:bg-primary-hover"
-            >
-              <Ellipsis aria-hidden className="size-6" />
-            </button>
+          {uploadButtons}
+          <div role="tablist" aria-label="ชนิดไฟล์อัปโหลด" className="flex gap-6">
+            {(
+              [
+                ['images', 'รูป'],
+                ['folders', 'โฟลเดอร์'],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                role="tab"
+                aria-selected={tab === key}
+                onClick={() => setTab(key)}
+                className={cx(
+                  'min-h-11 border-b-4 px-1 text-csmju-body transition-colors',
+                  tab === key ? 'border-primary font-semibold text-ink' : 'border-transparent text-body hover:text-ink',
+                )}
+              >
+                {label}
+              </button>
+            ))}
           </div>
         </>
       }
     >
-      <p className="mb-3 text-csmju-caption text-muted">PNG, JPEG, WebP, GIF, SVG ไม่เกิน 10 MB · รูปของคุณเห็นได้เฉพาะคุณ</p>
-      {assets.isLoading ? (
+      {tab === 'images' ? (
+        <>
+          <p className="mb-3 text-csmju-caption text-muted">PNG, JPEG, WebP, GIF, SVG ไม่เกิน 10 MB · รูปของคุณเห็นได้เฉพาะคุณ</p>
+          <AssetGrid q={q.trim()} folders={folders.data?.items ?? []} onInsert={insert} emptyText={q.trim() ? 'ไม่พบรูปที่ค้นหา' : null} />
+        </>
+      ) : folders.isLoading ? (
         <Spinner />
-      ) : assets.isError ? (
-        <ErrorState message={errorMessage(assets.error)} onRetry={() => void assets.refetch()} />
-      ) : assets.data!.items.length === 0 ? (
-        q.trim() ? (
-          <p className="text-csmju-caption text-muted">ไม่พบรูปที่ค้นหา</p>
-        ) : (
-          <EmptyState title="ยังไม่มีรูป" description="รูปที่อัปโหลดจะเก็บไว้ที่นี่ ใช้ซ้ำในงานอื่นได้" />
-        )
+      ) : folders.isError ? (
+        <ErrorState message={errorMessage(folders.error)} onRetry={() => void folders.refetch()} />
+      ) : folders.data!.items.length === 0 ? (
+        <div className="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-line-strong px-6 py-8 text-center">
+          <span className="relative flex size-24 items-center justify-center">
+            <span aria-hidden className="absolute inset-2 rotate-6 rounded-3xl bg-type-teal/30" />
+            <span className="relative flex size-18 items-center justify-center rounded-2xl bg-pastel-aqua text-type-teal shadow-csmju-md">
+              <FolderOpen aria-hidden className="size-9" />
+            </span>
+          </span>
+          <h3 className="text-csmju-body font-bold text-ink">จัดระเบียบรายการอัปโหลดของคุณ</h3>
+          <p className="text-csmju-caption text-body">ทำให้รายการอัปโหลดของคุณเป็นระเบียบโดยย้ายไปที่โฟลเดอร์</p>
+          <Button onClick={() => setCreating(true)}>
+            <FolderPlus aria-hidden className="size-5" /> สร้างโฟลเดอร์
+          </Button>
+        </div>
       ) : (
-        <ul className="columns-2 gap-2">
-          {assets.data!.items.map((asset) => (
-            <li key={asset.id} className="group relative mb-2 break-inside-avoid">
-              <button
-                type="button"
-                onClick={() => insert(asset)}
-                aria-label={`ใส่รูป ${asset.fileName}`}
-                title={asset.fileName}
-                className="csmju-checker block w-full overflow-hidden rounded-xl border border-line hover:shadow-csmju-md"
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element -- รูปผ่าน API ที่ต้องมี session */}
-                <img src={asset.contentUrl} alt="" className="block w-full" loading="lazy" />
+        <ul className="flex flex-col gap-2">
+          <li>
+            <button type="button" onClick={() => setCreating(true)} className="flex min-h-18 w-full items-center gap-4 rounded-2xl px-2 text-left hover:bg-surface-muted">
+              <span className="inline-flex size-16 items-center justify-center rounded-2xl border border-dashed border-line-strong text-ink">
+                <Plus aria-hidden className="size-6" />
+              </span>
+              <span className="text-csmju-body font-bold text-ink">สร้างโฟลเดอร์</span>
+            </button>
+          </li>
+          {folders.data!.items.map((folder) => (
+            <li key={folder.id} className="flex items-center gap-1">
+              <button type="button" onClick={() => setView({ kind: 'folder', folder })} className="flex min-h-18 min-w-0 flex-1 items-center gap-4 rounded-2xl px-2 text-left hover:bg-surface-muted">
+                <span className="inline-flex size-16 shrink-0 items-center justify-center rounded-2xl bg-pastel-aqua text-ink">
+                  <FolderIcon aria-hidden className="size-6" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate text-csmju-body font-bold text-ink">{folder.name}</span>
+                  <span className="block text-csmju-caption text-muted">{folder.assetCount} รูป</span>
+                </span>
               </button>
-              <IconButton
-                label={`ย้าย ${asset.fileName} ไปถังขยะ`}
-                onClick={() => trash.mutate(asset.id)}
-                className="absolute top-1 right-1 bg-surface/90 text-danger opacity-0 group-focus-within:opacity-100 group-hover:opacity-100"
-              >
-                <Trash2 aria-hidden className="size-4" />
-              </IconButton>
+              <AssetFolderMenu folder={folder} />
             </li>
           ))}
         </ul>
       )}
+      {creating && <CreateFolderDialog endpoint="/asset-folders" queryKey="asset-folders" onClose={() => setCreating(false)} />}
     </PanelFrame>
+  );
+}
+
+/// เมนูของโฟลเดอร์รูป: เปลี่ยนชื่อ · ลบ (รูปข้างในยังอยู่)
+function AssetFolderMenu({ folder }: { folder: AssetFolder }) {
+  const queryClient = useQueryClient();
+  const toast = useToast();
+  const refresh = () => {
+    void queryClient.invalidateQueries({ queryKey: ['asset-folders'] });
+    void queryClient.invalidateQueries({ queryKey: ['assets'] });
+  };
+
+  return (
+    <Menu
+      label={`ตัวเลือกของโฟลเดอร์ ${folder.name}`}
+      trigger={<Ellipsis aria-hidden className="size-5" />}
+      triggerClassName="bg-transparent shadow-none hover:bg-surface-muted"
+      items={[
+        {
+          label: 'เปลี่ยนชื่อ',
+          icon: <Pencil aria-hidden className="size-4" />,
+          onSelect: () => {
+            const name = window.prompt('ชื่อโฟลเดอร์ใหม่', folder.name)?.trim();
+
+            if (!name || name === folder.name) return;
+            api.patch(`/asset-folders/${folder.id}`, { name: name.slice(0, 80) }).then(refresh, (error: unknown) => toast(errorMessage(error), 'error'));
+          },
+        },
+        {
+          label: 'ลบโฟลเดอร์ (รูปยังอยู่)',
+          icon: <Trash2 aria-hidden className="size-4" />,
+          danger: true,
+          onSelect: () => {
+            if (!window.confirm(`ลบโฟลเดอร์ “${folder.name}”? รูปข้างในจะยังอยู่ในแท็บรูป`)) return;
+            api.del(`/asset-folders/${folder.id}`).then(
+              () => {
+                refresh();
+                toast(`ลบโฟลเดอร์ “${folder.name}” แล้ว`);
+              },
+              (error: unknown) => toast(errorMessage(error), 'error'),
+            );
+          },
+        },
+      ]}
+    />
+  );
+}
+
+/// ตารางรูปแบบก่ออิฐ (สูงตามสัดส่วนรูป) + เมนู … ของแต่ละรูป: ย้ายไปโฟลเดอร์ · ถังขยะ
+function AssetGrid({
+  q,
+  folderId,
+  folders,
+  onInsert,
+  emptyText,
+}: {
+  q: string;
+  folderId?: string;
+  folders: AssetFolder[];
+  onInsert: (asset: Asset) => void;
+  emptyText: string | null;
+}) {
+  const queryClient = useQueryClient();
+  const toast = useToast();
+  const assets = useQuery({
+    queryKey: ['assets', 'library', q, folderId ?? ''],
+    queryFn: () => api.list<Asset>(`/assets${qs({ q: q || undefined, folderId, limit: 60 })}`),
+  });
+  const patch = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: { trashed?: boolean; folderId?: string | null } }) => api.patch<Asset>(`/assets/${id}`, body),
+    onSuccess: (_asset, { body }) => {
+      void queryClient.invalidateQueries({ queryKey: ['assets'] });
+      void queryClient.invalidateQueries({ queryKey: ['asset-folders'] });
+      toast(body.trashed ? 'ย้ายรูปไปถังขยะแล้ว' : body.folderId ? `ย้ายไป “${folders.find((f) => f.id === body.folderId)?.name ?? 'โฟลเดอร์'}” แล้ว` : 'เอาออกจากโฟลเดอร์แล้ว');
+    },
+    onError: (error) => toast(errorMessage(error), 'error'),
+  });
+
+  if (assets.isLoading) return <Spinner />;
+  if (assets.isError) return <ErrorState message={errorMessage(assets.error)} onRetry={() => void assets.refetch()} />;
+
+  if (assets.data!.items.length === 0) {
+    return emptyText ? (
+      <p className="text-csmju-caption text-muted">{emptyText}</p>
+    ) : (
+      <EmptyState title="ยังไม่มีรูป" description="รูปที่อัปโหลดจะเก็บไว้ที่นี่ ใช้ซ้ำในงานอื่นได้" />
+    );
+  }
+
+  return (
+    <ul className="columns-2 gap-2">
+      {assets.data!.items.map((asset) => (
+        <li key={asset.id} className="group relative mb-2 break-inside-avoid">
+          <button
+            type="button"
+            onClick={() => onInsert(asset)}
+            aria-label={`ใส่รูป ${asset.fileName}`}
+            title={asset.fileName}
+            className="csmju-checker block w-full overflow-hidden rounded-xl border border-line hover:shadow-csmju-md"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element -- รูปผ่าน API ที่ต้องมี session */}
+            <img src={asset.contentUrl} alt="" className="block w-full" loading="lazy" />
+          </button>
+          <div className="absolute top-1 right-1 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 has-aria-expanded:opacity-100">
+            <Menu
+              label={`ตัวเลือกของรูป ${asset.fileName}`}
+              trigger={<Ellipsis aria-hidden className="size-5" />}
+              items={[
+                ...folders
+                  .filter((f) => f.id !== asset.folderId)
+                  .map((f) => ({
+                    label: `ย้ายไป “${f.name}”`,
+                    icon: <FolderInput aria-hidden className="size-4" />,
+                    onSelect: () => patch.mutate({ id: asset.id, body: { folderId: f.id } }),
+                  })),
+                ...(asset.folderId
+                  ? [{ label: 'เอาออกจากโฟลเดอร์', icon: <FolderMinus aria-hidden className="size-4" />, onSelect: () => patch.mutate({ id: asset.id, body: { folderId: null } }) }]
+                  : []),
+                { label: 'ย้ายไปถังขยะ', icon: <Trash2 aria-hidden className="size-4" />, danger: true, onSelect: () => patch.mutate({ id: asset.id, body: { trashed: true } }) },
+              ]}
+            />
+          </div>
+        </li>
+      ))}
+    </ul>
   );
 }
 

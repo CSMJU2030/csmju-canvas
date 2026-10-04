@@ -306,6 +306,21 @@
                 "title"
               ]
             }
+          },
+          {
+            "name": "scope",
+            "required": false,
+            "in": "query",
+            "description": "mine = งานของฉัน · shared = งานของคนอื่นที่ฉันเคยเปิดจากลิงก์แชร์ · all = ทั้งสองอย่าง",
+            "schema": {
+              "default": "mine",
+              "type": "string",
+              "enum": [
+                "mine",
+                "shared",
+                "all"
+              ]
+            }
           }
         ],
         "responses": {
@@ -689,6 +704,29 @@
             "description": "true = เฉพาะเทมเพลตตั้งต้นของทีม CS Canvas",
             "schema": {
               "type": "boolean"
+            }
+          },
+          {
+            "name": "colors",
+            "required": false,
+            "in": "query",
+            "description": "กลุ่มสีคั่นด้วยจุลภาค — เทมเพลตที่มีสีใดสีหนึ่งในรายการ",
+            "schema": {
+              "example": "blue,yellow",
+              "type": "string"
+            }
+          },
+          {
+            "name": "language",
+            "required": false,
+            "in": "query",
+            "description": "ภาษาของข้อความในเทมเพลต",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "th",
+                "en"
+              ]
             }
           }
         ],
@@ -1101,6 +1139,16 @@
                 "image/gif",
                 "image/svg+xml"
               ]
+            }
+          },
+          {
+            "name": "folderId",
+            "required": false,
+            "in": "query",
+            "description": "เฉพาะรูปในโฟลเดอร์รูปนี้",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
             }
           },
           {
@@ -1521,6 +1569,211 @@
         "summary": "ลบโฟลเดอร์ (งานข้างในยังอยู่)",
         "tags": [
           "folders"
+        ]
+      }
+    },
+    "/api/v1/asset-folders": {
+      "get": {
+        "operationId": "AssetFoldersController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "example": 2,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "example": 50,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "สำเร็จ พร้อมข้อมูลแบ่งหน้า",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AssetFolderDto"
+                      }
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PaginationMeta"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "โฟลเดอร์รูปของฉัน",
+        "tags": [
+          "assets"
+        ]
+      },
+      "post": {
+        "operationId": "AssetFoldersController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssetFolderBodyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/AssetFolderDto"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "สร้างโฟลเดอร์รูป",
+        "tags": [
+          "assets"
+        ]
+      }
+    },
+    "/api/v1/asset-folders/{id}": {
+      "patch": {
+        "operationId": "AssetFoldersController_rename",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssetFolderBodyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/AssetFolderDto"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "เปลี่ยนชื่อโฟลเดอร์รูป",
+        "tags": [
+          "assets"
+        ]
+      },
+      "delete": {
+        "operationId": "AssetFoldersController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/DeletedDto"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "ลบโฟลเดอร์รูป (รูปข้างในยังอยู่)",
+        "tags": [
+          "assets"
         ]
       }
     },
@@ -2450,6 +2703,11 @@
             "type": "string",
             "example": "/api/v1/assets/…/content"
           },
+          "folderId": {
+            "type": "object",
+            "format": "uuid",
+            "nullable": true
+          },
           "trashedAt": {
             "type": "object",
             "nullable": true
@@ -2490,6 +2748,12 @@
           "fileName": {
             "type": "string",
             "description": "เปลี่ยนชื่อไฟล์"
+          },
+          "folderId": {
+            "type": "object",
+            "format": "uuid",
+            "nullable": true,
+            "description": "ย้ายเข้าโฟลเดอร์รูป · null = เอาออกจากโฟลเดอร์"
           }
         }
       },
@@ -2528,6 +2792,47 @@
           "name": {
             "type": "string",
             "example": "งานวิชา CS201"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "AssetFolderDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "assetCount": {
+            "type": "number",
+            "description": "จำนวนรูปที่ยังไม่อยู่ในถังขยะ"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "assetCount",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "AssetFolderBodyDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "รูปกิจกรรมรับน้อง"
           }
         },
         "required": [
