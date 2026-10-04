@@ -9,6 +9,7 @@ import { createPortal } from 'react-dom';
 import { create } from 'zustand';
 import { FloatingPanel, useAnchoredMenu } from '@/components/csmju/floating';
 import { cx } from '@/components/csmju/primitives';
+import { entryLength, entryProgress } from '@/lib/editor/motion-export';
 import { drawPage, preloadPage, strokeFreehand, subscribeImageReady } from '@/lib/editor/render';
 import { useEditor } from '@/lib/editor/store';
 import { pageSizeOf, type Page } from '@/lib/editor/types';
@@ -298,13 +299,7 @@ function SlideView({ page, interactive = false, className }: { page: Page; inter
     const ctx = canvas.getContext('2d')!;
     const now = performance.now();
     const elapsed = now - enteredAt;
-    const animated = page.elements.filter((el) => el.animation);
-    // ชิ้นที่มีแอนิเมชันเล่นต่อกันทีละชิ้น (ชิ้นละ 0.15 วินาที) แบบ Canva
-    const progressOf = (el: (typeof page.elements)[number]) => {
-      const order = animated.indexOf(el);
-
-      return order < 0 ? undefined : Math.max(0, Math.min(1, (elapsed - order * 150) / 800));
-    };
+    const progressOf = entryProgress(page, elapsed);
 
     canvas.width = Math.round(size.width * scale * dpr);
     canvas.height = Math.round(size.height * scale * dpr);
@@ -325,7 +320,7 @@ function SlideView({ page, interactive = false, className }: { page: Page; inter
 
     const effectRunning = effect && drawMagic(ctx, effect.kind, now - effect.at, size);
 
-    if (elapsed < animated.length * 150 + 900 || effectRunning) raf.current = requestAnimationFrame(() => paintRef.current());
+    if (elapsed < entryLength(page) + 100 || effectRunning) raf.current = requestAnimationFrame(() => paintRef.current());
   }, [page, size, scale, enteredAt, ink, effect]);
 
   useEffect(() => {

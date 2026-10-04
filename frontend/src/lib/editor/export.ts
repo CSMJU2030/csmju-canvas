@@ -1,5 +1,7 @@
 import { boundingBox, unionBox } from './geometry';
+import { renderGif, renderVideo } from './motion-export';
 import { buildPdf, type PdfPage } from './pdf';
+import { buildPptx, type PptxSlide } from './pptx';
 import { drawElement, preloadPage, renderPageToCanvas } from './render';
 import { pageToSvg } from './svg-export';
 import { pageSizeOf, type DesignDocument, type Page } from './types';
@@ -103,7 +105,7 @@ export async function exportSelection(page: Page, ids: string[], title: string):
   download(await canvasToBlob(canvas, 'png', 1), `${safeFileName(title)}-ชิ้นงาน.png`);
 }
 
-export type DownloadFormat = 'png' | 'jpeg' | 'pdf' | 'svg';
+export type DownloadFormat = 'png' | 'jpeg' | 'pdf' | 'svg' | 'gif' | 'video' | 'pptx';
 
 export interface DownloadOptions {
   format: DownloadFormat;
@@ -114,8 +116,13 @@ export interface DownloadOptions {
   pageIndexes: number[];
   /// PDF: แยกไฟล์ละหน้า (รวมเป็น ZIP)
   separate?: boolean;
-  /// PDF: ต่อหน้าสมุดโน้ตท้ายแต่ละหน้า
+  /// PDF: ต่อหน้าสมุดโน้ตท้ายแต่ละหน้า · PPTX: ใส่เป็นโน้ตผู้บรรยาย
   withNotes?: boolean;
+  /// วิดีโอ: ความสูงเป็นพิกเซล (480 720 1080)
+  videoHeight?: number;
+  /// GIF/วิดีโอ: ความคืบหน้า 0–1
+  onProgress?: (ratio: number) => void;
+  signal?: AbortSignal;
 }
 
 async function blobBytes(blob: Blob): Promise<Uint8Array> {
@@ -169,6 +176,42 @@ export async function downloadDesign(doc: DesignDocument, base: { width: number;
 
   if (indexes.length === 0) throw new Error('ยังไม่ได้เลือกหน้า');
 
+  if (options.format === 'gif') {
+    const blob = await renderGif(indexes.map((i) => doc.pages[i]), base, options.scale, options.onProgress);
+
+    download(blob, `${name}.gif`);
+
+    return `${name}.gif`;
+  }
+
+  if (options.format === 'video') {
+    const { blob, ext } = await renderVideo(indexes.map((i) => doc.pages[i]), base, options.videoHeight ?? 720, options.onProgress, options.signal);
+
+    download(blob, `${name}.${ext}`);
+
+    return `${name}.${ext}`;
+  }
+
+  if (options.format === 'pptx') {
+    const slides: PptxSlide[] = [];
+    const first = pageSizeOf(doc.pages[indexes[0]], base);
+
+    for (const index of indexes) {
+      const page = doc.pages[index];
+      const size = pageSizeOf(page, base);
+      // ทุกสไลด์ใน PowerPoint ขนาดเท่ากัน — หน้าที่ขนาดต่างจากหน้าแรกถูกยืดให้เต็มสไลด์
+      const canvas = await renderPageToCanvas(page, size, Math.min(2, 1920 / Math.max(first.width, first.height)) * options.scale, {
+        background: page.background ? undefined : 'rgb(255 255 255)',
+      });
+
+      slides.push({ png: await blobBytes(await canvasToBlob(canvas, 'png', 1)), notes: options.withNotes ? page.notes : undefined });
+    }
+
+    download(buildPptx(slides, first, title), `${name}.pptx`);
+
+    return `${name}.pptx`;
+  }
+
   if (options.format === 'pdf') {
     const build = async (list: number[]) => {
       const pages: PdfPage[] = [];
@@ -210,6 +253,7 @@ export async function downloadDesign(doc: DesignDocument, base: { width: number;
 
   const entries: ZipEntry[] = [];
   const ext = options.format === 'jpeg' ? 'jpg' : options.format;
+  const imageFormat: ExportFormat = options.format === 'jpeg' ? 'jpeg' : 'png';
 
   for (const index of indexes) {
     const page = doc.pages[index];
@@ -223,7 +267,7 @@ export async function downloadDesign(doc: DesignDocument, base: { width: number;
       const background = options.format === 'jpeg' && !page.background ? 'rgb(255 255 255)' : undefined;
       const canvas = await renderPageToCanvas(page, size, options.scale, { transparent, background });
 
-      blob = await canvasToBlob(canvas, options.format, options.quality);
+      blob = await canvasToBlob(canvas, imageFormat, options.quality);
     }
 
     if (indexes.length === 1) {

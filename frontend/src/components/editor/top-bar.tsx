@@ -20,6 +20,7 @@ import { useMe } from '@/lib/csmju/session';
 import { useCreateDesign } from '@/lib/create-design';
 import { designTypeLabel } from '@/lib/design-types';
 import { downloadDesign, parsePageRange, type DownloadFormat } from '@/lib/editor/export';
+import { pageSeconds, videoMimeType } from '@/lib/editor/motion-export';
 import { renderPageToCanvas } from '@/lib/editor/render';
 import { canEditDoc, useEditor } from '@/lib/editor/store';
 import { pageSizeOf } from '@/lib/editor/types';
@@ -578,6 +579,7 @@ const LINK_ROLES = [
 
 function ShareMain({ onDownload, onClose }: { onDownload: () => void; onClose: () => void }) {
   const me = useMe();
+  const [settings, setSettings] = useState(false);
   const toast = useToast();
   const designId = useEditor((s) => s.designId);
   const linkAccess = useEditor((s) => s.linkAccess);
@@ -609,10 +611,43 @@ function ShareMain({ onDownload, onClose }: { onDownload: () => void; onClose: (
     <div className="flex flex-col gap-4 p-4">
       <div className="flex items-center justify-between">
         <h2 className="text-csmju-body font-bold text-ink">แชร์ดีไซน์</h2>
-        <button type="button" onClick={() => useEditorUi.getState().set({ overlay: 'analytics' })} className="inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-csmju-caption text-ink hover:bg-surface-muted">
-          <BarChart3 aria-hidden className="size-4" /> ผู้เข้าชม {stats.data?.uniqueViewers ?? 0} คน
-        </button>
+        <div className="flex items-center">
+          <button type="button" onClick={() => useEditorUi.getState().set({ overlay: 'analytics' })} className="inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-csmju-caption text-ink hover:bg-surface-muted">
+            <BarChart3 aria-hidden className="size-4" /> ผู้เข้าชม {stats.data?.uniqueViewers ?? 0} คน
+          </button>
+          <button
+            type="button"
+            aria-expanded={settings}
+            aria-label="การตั้งค่าการแชร์"
+            title="การตั้งค่าการแชร์"
+            onClick={() => setSettings((v) => !v)}
+            className="inline-flex size-9 items-center justify-center rounded-lg text-ink hover:bg-surface-muted"
+          >
+            <Settings aria-hidden className="size-4" />
+          </button>
+        </div>
       </div>
+      {settings && (
+        <div className="rounded-xl border border-line p-3">
+          <p className="text-csmju-caption font-bold text-ink">ลบสิทธิ์เข้าถึงสำหรับทุกคน</p>
+          <p className="mt-1 text-csmju-caption text-muted">ทุกคนที่เคยเปิดผ่านลิงก์จะเข้าไม่ได้อีก และดีไซน์กลับเป็นของคุณคนเดียว</p>
+          <button
+            type="button"
+            disabled={linkAccess === 'NONE' || save.isPending}
+            onClick={() =>
+              save.mutate('NONE', {
+                onSuccess: () => {
+                  toast('ลบสิทธิ์เข้าถึงของทุกคนแล้ว');
+                  setSettings(false);
+                },
+              })
+            }
+            className="mt-2 min-h-10 rounded-lg border border-line-strong px-3 text-csmju-caption font-semibold text-ink hover:bg-surface-muted disabled:opacity-50"
+          >
+            {linkAccess === 'NONE' ? 'ตอนนี้มีแค่คุณที่เข้าถึงได้' : 'ลบสิทธิ์เข้าถึง'}
+          </button>
+        </div>
+      )}
       <div>
         <p className="mb-2 text-csmju-caption font-semibold text-ink">คนที่มีสิทธิ์เข้าถึง</p>
         <div className="flex items-center gap-2">
@@ -686,7 +721,12 @@ const FORMATS: { key: DownloadFormat; label: string; hint: string }[] = [
   { key: 'jpeg', label: 'JPG', hint: 'ไฟล์ภาพเล็ก เหมาะส่งต่อ' },
   { key: 'pdf', label: 'PDF มาตรฐาน', hint: 'ไฟล์เอกสาร หลายหน้า' },
   { key: 'svg', label: 'SVG', hint: 'เวกเตอร์ แก้ต่อได้ในโปรแกรมอื่น' },
+  { key: 'video', label: 'วิดีโอ', hint: 'วิดีโอคุณภาพสูง เล่นแอนิเมชัน' },
+  { key: 'gif', label: 'GIF', hint: 'คลิปสั้น ไม่มีเสียง' },
+  { key: 'pptx', label: 'PPTX', hint: 'เอกสาร Microsoft PowerPoint' },
 ];
+
+const VIDEO_HEIGHTS = [480, 720, 1080] as const;
 
 export function DownloadPanel({ onBack, onDone }: { onBack?: () => void; onDone: () => void }) {
   const pages = useEditor((s) => s.doc.pages);
@@ -704,6 +744,11 @@ export function DownloadPanel({ onBack, onDone }: { onBack?: () => void; onDone:
   const [which, setWhich] = useState<'all' | 'current' | 'custom'>('all');
   const [range, setRange] = useState(`1-${pages.length}`);
   const [busy, setBusy] = useState(false);
+  const [gifScale, setGifScale] = useState(0.5);
+  const [videoHeight, setVideoHeight] = useState<(typeof VIDEO_HEIGHTS)[number]>(720);
+  const [progress, setProgress] = useState<number | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const videoType = format === 'video' ? videoMimeType() : null;
   const visible = pages.map((p, i) => (p.hidden ? -1 : i)).filter((i) => i >= 0);
   const chosen = which === 'all' ? visible : which === 'current' ? [pageIndex] : parsePageRange(range, pages.length);
   const toggle = (index: number) => {
@@ -715,27 +760,37 @@ export function DownloadPanel({ onBack, onDone }: { onBack?: () => void; onDone:
     setRange(compactRange([...set].sort((a, b) => a - b)));
   };
 
+  const seconds = chosen.reduce((sum, i) => sum + (pages[i] ? pageSeconds(pages[i]) : 0), 0);
+
   const run = async () => {
     setBusy(true);
+    abortRef.current = new AbortController();
+    if (format === 'gif' || format === 'video') setProgress(0);
 
     try {
       const state = useEditor.getState();
       const file = await downloadDesign(state.doc, { width: baseWidth, height: baseHeight }, state.title, {
         format,
-        scale: format === 'pdf' ? (print ? 2 : 1) : scale,
+        scale: format === 'pdf' ? (print ? 2 : 1) : format === 'gif' ? gifScale : format === 'pptx' ? 1 : scale,
         transparent,
         quality: quality / 100,
         pageIndexes: chosen,
         separate,
         withNotes,
+        videoHeight,
+        onProgress: setProgress,
+        signal: abortRef.current.signal,
       });
 
       toast(`ดาวน์โหลด ${file} แล้ว`);
       onDone();
     } catch (error) {
-      toast(errorMessage(error), 'error');
+      if (error instanceof DOMException && error.name === 'AbortError') toast('ยกเลิกการสร้างวิดีโอแล้ว');
+      else toast(errorMessage(error), 'error');
     } finally {
       setBusy(false);
+      setProgress(null);
+      abortRef.current = null;
     }
   };
 
@@ -776,6 +831,40 @@ export function DownloadPanel({ onBack, onDone }: { onBack?: () => void; onDone:
           </label>
         )}
         {format === 'png' && <ToggleRow label="พื้นหลังโปร่งใส" checked={transparent} onChange={setTransparent} />}
+        {format === 'gif' && (
+          <label className="flex flex-col gap-1 text-csmju-caption font-semibold text-ink">
+            ขนาด × {gifScale}
+            <input type="range" min={0.25} max={1} step={0.05} value={gifScale} onChange={(e) => setGifScale(Number(e.target.value))} className="accent-primary" />
+            <span className="font-normal text-muted tabular-nums">
+              {Math.round(baseWidth * gifScale)} × {Math.round(baseHeight * gifScale)} px · ยาว {seconds.toFixed(1)} วินาที · ไฟล์ใหญ่ขึ้นตามขนาด
+            </span>
+          </label>
+        )}
+        {format === 'video' && (
+          <>
+            <div>
+              <p className="mb-2 text-csmju-caption font-semibold text-ink">คุณภาพ</p>
+              <div role="radiogroup" aria-label="คุณภาพวิดีโอ" className="grid grid-cols-3 rounded-xl bg-surface-muted p-1">
+                {VIDEO_HEIGHTS.map((h) => (
+                  <button key={h} type="button" role="radio" aria-checked={videoHeight === h} onClick={() => setVideoHeight(h)} className={cx('min-h-10 rounded-lg text-csmju-caption', videoHeight === h ? 'bg-surface font-semibold text-ink shadow-csmju-sm' : 'text-body')}>
+                    {h}p
+                  </button>
+                ))}
+              </div>
+            </div>
+            <p className="text-csmju-caption text-muted">
+              {videoType
+                ? `ไฟล์ ${videoType.ext.toUpperCase()} ยาว ${seconds.toFixed(1)} วินาที (ตั้งเวลาแต่ละหน้าที่ปุ่ม ⏱) · ระบบเล่นงานจริงแล้วอัด จึงใช้เวลาเท่าความยาววิดีโอ`
+                : 'เบราว์เซอร์นี้อัดวิดีโอไม่ได้ ลองใช้ Chrome หรือ Edge รุ่นล่าสุด'}
+            </p>
+          </>
+        )}
+        {format === 'pptx' && (
+          <>
+            <ToggleRow label="ใส่สมุดโน้ตเป็นโน้ตผู้บรรยาย" checked={withNotes} onChange={setWithNotes} />
+            <p className="text-csmju-caption text-muted">แต่ละหน้าเป็นภาพเต็มสไลด์ เปิดได้ใน PowerPoint, Keynote และ Google Slides แต่แก้ข้อความทีละตัวไม่ได้</p>
+          </>
+        )}
         {format === 'pdf' && (
           <>
             <div role="radiogroup" aria-label="ค่าที่ตั้งไว้ล่วงหน้า" className="grid grid-cols-2 rounded-xl bg-surface-muted p-1">
@@ -844,9 +933,21 @@ export function DownloadPanel({ onBack, onDone }: { onBack?: () => void; onDone:
         </div>
       </div>
       <div className="border-t border-line p-3">
-        <button type="button" disabled={busy || chosen.length === 0} onClick={() => void run()} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary text-csmju-body font-semibold text-on-inverse hover:bg-primary-hover disabled:opacity-50">
+        {progress !== null && (
+          <div className="mb-3">
+            <div role="progressbar" aria-label="ความคืบหน้า" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress * 100)} className="h-2 overflow-hidden rounded-full bg-surface-muted">
+              <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${Math.round(progress * 100)}%` }} />
+            </div>
+            {format === 'video' && (
+              <button type="button" onClick={() => abortRef.current?.abort()} className="mt-2 min-h-10 w-full rounded-lg text-csmju-caption font-semibold text-ink hover:bg-surface-muted">
+                ยกเลิก
+              </button>
+            )}
+          </div>
+        )}
+        <button type="button" disabled={busy || chosen.length === 0 || (format === 'video' && !videoType)} onClick={() => void run()} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary text-csmju-body font-semibold text-on-inverse hover:bg-primary-hover disabled:opacity-50">
           {busy ? <LoaderCircle aria-hidden className="size-5 animate-spin" /> : <Download aria-hidden className="size-5" />}
-          {busy ? 'กำลังเตรียมไฟล์…' : 'ดาวน์โหลด'}
+          {busy ? (progress !== null ? `กำลังสร้างไฟล์… ${Math.round(progress * 100)}%` : 'กำลังเตรียมไฟล์…') : 'ดาวน์โหลด'}
         </button>
       </div>
     </div>
