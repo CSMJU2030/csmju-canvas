@@ -104,7 +104,7 @@ export function ShareDialog({ design, onClose }: { design: Pick<DesignSummary, '
                 onClick={() => setPicker(picker === 'role' ? null : 'role')}
                 className="flex min-h-14 shrink-0 items-center gap-2 rounded-xl px-3 text-csmju-caption font-semibold text-ink hover:bg-surface-muted"
               >
-                {linkAccess === 'EDIT' ? 'แก้ไขได้' : 'ดูได้'}
+                {linkAccess === 'EDIT' ? 'แก้ไขได้' : linkAccess === 'COMMENT' ? 'แสดงความคิดเห็นได้' : 'ดูได้'}
                 <ChevronDown aria-hidden className="size-4" />
               </button>
             )}
@@ -136,10 +136,11 @@ export function ShareDialog({ design, onClose }: { design: Pick<DesignSummary, '
               </ul>
             )}
             {picker === 'role' && (
-              <ul role="listbox" aria-label="สิทธิ์ของผู้มีลิงก์" className="csmju-pop absolute top-full right-0 z-10 mt-1 w-48 rounded-xl border border-line bg-surface py-1 shadow-csmju-lg">
+              <ul role="listbox" aria-label="สิทธิ์ของผู้มีลิงก์" className="csmju-pop absolute top-full right-0 z-10 mt-1 w-56 rounded-xl border border-line bg-surface py-1 shadow-csmju-lg">
                 {(
                   [
                     ['EDIT', 'แก้ไขได้'],
+                    ['COMMENT', 'แสดงความคิดเห็นได้'],
                     ['VIEW', 'ดูได้'],
                   ] as const
                 ).map(([value, label]) => (

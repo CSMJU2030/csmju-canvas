@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Bell, BookOpen, ChevronRight, Clock, CloudUpload, Ellipsis, FolderOpen, House, LayoutTemplate, PanelLeft, Plus, Sparkles,
-  Star, Trash2, UserRound,
+  Star, Trash2, UserRound, MessageCircle,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
@@ -256,7 +256,7 @@ function NotificationsPopover() {
                   <li key={n.id} className="border-b border-line last:border-b-0">
                     <Link href={n.link ?? '/notifications'} onClick={() => setOpen(false)} className="flex gap-3 px-4 py-3 hover:bg-surface-muted">
                       <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary">
-                        {n.kind === 'TEMPLATE_USED' ? <LayoutTemplate aria-hidden className="size-5" /> : <Trash2 aria-hidden className="size-5" />}
+                        {n.kind === 'TEMPLATE_USED' ? <LayoutTemplate aria-hidden className="size-5" /> : n.kind === 'COMMENT_ADDED' ? <MessageCircle aria-hidden className="size-5" /> : <Trash2 aria-hidden className="size-5" />}
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="block text-csmju-caption text-ink">{n.title}</span>

@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect } from 'react';
-import { currentPage, useEditor } from '@/lib/editor/store';
+import { canEditDoc, currentPage, useEditor } from '@/lib/editor/store';
 import { useEditorUi } from '@/lib/editor/ui-store';
 import { promptLink } from './context-menu';
+import { printDesign } from './top-bar';
 import { isTyping } from './stage';
 
 /// คีย์ลัดของหน้าแก้ไข (ดูรายการเต็มใน /help/shortcuts)
@@ -15,7 +16,7 @@ export function useShortcuts() {
       const state = useEditor.getState();
 
       // ลิงก์แบบดูได้ — ไม่มีคีย์ลัดที่แก้งาน
-      if (state.access === 'VIEW') return;
+      if (!canEditDoc(state)) return;
       const mod = event.ctrlKey || event.metaKey;
       const key = event.key.toLowerCase();
 
@@ -35,6 +36,24 @@ export function useShortcuts() {
       if (mod && key === 'a') {
         event.preventDefault();
         state.select(currentPage(state).elements.filter((el) => !el.hidden).map((el) => el.id));
+        return;
+      }
+
+      if (event.shiftKey && !mod && key === 'r') {
+        event.preventDefault();
+        useEditorUi.getState().toggleRulers();
+        return;
+      }
+
+      if (mod && key === 'f') {
+        event.preventDefault();
+        useEditorUi.getState().set({ overlay: 'find' });
+        return;
+      }
+
+      if (mod && key === 'p' && !event.altKey) {
+        event.preventDefault();
+        void printDesign();
         return;
       }
 

@@ -11,7 +11,7 @@ import { useToast } from '@/components/csmju/primitives';
 import { exportSelection } from '@/lib/editor/export';
 import { dominantColors } from '@/lib/editor/image-filters';
 import { getImage } from '@/lib/editor/render';
-import { currentPage, useEditor } from '@/lib/editor/store';
+import { canEditDoc, currentPage, useEditor } from '@/lib/editor/store';
 import { useEditorUi } from '@/lib/editor/ui-store';
 
 /// เมนูคลิกขวา / ปุ่ม … ของชิ้นงาน (ภาพบรีฟ "เมื่อคลิกขวา") — คีย์ลัดที่แสดงทำงานจริงทุกตัว
@@ -46,7 +46,7 @@ function MenuBody({ x, y }: { x: number; y: number }) {
   const selected = page.elements.filter((el) => state.selection.includes(el.id));
   const single = selected.length === 1 ? selected[0] : null;
   const locked = selected.length > 0 && selected.every((el) => el.locked);
-  const editable = state.access !== 'VIEW';
+  const editable = canEditDoc(state);
 
   useLayoutEffect(() => {
     const el = ref.current;

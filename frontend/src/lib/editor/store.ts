@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { fitTemplate } from './fit-template';
 import { boundingBox, unionBox, type Rect } from './geometry';
 import { measureTextHeight } from './render';
 import type { Guide } from './snapping';
@@ -43,8 +44,8 @@ export interface EditorMeta {
   title: string;
   designType: string;
   /// สิทธิ์ของผู้เปิด: OWNER · EDIT (ลิงก์แก้ไขได้) · VIEW (ลิงก์ดูได้ = ห้ามแก้ทุกอย่าง)
-  access: 'OWNER' | 'EDIT' | 'VIEW';
-  linkAccess: 'NONE' | 'VIEW' | 'EDIT';
+  access: 'OWNER' | 'EDIT' | 'COMMENT' | 'VIEW';
+  linkAccess: 'NONE' | 'VIEW' | 'COMMENT' | 'EDIT';
   width: number;
   height: number;
 }
@@ -70,6 +71,9 @@ export interface EditorState extends EditorMeta {
   tool: DrawTool;
   /// สไตล์ที่คัดลอกไว้ (ปุ่มคัดลอกสไตล์ / Ctrl+Alt+C)
   styleClipboard: StyleSnapshot | null;
+  /// โหมดที่ผู้ใช้เลือก (ปุ่ม "การแก้ไข ⌄"): แก้ไข · แสดงความคิดเห็น · ดู
+  viewMode: 'edit' | 'comment' | 'view';
+  setViewMode(mode: 'edit' | 'comment' | 'view'): void;
   /// หน้าที่คัดลอกไว้ (เมนู … ของภาพย่อหน้า)
   pageClipboard: Page | null;
 
@@ -77,6 +81,8 @@ export interface EditorState extends EditorMeta {
   setTitle(title: string): void;
   /// เปลี่ยนขนาดทั้งงาน (หน้าที่มีขนาดของตัวเองไม่เปลี่ยน)
   resize(width: number, height: number): void;
+  /// ปรับขนาดงาน (เมนู "ปรับขนาด") · scaleContent = ย่อ/ขยายชิ้นงานทุกหน้าให้พอดีขนาดใหม่ (ย้อนกลับได้)
+  resizeDesign(width: number, height: number, scaleContent: boolean): void;
   /// ขนาดเฉพาะหน้า · null = กลับไปใช้ขนาดของงาน
   resizePage(index: number, size: { width: number; height: number } | null): void;
   /// เพิ่มหน้าว่างต่อจากหน้าปัจจุบัน (กำหนดขนาดเองได้)
@@ -103,6 +109,8 @@ export interface EditorState extends EditorMeta {
   distributeSelected(axis: 'horizontal' | 'vertical'): void;
   /// แก้คุณสมบัติของหน้า (ชื่อ ซ่อน ล็อก โน้ต เวลา)
   updatePage(index: number, patch: Partial<Omit<Page, 'id' | 'elements'>>): void;
+  /// ค้นหาและแทนที่ข้อความทุกหน้า (ข้ามชิ้นที่ล็อก) · คืนจำนวนที่แทน
+  replaceText(find: string, replacement: string, matchCase: boolean): number;
   /// แทนสีหนึ่งด้วยอีกสีในหน้าปัจจุบันหรือทั้งงาน · คืนจำนวนจุดที่เปลี่ยน
   replaceColor(from: string, to: string, scope: 'page' | 'all'): number;
   removeSelected(): void;
@@ -136,6 +144,16 @@ export interface EditorState extends EditorMeta {
 }
 
 let gestureSnapshot: DesignDocument | null = null;
+
+/// แก้เนื้องานได้หรือไม่: ต้องเป็นเจ้าของหรือลิงก์แก้ไขได้ และอยู่ในโหมด "การแก้ไข"
+export function canEditDoc(state: Pick<EditorState, 'access' | 'viewMode'>): boolean {
+  return (state.access === 'OWNER' || state.access === 'EDIT') && state.viewMode === 'edit';
+}
+
+/// เขียนความคิดเห็นได้หรือไม่ (เจ้าของ · ลิงก์แก้ไขได้ · ลิงก์แสดงความคิดเห็นได้)
+export function canComment(state: Pick<EditorState, 'access'>): boolean {
+  return state.access !== 'VIEW';
+}
 
 export function currentPage(state: Pick<EditorState, 'doc' | 'pageIndex'>): Page {
   return state.doc.pages[Math.min(state.pageIndex, state.doc.pages.length - 1)];
@@ -226,6 +244,11 @@ export const useEditor = create<EditorState>((set, get) => {
     tool: DEFAULT_DRAW_TOOL,
     styleClipboard: null,
     pageClipboard: null,
+    viewMode: 'edit',
+
+    setViewMode(mode) {
+      set({ viewMode: mode, selection: [], editingTextId: null });
+    },
 
     load(meta, doc) {
       gestureSnapshot = null;
@@ -256,6 +279,23 @@ export const useEditor = create<EditorState>((set, get) => {
       const page = state.doc.pages[state.pageIndex];
 
       set({ baseWidth: width, baseHeight: height, ...pageSizeOf(page, { width, height }), revision: state.revision + 1 });
+    },
+
+    resizeDesign(width, height, scaleContent) {
+      const state = get();
+
+      if (scaleContent) {
+        const from = { width: state.baseWidth, height: state.baseHeight };
+        const pages = state.doc.pages.map((page) =>
+          page.width || page.height ? page : { ...fitTemplate({ version: 1, pages: [page] }, from, { width, height }).pages[0], id: page.id },
+        );
+
+        set({ baseWidth: width, baseHeight: height });
+        commit({ ...state.doc, pages }, { selection: [] });
+        return;
+      }
+
+      get().resize(width, height);
     },
 
     resizePage(index, size) {
@@ -393,6 +433,31 @@ export const useEditor = create<EditorState>((set, get) => {
       const state = get();
 
       commit(withPage(state.doc, index, (page) => ({ ...page, ...patch })));
+    },
+
+    replaceText(find, replacement, matchCase) {
+      if (!find) return 0;
+
+      const state = get();
+      const pattern = new RegExp(find.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), matchCase ? 'g' : 'gi');
+      let count = 0;
+      const pages = state.doc.pages.map((page) => ({
+        ...page,
+        elements: page.elements.map((el) => {
+          if (el.type !== 'text' || el.locked) return el;
+
+          const hits = el.text.match(pattern)?.length ?? 0;
+
+          if (hits === 0) return el;
+          count += hits;
+
+          return fitText({ ...el, text: el.text.replace(pattern, () => replacement) });
+        }),
+      }));
+
+      if (count > 0) commit({ ...state.doc, pages });
+
+      return count;
     },
 
     replaceColor(from, to, scope) {

@@ -31,6 +31,16 @@ interface EditorUi {
   /// มุมมองหน้า: แบบภาพย่อด้านล่าง หรือแบบตารางเต็มจอ
   pagesView: 'strip' | 'grid';
   rulers: boolean;
+  /// เส้นไกด์ที่ลากออกจากไม้บรรทัด (พิกัดหน้า) — ไม่บันทึกลงงาน
+  guideLines: { axis: 'x' | 'y'; at: number }[];
+  margins: boolean;
+  bleed: boolean;
+  commentsOpen: boolean;
+  commentPins: boolean;
+  /// แถบภาพย่อหน้าด้านล่าง
+  stripOpen: boolean;
+  /// หน้าต่าง/มุมมองเต็มจอที่เปิดอยู่
+  overlay: 'versions' | 'find' | 'accessibility' | 'analytics' | 'resize' | 'move' | null;
 
   setPanel(panel: PanelKey | null): void;
   togglePanel(panel: PanelKey): void;
@@ -41,6 +51,9 @@ interface EditorUi {
   setPainting(painting: boolean): void;
   setPagesView(view: 'strip' | 'grid'): void;
   toggleRulers(): void;
+  addGuide(guide: { axis: 'x' | 'y'; at: number }): void;
+  moveGuide(index: number, at: number | null): void;
+  set(patch: Partial<Pick<EditorUi, 'margins' | 'bleed' | 'commentsOpen' | 'commentPins' | 'overlay' | 'stripOpen'>>): void;
 }
 
 export const useEditorUi = create<EditorUi>((set, get) => ({
@@ -52,6 +65,13 @@ export const useEditorUi = create<EditorUi>((set, get) => ({
   painting: false,
   pagesView: 'strip',
   rulers: false,
+  guideLines: [],
+  margins: false,
+  bleed: false,
+  commentsOpen: false,
+  commentPins: true,
+  stripOpen: true,
+  overlay: null,
 
   setPanel(panel) {
     set({ panel, toolsOpen: false });
@@ -79,6 +99,15 @@ export const useEditorUi = create<EditorUi>((set, get) => ({
   },
   toggleRulers() {
     set({ rulers: !get().rulers });
+  },
+  addGuide(guide) {
+    set({ guideLines: [...get().guideLines, guide] });
+  },
+  moveGuide(index, at) {
+    set({ guideLines: at === null ? get().guideLines.filter((_, i) => i !== index) : get().guideLines.map((g, i) => (i === index ? { ...g, at } : g)) });
+  },
+  set(patch) {
+    set(patch);
   },
 }));
 

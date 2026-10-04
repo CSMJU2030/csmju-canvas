@@ -363,6 +363,10 @@ function StarredView({ onBack }: { onBack: () => void }) {
     queryKey: ['templates', 'starred-editor'],
     queryFn: () => api.list<TemplateSummary>(`/templates${qs({ starred: true, limit: 60 })}`),
   });
+  const starredDesigns = useQuery({
+    queryKey: ['designs', 'starred-editor'],
+    queryFn: () => api.list<DesignSummary>(`/designs${qs({ starred: true, limit: 60 })}`),
+  });
 
   const apply = async (template: TemplateSummary) => {
     if (!window.confirm(`ใช้เทมเพลต “${template.title}” แทนงานทั้งหมดในหน้านี้? (ย้อนกลับได้ด้วย Ctrl+Z)`)) return;
@@ -382,6 +386,22 @@ function StarredView({ onBack }: { onBack: () => void }) {
     <div className="flex min-h-0 flex-1 flex-col">
       <BackHeader title="ติดดาวแล้ว" onBack={onBack} />
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+        {(starredDesigns.data?.items.length ?? 0) > 0 && (
+          <section className="mb-5">
+            <h3 className="mb-2 text-csmju-body font-bold text-ink">ดีไซน์ที่ติดดาว</h3>
+            <ul className="grid grid-cols-2 gap-3">
+              {starredDesigns.data!.items.map((d) => (
+                <li key={d.id}>
+                  <a href={`/design/${d.id}`} className="group block">
+                    <Thumbnail src={d.thumbnail} width={d.width} height={d.height} designType={d.designType} alt="" />
+                    <span className="mt-1 block truncate text-csmju-caption font-semibold text-ink">{d.title}</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+        <h3 className="mb-2 text-csmju-body font-bold text-ink">เทมเพลตที่ติดดาว</h3>
         {starred.isLoading ? (
           <Spinner />
         ) : starred.isError ? (

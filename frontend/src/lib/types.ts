@@ -12,8 +12,10 @@ export interface DesignSummary {
   sourceTemplateId: string | null;
   trashedAt: string | null;
   tags: string[];
-  linkAccess: 'NONE' | 'VIEW' | 'EDIT';
-  access: 'OWNER' | 'EDIT' | 'VIEW';
+  linkAccess: 'NONE' | 'VIEW' | 'COMMENT' | 'EDIT';
+  access: 'OWNER' | 'EDIT' | 'COMMENT' | 'VIEW';
+  /// เจ้าของติดดาวไว้
+  starred?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -75,7 +77,7 @@ export interface Folder {
 
 export interface NotificationItem {
   id: string;
-  kind: 'DESIGN_TRASHED' | 'TEMPLATE_USED';
+  kind: 'DESIGN_TRASHED' | 'TEMPLATE_USED' | 'COMMENT_ADDED';
   title: string;
   link: string | null;
   readAt: string | null;

@@ -82,3 +82,27 @@ describe('paint', () => {
     expect(gradientCss(g)).toBe(css);
   });
 });
+
+describe('export helpers', () => {
+  it('อ่านช่วงหน้า "1-3, 5" และข้ามเลขที่เกินจำนวนหน้า', async () => {
+    const { parsePageRange } = await import('./export');
+
+    expect(parsePageRange('1-3, 5, 9', 6)).toEqual([0, 1, 2, 4]);
+    expect(parsePageRange('3-1', 6)).toEqual([0, 1, 2]);
+  });
+
+  it('ZIP มี CRC32 ที่ถูกต้องตามค่ามาตรฐาน', async () => {
+    const { crc32 } = await import('./zip');
+
+    expect(crc32(new TextEncoder().encode('123456789'))).toBe(0xcbf43926);
+  });
+
+  it('ค้นหาและแทนที่ข้อความทุกหน้า', async () => {
+    const { createText } = await import('./factory');
+    const s = useEditor.getState;
+
+    s().addElements([createText({ width: 1920, height: 1080 }, 'body', { text: 'สวัสดี ชาวโลก สวัสดี' })]);
+    expect(s().replaceText('สวัสดี', 'Hello', false)).toBe(2);
+    expect((s().doc.pages[0].elements.at(-1) as { text: string }).text).toBe('Hello ชาวโลก Hello');
+  });
+});

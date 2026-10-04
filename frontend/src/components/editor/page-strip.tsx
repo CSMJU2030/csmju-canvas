@@ -11,7 +11,7 @@ import { IconButton, cx, useToast } from '@/components/csmju/primitives';
 import { DESIGN_GROUPS, DESIGN_TYPES } from '@/lib/design-types';
 import { exportPages } from '@/lib/editor/export';
 import { renderPageToCanvas } from '@/lib/editor/render';
-import { useEditor } from '@/lib/editor/store';
+import { canEditDoc, useEditor } from '@/lib/editor/store';
 import { pageSizeOf, type Page } from '@/lib/editor/types';
 import { useEditorUi } from '@/lib/editor/ui-store';
 import { clampZoom, fitToScreen } from './stage';
@@ -53,7 +53,7 @@ export function PageThumb({ page, className }: { page: Page; className?: string 
 export function PageStrip() {
   const pages = useEditor((s) => s.doc.pages);
   const pageIndex = useEditor((s) => s.pageIndex);
-  const readOnly = useEditor((s) => s.access === 'VIEW');
+  const readOnly = useEditor((s) => !canEditDoc(s));
   const [dragging, setDragging] = useState<number | null>(null);
   const activeRef = useRef<HTMLLIElement>(null);
 
@@ -579,7 +579,8 @@ export function BottomBar({ onPresent, readOnly = false }: { onPresent: () => vo
   const pageCount = useEditor((s) => s.doc.pages.length);
   const panel = useEditorUi((s) => s.panel);
   const pagesView = useEditorUi((s) => s.pagesView);
-  const [stripOpen, setStripOpen] = useStripOpen();
+  const stripOpen = useEditorUi((s) => s.stripOpen);
+  const setStripOpen = (open: boolean) => useEditorUi.getState().set({ stripOpen: open });
   const timer = useTimer();
 
   const zoomTo = (next: number) => {
@@ -671,27 +672,4 @@ function BarToggle({ active, onClick, icon, label, highlight }: { active: boolea
       {label}
     </button>
   );
-}
-
-/// แถบภาพย่อเปิดอยู่เป็นค่าเริ่มต้น (จำค่าในเบราว์เซอร์นี้)
-function useStripOpen(): [boolean, (open: boolean) => void] {
-  const [open, setOpen] = useState(() => {
-    try {
-      return window.localStorage.getItem('csc.pageStrip') !== '0';
-    } catch {
-      return true;
-    }
-  });
-
-  return [
-    open,
-    (next) => {
-      setOpen(next);
-      try {
-        window.localStorage.setItem('csc.pageStrip', next ? '1' : '0');
-      } catch {
-        // เก็บไม่ได้ก็ไม่เป็นไร
-      }
-    },
-  ];
 }

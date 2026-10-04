@@ -22,7 +22,7 @@ import {
 import { createPath } from '@/lib/editor/factory';
 import { brushStyle, drawPage, strokeFreehand, subscribeImageReady } from '@/lib/editor/render';
 import { snapRect } from '@/lib/editor/snapping';
-import { brushWidth, currentPage, selectionBox, useEditor, type DrawBrush } from '@/lib/editor/store';
+import { brushWidth, canEditDoc, currentPage, selectionBox, useEditor, type DrawBrush } from '@/lib/editor/store';
 import type { CanvasElement, PathElement, TextElement } from '@/lib/editor/types';
 import { PREVIEW_MS, useEditorUi } from '@/lib/editor/ui-store';
 
@@ -363,7 +363,18 @@ export function Stage() {
       return;
     }
 
-    if (event.button === 1 || spaceDown.current || state.access === 'VIEW') {
+    // โหมดแสดงความคิดเห็น: คลิกชิ้นงานเพื่อเลือกแล้วเขียนความคิดเห็น (ไม่ลาก)
+    if (state.viewMode === 'comment' && event.button === 0 && !spaceDown.current) {
+      const hit = topElementAt(toPage(event.clientX, event.clientY));
+
+      state.select(hit ? [hit.id] : []);
+      useEditorUi.getState().set({ commentsOpen: true });
+
+      if (!hit) gesture.current = { kind: 'pan', start: { x: event.clientX, y: event.clientY }, pan: state.pan };
+      return;
+    }
+
+    if (event.button === 1 || spaceDown.current || !canEditDoc(state)) {
       gesture.current = { kind: 'pan', start: { x: event.clientX, y: event.clientY }, pan: state.pan };
       setCursor('grabbing');
       return;
@@ -545,9 +556,12 @@ export function Stage() {
 
       const page = currentPage(state);
       const moving = { ...g.box, x: g.box.x + dx, y: g.box.y + dy };
-      const targets = page.elements
-        .filter((el) => !g.origin.has(el.id) && !el.hidden)
-        .map(boundingBox);
+      const ui = useEditorUi.getState();
+      const targets = [
+        ...page.elements.filter((el) => !g.origin.has(el.id) && !el.hidden).map(boundingBox),
+        // เส้นไกด์จากไม้บรรทัดเป็นเป้าดูดด้วย
+        ...(ui.rulers ? ui.guideLines.map((guide) => (guide.axis === 'x' ? { x: guide.at, y: 0, width: 0, height: state.height } : { x: 0, y: guide.at, width: state.width, height: 0 })) : []),
+      ];
       const snap = event.altKey
         ? { dx: 0, dy: 0, guides: [] }
         : snapRect(moving, targets, { x: 0, y: 0, width: state.width, height: state.height }, SNAP_PX / state.zoom);
@@ -689,7 +703,7 @@ export function Stage() {
 
     const hit = topElementAt(toPage(event.clientX, event.clientY));
 
-    if (hit?.type === 'text' && !hit.locked && useEditor.getState().access !== 'VIEW') {
+    if (hit?.type === 'text' && !hit.locked && canEditDoc(useEditor.getState())) {
       const state = useEditor.getState();
 
       state.select([hit.id]);
