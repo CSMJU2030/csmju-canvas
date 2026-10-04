@@ -9,6 +9,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { FloatingPanel, useAnchoredMenu } from '@/components/csmju/floating';
 import { Pager } from '@/components/csmju/list-controls';
 import { CardGridSkeleton, EmptyState, ErrorState, IconButton, cx, errorMessage, inputClass, useToast } from '@/components/csmju/primitives';
 import { RenameDialog } from '@/components/designs/design-menu';
@@ -303,28 +304,12 @@ function downloadAsset(asset: Asset) {
 
 /// เมนู "…" ของไฟล์ (ภาพบรีฟ "อัพโหลดแบบใหม่ 3")
 function AssetMenu({ asset, onDetails }: { asset: Asset; onDetails: () => void }) {
-  const [open, setOpen] = useState(false);
+  const { open, setOpen, anchorRef, menuRef } = useAnchoredMenu();
   const [renaming, setRenaming] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
   const me = useMe();
   const toast = useToast();
   const create = useCreateDesign();
   const update = useAssetUpdate(asset, () => setRenaming(false));
-
-  useEffect(() => {
-    if (!open) return;
-
-    const close = (event: PointerEvent) => !ref.current?.contains(event.target as Node) && setOpen(false);
-    const onKey = (event: KeyboardEvent) => event.key === 'Escape' && setOpen(false);
-
-    document.addEventListener('pointerdown', close);
-    document.addEventListener('keydown', onKey);
-
-    return () => {
-      document.removeEventListener('pointerdown', close);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
 
   const run = (fn: () => void) => () => {
     setOpen(false);
@@ -333,8 +318,9 @@ function AssetMenu({ asset, onDetails }: { asset: Asset; onDetails: () => void }
   const item = 'flex min-h-11 w-full items-center gap-3 px-4 text-left text-csmju-caption text-ink hover:bg-surface-muted';
 
   return (
-    <div ref={ref} className="relative">
+    <div className="relative">
       <button
+        ref={anchorRef}
         type="button"
         aria-label={`ตัวเลือกของ ${asset.fileName}`}
         title="ตัวเลือก"
@@ -345,8 +331,7 @@ function AssetMenu({ asset, onDetails }: { asset: Asset; onDetails: () => void }
       >
         <Ellipsis aria-hidden className="size-5" />
       </button>
-      {open && (
-        <div role="menu" aria-label={`ตัวเลือกของ ${asset.fileName}`} className="csmju-pop absolute top-full right-0 z-40 mt-1 w-72 rounded-2xl border border-line bg-surface py-1 shadow-csmju-lg">
+      <FloatingPanel open={open} menuRef={menuRef} label={`ตัวเลือกของ ${asset.fileName}`} className="w-72 rounded-2xl border border-line bg-surface py-1 shadow-csmju-lg">
           <div className="border-b border-line px-4 py-3">
             <div className="flex items-center gap-2">
               <p className="truncate text-csmju-body font-semibold text-ink">{asset.fileName}</p>
@@ -383,8 +368,7 @@ function AssetMenu({ asset, onDetails }: { asset: Asset; onDetails: () => void }
               <Trash2 aria-hidden className="size-5" /> ย้ายไปที่ถังขยะ
             </button>
           </div>
-        </div>
-      )}
+      </FloatingPanel>
       {renaming &&
         createPortal(
           <RenameDialog title="เปลี่ยนชื่อไฟล์" initial={asset.fileName} busy={update.isPending} onClose={() => setRenaming(false)} onSave={(fileName) => update.mutate({ fileName })} />,

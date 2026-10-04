@@ -2,8 +2,8 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Bell, BookOpen, ChevronRight, Clock, CloudUpload, FolderOpen, House, LayoutTemplate, PanelLeft, Plus, Trash2,
-  UserRound,
+  Bell, BookOpen, ChevronRight, Clock, CloudUpload, FolderOpen, House, LayoutTemplate, PanelLeft, Plus, Sparkles, Star,
+  Trash2, UserRound,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
@@ -46,7 +46,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       ? 'projects'
       : pathname.startsWith('/account')
         ? 'account'
-        : 'recent';
+        : pathname.startsWith('/templates')
+          ? 'templates'
+          : 'recent';
   // แถบรองเปิดเฉพาะเมื่อผู้ใช้กดปุ่มเมนูมุมซ้ายบนเท่านั้น (กดไอคอนในแถบซ้ายไม่ทำให้เด้งขึ้นเอง)
   // ค่าเดียวใช้ทุกหน้า — เปิดไว้แล้วเปลี่ยนหน้าก็ยังเปิดอยู่ แค่เนื้อหาในแถบเปลี่ยนตามหน้า
   const [secondaryOpen, setSecondaryOpen] = useState(false);
@@ -75,7 +77,15 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Link href="/" className="csmju-logo mb-4 px-3 text-csmju-h1 leading-tight">
               CS Canvas
             </Link>
-            {secondary === 'projects' ? <ProjectsNav /> : secondary === 'account' ? <AccountNav /> : <RecentDesignsNav />}
+            {secondary === 'projects' ? (
+              <ProjectsNav />
+            ) : secondary === 'account' ? (
+              <AccountNav />
+            ) : secondary === 'templates' ? (
+              <TemplatesNav />
+            ) : (
+              <RecentDesignsNav />
+            )}
           </div>
         </aside>
         <main id="main" className="min-w-0 flex-1 pb-24 md:py-2 md:pr-2 md:pb-2">
@@ -99,7 +109,7 @@ function useUnread() {
   }).data?.meta.total ?? 0;
 }
 
-type SecondaryKind = 'recent' | 'projects' | 'account';
+type SecondaryKind = 'recent' | 'projects' | 'account' | 'templates';
 
 function Rail({ open, onToggleSecondary }: { open: boolean; onToggleSecondary: () => void }) {
   const pathname = usePathname();
@@ -136,12 +146,14 @@ function Rail({ open, onToggleSecondary }: { open: boolean; onToggleSecondary: (
         </span>
         สร้าง
       </button>
-      {/* ไอคอน "เทมเพลต" โผล่ต่อท้ายเมื่อเปิดแท็บเทมเพลต (ภาพบรีฟ) */}
-      {[...NAV, ...(pathname.startsWith('/templates') ? [{ href: '/templates', label: 'เทมเพลต', icon: LayoutTemplate }] : [])].map((item) => {
+      {/* ไอคอน "เทมเพลต" โผล่ต่อท้ายพร้อมเส้นคั่นเมื่อเปิดแท็บเทมเพลต (ภาพบรีฟ "เมื่อกด เทมเพลต") */}
+      {[...NAV, ...(pathname.startsWith('/templates') ? [{ href: '/templates', label: 'เทมเพลต', icon: LayoutTemplate }] : [])].map((item, index) => {
         const active = isActive(pathname, item.href);
 
         return (
-          <Link key={item.href} href={item.href} aria-current={active ? 'page' : undefined} className="group flex w-16 flex-col items-center gap-1 py-1 text-csmju-caption text-ink">
+          <div key={item.href} className={cx('flex flex-col items-center', index === NAV.length && 'csmju-pop')}>
+          {index === NAV.length && <span aria-hidden className="my-2 h-px w-8 bg-line-strong" />}
+          <Link href={item.href} aria-current={active ? 'page' : undefined} className="group flex w-16 flex-col items-center gap-1 py-1 text-csmju-caption text-ink">
             <span
               className={cx(
                 'flex size-10 items-center justify-center rounded-xl transition-colors',
@@ -152,6 +164,7 @@ function Rail({ open, onToggleSecondary }: { open: boolean; onToggleSecondary: (
             </span>
             <span className={cx(active && 'font-semibold text-primary')}>{item.label}</span>
           </Link>
+          </div>
         );
       })}
       <div className="mt-auto flex flex-col items-center gap-3">
@@ -213,7 +226,7 @@ function NotificationsPopover() {
       >
         <Bell aria-hidden className="size-5" />
         {unread > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-5 rounded-full bg-danger px-1 text-center text-csmju-caption leading-5 text-on-inverse tabular-nums">
+          <span className="csmju-pop absolute top-1 right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-danger px-1 text-csmju-caption leading-none font-bold text-on-inverse ring-2 ring-canvas tabular-nums">
             {unread > 9 ? '9+' : unread}
           </span>
         )}
@@ -440,6 +453,37 @@ function UploadsTree({ active, focus }: { active: boolean; focus: string | null 
         </div>
       )}
     </div>
+  );
+}
+
+/// แถบรองของแท็บเทมเพลต (ภาพบรีฟ "เมื่อกด เทมเพลต") — ใช้หมวดที่ระบบนี้มีจริง
+/// (ไม่มีคลังภาพถ่าย/กราฟิกจากบริการภายนอก จึงแทนด้วยเทมเพลตตั้งต้น · ที่ฉันเผยแพร่ · ติดดาว)
+function TemplatesNav() {
+  return (
+    <Suspense fallback={null}>
+      <TemplatesNavInner />
+    </Suspense>
+  );
+}
+
+function TemplatesNavInner() {
+  const params = useSearchParams();
+  const me = useMe();
+  const canPublish = me.subsystemRole === 'EDITOR' || me.subsystemRole === 'ADMIN';
+  const current = params.get('starred') ? 'starred' : params.get('builtIn') ? 'builtIn' : params.get('owner') === 'me' ? 'mine' : 'all';
+  const items = [
+    { key: 'all', href: '/templates', label: 'เทมเพลต', icon: <LayoutTemplate aria-hidden className="size-5" /> },
+    { key: 'builtIn', href: '/templates?builtIn=true', label: 'เทมเพลตตั้งต้นของทีม', icon: <Sparkles aria-hidden className="size-5" /> },
+    ...(canPublish ? [{ key: 'mine', href: '/templates?owner=me', label: 'ที่ฉันเผยแพร่', icon: <UserRound aria-hidden className="size-5" /> }] : []),
+    { key: 'starred', href: '/templates?starred=true', label: 'คอนเทนต์ติดดาว', icon: <Star aria-hidden className="size-5" /> },
+  ];
+
+  return (
+    <nav aria-label="เทมเพลต" className="flex flex-col gap-0.5">
+      {items.map((item) => (
+        <SideLink key={item.key} href={item.href} label={item.label} icon={item.icon} active={current === item.key} />
+      ))}
+    </nav>
   );
 }
 

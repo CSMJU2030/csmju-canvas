@@ -1,13 +1,14 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { CloudUpload, Ruler, Search, Sparkles } from 'lucide-react';
+import { CloudUpload, Lock, LockOpen, Ruler, Search, Sparkles } from 'lucide-react';
 import { createContext, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Button,
   Dialog,
   EmptyState,
   FormField,
+  IconButton,
   cx,
   errorMessage,
   inputClass,
@@ -15,6 +16,7 @@ import {
 } from '@/components/csmju/primitives';
 import { TemplateCard, TypeTile } from '@/components/designs/cards';
 import { Carousel } from '@/components/designs/carousel';
+import { TypeArt } from '@/components/designs/type-art';
 import { api, qs } from '@/lib/csmju/api';
 import { designFromUpload, useCreateDesign } from '@/lib/create-design';
 import {
@@ -92,9 +94,11 @@ function CreateDesignDialog({
   ];
 
   return (
-    <Dialog open={tab !== null} onClose={onClose} title="สร้างดีไซน์" size="xl">
-      <div className="flex flex-col gap-4 md:flex-row">
-        <nav aria-label="หมวดงาน" className="flex shrink-0 gap-1 overflow-x-auto md:w-56 md:flex-col md:overflow-visible">
+    <Dialog open={tab !== null} onClose={onClose} title="สร้างดีไซน์" size="xl" bare>
+      <div className="flex h-dialog flex-col md:flex-row">
+        <div className="shrink-0 border-b border-line px-5 pt-6 pb-3 md:w-72 md:overflow-y-auto md:border-b-0 md:px-6">
+        <h2 className="mb-5 text-csmju-h1 font-bold text-ink">สร้างดีไซน์</h2>
+        <nav aria-label="หมวดงาน" className="csmju-scroll-x flex gap-1 overflow-x-auto md:flex-col md:overflow-visible">
           {tabs.map((t) => (
             <button
               key={t.key}
@@ -115,9 +119,11 @@ function CreateDesignDialog({
             </button>
           ))}
         </nav>
+        </div>
 
-        <div className="min-w-0 flex-1">
-          <div className="relative mb-4">
+        <div key={tab ?? 'none'} className="csmju-fade-in min-w-0 flex-1 overflow-y-auto px-5 pt-6 pb-6 md:pr-16 md:pl-2">
+          {tab !== 'custom' && (
+          <div className="relative mb-5">
             <Search aria-hidden className="pointer-events-none absolute top-1/2 left-3 size-5 -translate-y-1/2 text-muted" />
             <label className="sr-only" htmlFor="create-search">
               คุณต้องการสร้างอะไร
@@ -127,9 +133,10 @@ function CreateDesignDialog({
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="คุณต้องการสร้างอะไร เช่น โปสเตอร์ เกียรติบัตร"
-              className={cx(inputClass, 'pl-10')}
+              className={cx(inputClass, 'rounded-xl pl-10')}
             />
           </div>
+          )}
 
           {query.trim() ? (
             matches.length > 0 ? (
@@ -254,41 +261,134 @@ function ForYou({ onPick, busy, onClose }: { onPick: (t: DesignType) => void; bu
   );
 }
 
+type Unit = 'px' | 'in' | 'cm' | 'mm';
+
+/// พิกเซลต่อหน่วย (กระดาษคิดที่ 96 dpi ให้ตรงกับประเภทงานอื่นในระบบ)
+const PX_PER: Record<Unit, number> = { px: 1, in: 96, cm: 96 / 2.54, mm: 96 / 25.4 };
+const UNIT_LABEL: Record<Unit, string> = { px: 'px', in: 'นิ้ว', cm: 'ซม.', mm: 'มม.' };
+
+/// เลย์เอาต์ยอดนิยมตามภาพบรีฟ (กดแล้วเติมขนาดให้ในช่องด้านบน)
+const POPULAR_LAYOUTS: { label: string; width: number; height: number; unit: Unit }[] = [
+  { label: 'เอกสาร (ไซส์ US แนวตั้ง)', width: 8.5, height: 11, unit: 'in' },
+  { label: 'เอกสาร (A4 แนวนอน)', width: 29.7, height: 21, unit: 'cm' },
+  { label: 'เอกสาร (โปสเตอร์แนวตั้ง A3)', width: 29.7, height: 42, unit: 'cm' },
+  { label: 'เอกสาร (โปสเตอร์แนวนอน A3)', width: 420, height: 297, unit: 'mm' },
+  { label: 'เอกสาร (A4 แนวตั้ง)', width: 21, height: 29.7, unit: 'cm' },
+];
+
 function CustomSize({ onClose }: { onClose: () => void }) {
-  const [width, setWidth] = useState('1080');
-  const [height, setHeight] = useState('1080');
+  const [width, setWidth] = useState('');
+  const [height, setHeight] = useState('');
+  const [unit, setUnit] = useState<Unit>('px');
+  const [locked, setLocked] = useState(false);
   const create = useCreateDesign();
   const toast = useToast();
   const w = Number(width);
   const h = Number(height);
-  const valid = Number.isInteger(w) && Number.isInteger(h) && w >= 16 && h >= 16 && w <= 8000 && h <= 8000;
+  const pxW = Math.round(w * PX_PER[unit]);
+  const pxH = Math.round(h * PX_PER[unit]);
+  const filled = width.trim() !== '' && height.trim() !== '';
+  const valid = filled && w > 0 && h > 0 && pxW >= 16 && pxH >= 16 && pxW <= 8000 && pxH <= 8000;
+
+  const changeWidth = (value: string) => {
+    if (locked && w > 0 && h > 0 && Number(value) > 0) setHeight(String(round(Number(value) * (h / w))));
+    setWidth(value);
+  };
+  const changeHeight = (value: string) => {
+    if (locked && w > 0 && h > 0 && Number(value) > 0) setWidth(String(round(Number(value) * (w / h))));
+    setHeight(value);
+  };
+  const changeUnit = (next: Unit) => {
+    // แปลงค่าที่กรอกไว้ให้เป็นขนาดเดิมในหน่วยใหม่
+    if (w > 0) setWidth(String(round((w * PX_PER[unit]) / PX_PER[next])));
+    if (h > 0) setHeight(String(round((h * PX_PER[unit]) / PX_PER[next])));
+    setUnit(next);
+  };
+
+  const submit = () => {
+    if (!valid) return;
+    create.mutate(
+      { title: 'ดีไซน์ที่ไม่มีชื่อ', designType: CUSTOM_TYPE, width: pxW, height: pxH },
+      { onSuccess: onClose, onError: (error) => toast(errorMessage(error), 'error') },
+    );
+  };
 
   return (
-    <form
-      className="flex max-w-sm flex-col gap-4"
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (!valid) return;
-        create.mutate(
-          { title: 'ดีไซน์ที่ไม่มีชื่อ', designType: CUSTOM_TYPE, width: w, height: h },
-          { onSuccess: onClose, onError: (error) => toast(errorMessage(error), 'error') },
-        );
-      }}
-    >
-      <div className="grid grid-cols-2 gap-3">
-        <FormField label="กว้าง (px)">
-          {(props) => <input {...props} type="number" min={16} max={8000} value={width} onChange={(e) => setWidth(e.target.value)} className={inputClass} />}
+    <div>
+      <h3 className="mb-4 text-csmju-h2 font-bold text-ink">กำหนดขนาดเอง</h3>
+      <form
+        className="grid grid-cols-2 items-end gap-3 lg:grid-cols-5"
+        onSubmit={(event) => {
+          event.preventDefault();
+          submit();
+        }}
+      >
+        <FormField label="ความกว้าง">
+          {(props) => <input {...props} inputMode="decimal" value={width} onChange={(e) => changeWidth(e.target.value)} className={cx(inputClass, 'rounded-xl')} />}
         </FormField>
-        <FormField label="สูง (px)">
-          {(props) => <input {...props} type="number" min={16} max={8000} value={height} onChange={(e) => setHeight(e.target.value)} className={inputClass} />}
+        <FormField label="ความยาว">
+          {(props) => <input {...props} inputMode="decimal" value={height} onChange={(e) => changeHeight(e.target.value)} className={cx(inputClass, 'rounded-xl')} />}
         </FormField>
-      </div>
-      {!valid && <p className="text-csmju-caption text-danger">ขนาดต้องเป็นจำนวนเต็ม 16–8000 พิกเซล</p>}
-      <Button type="submit" variant="primary" disabled={!valid} loading={create.isPending}>
-        สร้างดีไซน์ใหม่
-      </Button>
-    </form>
+        <FormField label="หน่วย">
+          {(props) => (
+            <select {...props} value={unit} onChange={(e) => changeUnit(e.target.value as Unit)} className={cx(inputClass, 'rounded-xl')}>
+              {(Object.keys(UNIT_LABEL) as Unit[]).map((u) => (
+                <option key={u} value={u}>{UNIT_LABEL[u]}</option>
+              ))}
+            </select>
+          )}
+        </FormField>
+        <IconButton
+          label={locked ? 'ปลดล็อกสัดส่วน' : 'ล็อกสัดส่วนกว้าง:ยาว'}
+          active={locked}
+          aria-pressed={locked}
+          onClick={() => setLocked((v) => !v)}
+          className="mb-0"
+        >
+          {locked ? <Lock aria-hidden className="size-4" /> : <LockOpen aria-hidden className="size-4" />}
+        </IconButton>
+        <Button type="submit" variant={valid ? 'primary' : 'secondary'} disabled={!valid} loading={create.isPending} className="col-span-2 lg:col-span-1">
+          สร้างดีไซน์ใหม่
+        </Button>
+      </form>
+      <p className={cx('mt-2 text-csmju-caption', filled && !valid ? 'text-danger' : 'text-muted')}>
+        {filled && !valid
+          ? 'ขนาดต้องอยู่ระหว่าง 16–8000 พิกเซล'
+          : filled && unit !== 'px'
+            ? `= ${pxW.toLocaleString('th-TH')} × ${pxH.toLocaleString('th-TH')} พิกเซล (96 dpi)`
+            : 'กรอกความกว้างและความยาว หรือเลือกจากเลย์เอาต์ด้านล่าง'}
+      </p>
+
+      <h3 className="mt-8 mb-4 text-csmju-h3 font-bold text-ink">เลย์เอาต์ยอดนิยม</h3>
+      <ul className="grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-3 lg:grid-cols-4">
+        {POPULAR_LAYOUTS.map((layout) => (
+          <li key={layout.label}>
+            <button
+              type="button"
+              onClick={() => {
+                setUnit(layout.unit);
+                setWidth(String(layout.width));
+                setHeight(String(layout.height));
+              }}
+              className="group block w-full text-left"
+            >
+              <span className="flex aspect-4/3 w-full items-center justify-center rounded-xl bg-surface-muted p-3 transition-colors group-hover:bg-primary-soft">
+                <TypeArt type={{ key: 'flyer', width: layout.width, height: layout.height, group: 'print' }} className="h-full w-full" />
+              </span>
+              <span className="mt-2 block truncate text-csmju-caption text-ink">{layout.label}</span>
+              <span className="block text-csmju-caption text-muted tabular-nums">
+                {layout.width} × {layout.height} {UNIT_LABEL[layout.unit]}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
+}
+
+function round(n: number): number {
+  return Math.round(n * 100) / 100;
 }
 
 function UploadStart({ onClose }: { onClose: () => void }) {

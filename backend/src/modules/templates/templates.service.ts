@@ -27,6 +27,8 @@ export class TemplatesService {
       });
     }
     if (query.designType) and.push({ designType: query.designType });
+    if (query.starred) and.push({ favorites: { some: { coreUserId: user.coreUserId } } });
+    if (query.builtIn) and.push({ createdByCoreUserId: null });
     if (query.category) and.push({ category: query.category });
     if (query.owner === 'me') and.push({ createdByCoreUserId: user.coreUserId });
     if (query.owner === 'others') {
@@ -52,6 +54,7 @@ export class TemplatesService {
         skip: query.skip,
         take: query.take,
         omit: { document: true },
+        include: { favorites: { where: { coreUserId: user.coreUserId }, select: { id: true } } },
       }),
       this.prisma.template.count({ where }),
     ]);
@@ -63,7 +66,10 @@ export class TemplatesService {
   }
 
   async get(user: CoreHubUser, id: string) {
-    const row = await this.prisma.template.findUnique({ where: { id } });
+    const row = await this.prisma.template.findUnique({
+      where: { id },
+      include: { favorites: { where: { coreUserId: user.coreUserId }, select: { id: true } } },
+    });
 
     if (!row) throw new NotFoundException('ไม่พบเทมเพลตนี้ อาจถูกลบไปแล้ว');
 
@@ -105,6 +111,28 @@ export class TemplatesService {
     return { id, deleted: true };
   }
 
+  async favorite(user: CoreHubUser, templateId: string) {
+    const template = await this.prisma.template.findUnique({ where: { id: templateId }, select: { id: true } });
+
+    if (!template) throw new NotFoundException('ไม่พบเทมเพลตนี้ อาจถูกลบไปแล้ว');
+
+    const row = await this.prisma.templateFavorite.upsert({
+      where: { coreUserId_templateId: { coreUserId: user.coreUserId, templateId } },
+      create: { coreUserId: user.coreUserId, templateId },
+      update: {},
+    });
+
+    return { templateId: row.templateId, createdAt: row.createdAt.toISOString() };
+  }
+
+  async unfavorite(user: CoreHubUser, templateId: string) {
+    const removed = await this.prisma.templateFavorite.deleteMany({ where: { coreUserId: user.coreUserId, templateId } });
+
+    if (removed.count === 0) throw new NotFoundException('เทมเพลตนี้ไม่ได้ติดดาวไว้');
+
+    return { id: templateId, deleted: true };
+  }
+
   /// แก้/ลบได้เฉพาะคนที่เผยแพร่ หรือ ADMIN · เทมเพลตตั้งต้นของทีมแก้ได้เฉพาะ ADMIN
   private async assertCanManage(user: CoreHubUser, id: string) {
     const row = await this.prisma.template.findUnique({
@@ -122,7 +150,7 @@ export class TemplatesService {
   }
 }
 
-function toSummary(row: Omit<Template, 'document'>, coreUserId: string) {
+function toSummary(row: Omit<Template, 'document'> & { favorites?: { id: string }[] }, coreUserId: string) {
   return {
     id: row.id,
     title: row.title,
@@ -135,6 +163,7 @@ function toSummary(row: Omit<Template, 'document'>, coreUserId: string) {
     usageCount: row.usageCount,
     isBuiltIn: row.createdByCoreUserId === null,
     isMine: row.createdByCoreUserId === coreUserId,
+    isStarred: (row.favorites?.length ?? 0) > 0,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };

@@ -108,7 +108,8 @@ model Template {
   createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  designs Design[] @relation("TemplateDesigns")
+  designs   Design[]           @relation("TemplateDesigns")
+  favorites TemplateFavorite[] @relation("TemplateFavorites")
 
   @@index([designType])
   @@index([usageCount])
@@ -171,4 +172,17 @@ model Feedback {
 
   @@index([createdAt])
   @@map("feedbacks")
+}
+
+/// เทมเพลตที่ผู้ใช้ติดดาวไว้ (แถบรองของเทมเพลต → คอนเทนต์ติดดาว)
+model TemplateFavorite {
+  id         String   @id @default(uuid()) @db.Uuid
+  coreUserId String   @map("core_user_id")
+  templateId String   @map("template_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  template Template @relation("TemplateFavorites", fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([coreUserId, templateId])
+  @@map("template_favorites")
 }

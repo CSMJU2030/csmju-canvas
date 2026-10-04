@@ -88,7 +88,15 @@ export function HomeView({ tab }: { tab: 'home' | 'templates' }) {
 
       <div key={tab} className="csmju-fade-in flex flex-col gap-12 px-4 pt-6 pb-12 md:px-10">
         {tab === 'templates' ? (
-          <TemplatesTab query={query.trim()} category={category} initialType={params.get('designType') ?? ''} />
+          <TemplatesTab
+            key={`${params.get('starred')}|${params.get('builtIn')}|${params.get('owner')}`}
+            query={query.trim()}
+            category={category}
+            initialType={params.get('designType') ?? ''}
+            starred={params.get('starred') === 'true'}
+            builtIn={params.get('builtIn') === 'true'}
+            mine={params.get('owner') === 'me'}
+          />
         ) : searching ? (
           <SearchResults query={query.trim()} filters={filters} onClear={() => { setQuery(''); setFilters(EMPTY_FILTERS); }} />
         ) : (

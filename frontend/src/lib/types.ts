@@ -34,6 +34,7 @@ export interface TemplateSummary {
   usageCount: number;
   isBuiltIn: boolean;
   isMine: boolean;
+  isStarred: boolean;
   createdAt: string;
   updatedAt: string;
 }

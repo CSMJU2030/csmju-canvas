@@ -1,16 +1,16 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
-import { LayoutTemplate } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { LayoutTemplate, Star } from 'lucide-react';
 import Link from 'next/link';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { api } from '@/lib/csmju/api';
 import { categoryLabel, designType as findDesignType, designTypeGroup, designTypeLabel, type DesignType } from '@/lib/design-types';
 import { renderPageToCanvas } from '@/lib/editor/render';
 import { normalizeDocument } from '@/lib/editor/types';
 import { relativeTime } from '@/lib/format';
 import type { DesignSummary, Template, TemplateSummary } from '@/lib/types';
-import { cx } from '../csmju/primitives';
+import { cx, useToast } from '../csmju/primitives';
 import { TypeArt } from './type-art';
 
 /// ภาพย่อบนพื้นเทาอ่อนขอบมน (การ์ด "ดีไซน์ต่อ" ของ Canva)
@@ -115,7 +115,8 @@ export function TemplateCard({
   const src = template.thumbnail ?? rendered ?? null;
 
   return (
-    <div className="group">
+    <div className="group relative">
+      <StarButton template={template} />
       <button type="button" onClick={onUse} className="block w-full text-left" aria-label={`ใช้เทมเพลต ${template.title}`}>
         {size === 'lg' ? (
           <span className="flex aspect-video w-full items-center justify-center overflow-hidden rounded-xl border border-line bg-surface-muted transition-shadow group-hover:shadow-csmju-lg">
@@ -136,6 +137,51 @@ export function TemplateCard({
       </button>
       {footer}
     </div>
+  );
+}
+
+/// ปุ่มดาวมุมขวาบนของการ์ดเทมเพลต — ติดดาวแล้วเห็นตลอด ยังไม่ติดดาวเห็นตอนชี้เมาส์
+function StarButton({ template }: { template: TemplateSummary }) {
+  const queryClient = useQueryClient();
+  const toast = useToast();
+  const [starred, setStarred] = useState(template.isStarred);
+  const [synced, setSynced] = useState(template.isStarred);
+
+  if (synced !== template.isStarred) {
+    setSynced(template.isStarred);
+    setStarred(template.isStarred);
+  }
+
+  const toggle = useMutation({
+    mutationFn: (next: boolean) => (next ? api.post('/template-favorites', { templateId: template.id }) : api.del(`/template-favorites/${template.id}`)),
+    onMutate: (next) => setStarred(next),
+    onSuccess: (_data, next) => {
+      void queryClient.invalidateQueries({ queryKey: ['templates'] });
+      toast(next ? 'ติดดาวแล้ว ดูได้ที่ “คอนเทนต์ติดดาว”' : 'เลิกติดดาวแล้ว');
+    },
+    onError: (error) => {
+      setStarred(template.isStarred);
+      toast(error instanceof Error ? error.message : 'ทำรายการไม่สำเร็จ', 'error');
+    },
+  });
+
+  return (
+    <button
+      type="button"
+      aria-pressed={starred}
+      aria-label={starred ? `เลิกติดดาว ${template.title}` : `ติดดาว ${template.title}`}
+      title={starred ? 'เลิกติดดาว' : 'ติดดาว'}
+      onClick={(event) => {
+        event.stopPropagation();
+        toggle.mutate(!starred);
+      }}
+      className={cx(
+        'absolute top-2 right-2 z-10 inline-flex size-9 items-center justify-center rounded-lg bg-surface/90 shadow-csmju-sm transition-opacity hover:bg-surface',
+        starred ? 'text-chart-5 opacity-100' : 'text-ink opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100',
+      )}
+    >
+      <Star aria-hidden className={cx('csmju-wiggle size-5', starred && 'fill-current')} />
+    </button>
   );
 }
 

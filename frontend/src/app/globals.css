@@ -422,6 +422,9 @@
 @utility max-h-dialog {
   max-height: 85dvh;
 }
+@utility h-dialog {
+  height: min(85dvh, 820px);
+}
 @utility min-h-panel {
   min-height: calc(100dvh - 1rem);
 }
@@ -527,4 +530,44 @@
 }
 :root[data-motion="reduce"] .csmju-wiggle {
   animation: none !important;
+}
+
+/* ป๊อปอัป (<dialog>) เด้งขึ้นจากกลาง + ฉากหลังจางเข้า — ทุกหน้าต่าง รวม "สร้างดีไซน์" จากปุ่มเพิ่มเติม */
+@keyframes csmju-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes csmju-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.csmju-dialog[open] {
+  animation: csmju-dialog-in 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.csmju-dialog::backdrop {
+  background-color: rgba(13, 10, 24, 0.55);
+  backdrop-filter: blur(2px);
+}
+.csmju-dialog[open]::backdrop {
+  animation: csmju-backdrop-in 220ms ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .csmju-dialog[open],
+  .csmju-dialog[open]::backdrop {
+    animation: none;
+  }
+}
+:root[data-motion="reduce"] .csmju-dialog[open],
+:root[data-motion="reduce"] .csmju-dialog[open]::backdrop {
+  animation: none;
 }

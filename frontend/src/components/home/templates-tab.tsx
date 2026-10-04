@@ -47,12 +47,27 @@ export function CategoryChips({ value, onChange }: { value: string; onChange: (k
 
 const PAGE_SIZE = 24;
 
-export function TemplatesTab({ query, category, initialType = '' }: { query: string; category: string; initialType?: string }) {
+export function TemplatesTab({
+  query,
+  category,
+  initialType = '',
+  starred = false,
+  builtIn = false,
+  mine = false,
+}: {
+  query: string;
+  category: string;
+  initialType?: string;
+  starred?: boolean;
+  builtIn?: boolean;
+  mine?: boolean;
+}) {
   const [type, setType] = useState(initialType);
-  const filtering = query !== '' || category !== '' || type !== '';
+  const scope = starred ? 'starred' : builtIn ? 'builtIn' : mine ? 'mine' : null;
+  const filtering = query !== '' || category !== '' || type !== '' || scope !== null;
 
   return filtering ? (
-    <Results query={query} category={category} type={type} onType={setType} />
+    <Results query={query} category={category} type={type} onType={setType} scope={scope} />
   ) : (
     <>
       <Explore onPick={setType} />
@@ -170,22 +185,48 @@ function AllTemplates() {
   );
 }
 
-function Results({ query, category, type, onType }: { query: string; category: string; type: string; onType: (t: string) => void }) {
+const SCOPE_TITLE = { starred: 'คอนเทนต์ติดดาว', builtIn: 'เทมเพลตตั้งต้นของทีม CS Canvas', mine: 'เทมเพลตที่ฉันเผยแพร่' } as const;
+
+function Results({
+  query,
+  category,
+  type,
+  onType,
+  scope,
+}: {
+  query: string;
+  category: string;
+  type: string;
+  onType: (t: string) => void;
+  scope: keyof typeof SCOPE_TITLE | null;
+}) {
   const use = useUse();
-  const [owner, setOwner] = useState<'' | 'me' | 'others'>('');
+  const [owner, setOwner] = useState<'' | 'me' | 'others'>(scope === 'mine' ? 'me' : '');
   const [sort, setSort] = useState<'popular' | 'recent'>('popular');
   const [page, setPage] = useState(1);
   const result = useQuery({
-    queryKey: ['templates', 'results', query, category, type, owner, sort, page],
+    queryKey: ['templates', 'results', query, category, type, owner, sort, page, scope],
     queryFn: () =>
-      api.list<TemplateSummary>(`/templates${qs({ q: query, category, designType: type, owner: owner || undefined, sort, page, limit: PAGE_SIZE })}`),
+      api.list<TemplateSummary>(
+        `/templates${qs({
+          q: query,
+          category,
+          designType: type,
+          owner: owner || undefined,
+          starred: scope === 'starred' ? true : undefined,
+          builtIn: scope === 'builtIn' ? true : undefined,
+          sort,
+          page,
+          limit: PAGE_SIZE,
+        })}`,
+      ),
   });
 
   return (
     <section>
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <h2 className="mr-auto text-csmju-h2 font-bold text-ink">
-          {query ? `ผลการค้นหา “${query}”` : type ? designTypeLabel(type) : 'เทมเพลต'}
+          {query ? `ผลการค้นหา “${query}”` : scope ? SCOPE_TITLE[scope] : type ? designTypeLabel(type) : 'เทมเพลต'}
           {result.data && <span className="ml-2 text-csmju-body font-normal text-muted">{result.data.meta.total.toLocaleString('th-TH')} แบบ</span>}
         </h2>
         {type && (
@@ -209,7 +250,10 @@ function Results({ query, category, type, onType }: { query: string; category: s
       ) : result.isError ? (
         <ErrorState message={errorMessage(result.error)} onRetry={() => void result.refetch()} />
       ) : result.data!.items.length === 0 ? (
-        <EmptyState title="ไม่พบเทมเพลต" description="ลองคำอื่น หรือยกเลิกตัวกรองบางตัว" />
+        <EmptyState
+          title={scope === 'starred' ? 'ยังไม่มีเทมเพลตที่ติดดาว' : 'ไม่พบเทมเพลต'}
+          description={scope === 'starred' ? 'กดรูปดาวบนการ์ดเทมเพลตเพื่อเก็บไว้ดูที่นี่' : 'ลองคำอื่น หรือยกเลิกตัวกรองบางตัว'}
+        />
       ) : (
         <>
           <TemplateGrid templates={result.data!.items} onUse={use} />

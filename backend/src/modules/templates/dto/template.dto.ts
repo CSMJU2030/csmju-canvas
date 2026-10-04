@@ -1,6 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsBoolean,
   IsIn,
+  IsUUID,
   IsInt,
   IsObject,
   IsOptional,
@@ -12,7 +14,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { PaginationQuery } from '../../../common/http/pagination.dto.js';
-import { TrimQuery } from '../../../common/http/query-transforms.js';
+import { BooleanQuery, TrimQuery } from '../../../common/http/query-transforms.js';
 import {
   DESIGN_TYPE_PATTERN,
   MAX_CANVAS_PX,
@@ -51,6 +53,29 @@ export class ListTemplatesQuery extends PaginationQuery {
   @IsOptional()
   @IsIn(TEMPLATE_SORTS, { message: 'sort ต้องเป็น popular หรือ recent' })
   sort?: (typeof TEMPLATE_SORTS)[number];
+
+  @ApiPropertyOptional({ description: 'true = เฉพาะที่ฉันติดดาวไว้' })
+  @IsOptional()
+  @BooleanQuery()
+  @IsBoolean({ message: 'starred ต้องเป็น true หรือ false' })
+  starred?: boolean;
+
+  @ApiPropertyOptional({ description: 'true = เฉพาะเทมเพลตตั้งต้นของทีม CS Canvas' })
+  @IsOptional()
+  @BooleanQuery()
+  @IsBoolean({ message: 'builtIn ต้องเป็น true หรือ false' })
+  builtIn?: boolean;
+}
+
+export class CreateFavoriteDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID('4', { message: 'templateId ต้องเป็น UUID v4' })
+  templateId!: string;
+}
+
+export class FavoriteDto {
+  @ApiProperty({ format: 'uuid' }) templateId!: string;
+  @ApiProperty() createdAt!: string;
 }
 
 export class CreateTemplateDto {
@@ -130,6 +155,7 @@ export class TemplateSummaryDto {
   @ApiProperty() usageCount!: number;
   @ApiProperty({ description: 'true = เทมเพลตตั้งต้นของทีม CS Canvas' }) isBuiltIn!: boolean;
   @ApiProperty({ description: 'ผู้เรียกเป็นคนเผยแพร่เอง' }) isMine!: boolean;
+  @ApiProperty({ description: 'ผู้เรียกติดดาวไว้' }) isStarred!: boolean;
   @ApiProperty() createdAt!: string;
   @ApiProperty() updatedAt!: string;
 }

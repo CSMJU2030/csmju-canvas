@@ -672,6 +672,24 @@
                 "recent"
               ]
             }
+          },
+          {
+            "name": "starred",
+            "required": false,
+            "in": "query",
+            "description": "true = เฉพาะที่ฉันติดดาวไว้",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "builtIn",
+            "required": false,
+            "in": "query",
+            "description": "true = เฉพาะเทมเพลตตั้งต้นของทีม CS Canvas",
+            "schema": {
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -931,6 +949,95 @@
           }
         },
         "summary": "เลิกเผยแพร่เทมเพลต",
+        "tags": [
+          "templates"
+        ]
+      }
+    },
+    "/api/v1/template-favorites": {
+      "post": {
+        "operationId": "TemplateFavoritesController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateFavoriteDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/FavoriteDto"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "ติดดาวเทมเพลต",
+        "tags": [
+          "templates"
+        ]
+      }
+    },
+    "/api/v1/template-favorites/{templateId}": {
+      "delete": {
+        "operationId": "TemplateFavoritesController_remove",
+        "parameters": [
+          {
+            "name": "templateId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/DeletedDto"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "เลิกติดดาวเทมเพลต",
         "tags": [
           "templates"
         ]
@@ -2125,6 +2232,10 @@
             "type": "boolean",
             "description": "ผู้เรียกเป็นคนเผยแพร่เอง"
           },
+          "isStarred": {
+            "type": "boolean",
+            "description": "ผู้เรียกติดดาวไว้"
+          },
           "createdAt": {
             "type": "string"
           },
@@ -2143,6 +2254,7 @@
           "usageCount",
           "isBuiltIn",
           "isMine",
+          "isStarred",
           "createdAt",
           "updatedAt"
         ]
@@ -2187,6 +2299,10 @@
             "type": "boolean",
             "description": "ผู้เรียกเป็นคนเผยแพร่เอง"
           },
+          "isStarred": {
+            "type": "boolean",
+            "description": "ผู้เรียกติดดาวไว้"
+          },
           "createdAt": {
             "type": "string"
           },
@@ -2209,6 +2325,7 @@
           "usageCount",
           "isBuiltIn",
           "isMine",
+          "isStarred",
           "createdAt",
           "updatedAt",
           "document"
@@ -2271,6 +2388,34 @@
             "type": "string"
           }
         }
+      },
+      "FavoriteDto": {
+        "type": "object",
+        "properties": {
+          "templateId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "templateId",
+          "createdAt"
+        ]
+      },
+      "CreateFavoriteDto": {
+        "type": "object",
+        "properties": {
+          "templateId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "templateId"
+        ]
       },
       "AssetDto": {
         "type": "object",

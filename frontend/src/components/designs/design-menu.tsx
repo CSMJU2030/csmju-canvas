@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Copy, Download, Ellipsis, ExternalLink, FolderInput, Info, LayoutTemplate, Link2, PenLine, Trash2, UserPlus } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api } from '@/lib/csmju/api';
 import { useMe } from '@/lib/csmju/session';
@@ -11,6 +11,7 @@ import { TEMPLATE_CATEGORIES } from '@/lib/design-types';
 import { exportPages } from '@/lib/editor/export';
 import { normalizeDocument } from '@/lib/editor/types';
 import type { Design, DesignSummary, Folder } from '@/lib/types';
+import { FloatingPanel, useAnchoredMenu } from '../csmju/floating';
 import { Button, Dialog, FormField, cx, errorMessage, inputClass, useToast } from '../csmju/primitives';
 import { DetailsPanel, ShareDialog, copyDesignLink } from './design-actions';
 
@@ -22,29 +23,12 @@ export function DesignMenu({ design }: { design: DesignSummary }) {
   const queryClient = useQueryClient();
   const toast = useToast();
   const me = useMe();
-  const [open, setOpen] = useState(false);
+  const { open, setOpen, anchorRef, menuRef } = useAnchoredMenu();
   const [dialog, setDialog] = useState<'rename' | 'folder' | 'details' | 'share' | 'publish' | null>(null);
-  const ref = useRef<HTMLDivElement>(null);
   const create = useCreateDesign();
   const isOwner = design.access === 'OWNER';
   const canPublish = me.subsystemRole === 'EDITOR' || me.subsystemRole === 'ADMIN';
 
-  useEffect(() => {
-    if (!open) return;
-
-    const close = (event: PointerEvent) => {
-      if (!ref.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const onKey = (event: KeyboardEvent) => event.key === 'Escape' && setOpen(false);
-
-    document.addEventListener('pointerdown', close);
-    document.addEventListener('keydown', onKey);
-
-    return () => {
-      document.removeEventListener('pointerdown', close);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
 
   const update = useMutation({
     mutationFn: (body: Record<string, unknown>) => api.patch<DesignSummary>(`/designs/${design.id}`, body),
@@ -83,8 +67,9 @@ export function DesignMenu({ design }: { design: DesignSummary }) {
   const item = 'flex min-h-11 w-full items-center gap-3 px-4 text-left text-csmju-caption text-ink hover:bg-surface-muted';
 
   return (
-    <div ref={ref} className="relative">
+    <div className="relative">
       <button
+        ref={anchorRef}
         type="button"
         aria-label={`ตัวเลือกของ ${design.title}`}
         title="ตัวเลือก"
@@ -99,8 +84,7 @@ export function DesignMenu({ design }: { design: DesignSummary }) {
       >
         <Ellipsis aria-hidden className="size-5" />
       </button>
-      {open && (
-        <div role="menu" aria-label={`ตัวเลือกของ ${design.title}`} className="csmju-pop absolute top-full right-0 z-40 mt-1 max-h-popover w-72 overflow-y-auto rounded-2xl border border-line bg-surface py-1 shadow-csmju-lg" onClick={(e) => e.stopPropagation()}>
+      <FloatingPanel open={open} menuRef={menuRef} label={`ตัวเลือกของ ${design.title}`} className="max-h-popover w-72 overflow-y-auto rounded-2xl border border-line bg-surface py-1 shadow-csmju-lg">
           <div className="border-b border-line px-4 py-3">
             <div className="flex items-center gap-2">
               <p className="truncate text-csmju-body font-semibold text-ink">{design.title}</p>
@@ -176,8 +160,7 @@ export function DesignMenu({ design }: { design: DesignSummary }) {
               </button>
             </div>
           )}
-        </div>
-      )}
+      </FloatingPanel>
       {/* portal ไปที่ body — ตัวห่อเมนูบนการ์ดจางเป็น 0 ตอนเมาส์ไม่ได้ชี้ ถ้าไม่ย้ายออก แผงจะมองไม่เห็น */}
       {dialog &&
         createPortal(

@@ -47,6 +47,7 @@ describe('CS Canvas API (e2e)', () => {
     await prisma.notification.deleteMany({ where: { coreUserId: owners } });
     await prisma.preference.deleteMany({ where: { coreUserId: owners } });
     await prisma.feedback.deleteMany({ where: { coreUserId: owners } });
+    await prisma.templateFavorite.deleteMany({ where: { coreUserId: owners } });
     await app.close();
   });
 
@@ -260,5 +261,25 @@ describe('CS Canvas API (e2e)', () => {
     const res = await http().patch('/api/v1/preferences').set('Authorization', bearer(student, 'student')).send({ theme: 'DARK' }).expect(200);
 
     expect(res.body.data.theme).toBe('DARK');
+  });
+
+  it('ติดดาวเทมเพลต แล้วกรองเฉพาะที่ติดดาวได้ · เลิกติดดาวได้', async () => {
+    const list = await http().get('/api/v1/templates?limit=1').set('Authorization', bearer(student, 'student')).expect(200);
+    const templateId = list.body.data[0].id as string;
+
+    await http().post('/api/v1/template-favorites').set('Authorization', bearer(student, 'student')).send({ templateId }).expect(201);
+
+    const starred = await http().get('/api/v1/templates?starred=true').set('Authorization', bearer(student, 'student')).expect(200);
+
+    expect(starred.body.data.map((t: { id: string }) => t.id)).toContain(templateId);
+    expect(starred.body.data[0].isStarred).toBe(true);
+
+    // ของคนอื่นไม่ติดดาวตาม
+    const others = await http().get('/api/v1/templates?starred=true').set('Authorization', bearer(other, 'student')).expect(200);
+
+    expect(others.body.data.map((t: { id: string }) => t.id)).not.toContain(templateId);
+
+    await http().delete(`/api/v1/template-favorites/${templateId}`).set('Authorization', bearer(student, 'student')).expect(200);
+    await http().delete(`/api/v1/template-favorites/${templateId}`).set('Authorization', bearer(student, 'student')).expect(404);
   });
 });

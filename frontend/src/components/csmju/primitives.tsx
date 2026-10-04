@@ -1,6 +1,7 @@
 'use client';
 
 import { CircleAlert, Inbox, LoaderCircle, X } from 'lucide-react';
+import { FloatingPanel, useAnchoredMenu } from './floating';
 import {
   createContext,
   useCallback,
@@ -218,6 +219,7 @@ export function Dialog({
   children,
   footer,
   size = 'md',
+  bare = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -225,8 +227,11 @@ export function Dialog({
   children: ReactNode;
   footer?: ReactNode;
   size?: 'md' | 'lg' | 'xl';
+  /// ไม่มีแถบหัว — เนื้อหาจัดหัวข้อเอง (หน้าต่างสร้างดีไซน์แบบ Canva) · ปุ่มปิดลอยมุมขวาบน
+  bare?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
 
   useEffect(() => {
     const dialog = ref.current;
@@ -248,28 +253,37 @@ export function Dialog({
       onClick={(event) => {
         if (event.target === ref.current) onClose();
       }}
-      aria-labelledby={`${title}-title`}
+      aria-labelledby={bare ? undefined : titleId}
+      aria-label={bare ? title : undefined}
       className={cx(
-        'm-auto w-11/12 rounded-3xl bg-surface p-0 text-body shadow-csmju-lg backdrop:bg-inverse/50',
+        'csmju-dialog m-auto w-11/12 overflow-visible rounded-3xl bg-surface p-0 text-body shadow-csmju-lg',
         size === 'md' && 'max-w-lg',
         size === 'lg' && 'max-w-3xl',
         size === 'xl' && 'max-w-6xl',
       )}
     >
-      {open && (
-        <div className="flex max-h-dialog flex-col">
-          <div className="flex items-center justify-between gap-4 border-b border-line px-5 py-3">
-            <h2 id={`${title}-title`} className="text-csmju-h3 font-semibold text-ink">
-              {title}
-            </h2>
-            <IconButton label="ปิด" onClick={onClose}>
+      {open &&
+        (bare ? (
+          <div className="relative flex max-h-dialog flex-col overflow-hidden rounded-3xl">
+            <IconButton label="ปิด" onClick={onClose} className="absolute top-3 right-3 z-10 rounded-full">
               <X aria-hidden className="size-5" />
             </IconButton>
+            {children}
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
-          {footer && <div className="flex justify-end gap-2 border-t border-line px-5 py-3">{footer}</div>}
-        </div>
-      )}
+        ) : (
+          <div className="flex max-h-dialog flex-col overflow-hidden rounded-3xl">
+            <div className="flex items-center justify-between gap-4 border-b border-line px-5 py-3">
+              <h2 id={titleId} className="text-csmju-h3 font-semibold text-ink">
+                {title}
+              </h2>
+              <IconButton label="ปิด" onClick={onClose}>
+                <X aria-hidden className="size-5" />
+              </IconButton>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
+            {footer && <div className="flex justify-end gap-2 border-t border-line px-5 py-3">{footer}</div>}
+          </div>
+        ))}
     </dialog>
   );
 }
@@ -352,31 +366,13 @@ export function Menu({
   align?: 'left' | 'right';
   triggerClassName?: string;
 }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-
-    const onPointer = (event: PointerEvent) => {
-      if (!ref.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
-    };
-
-    document.addEventListener('pointerdown', onPointer);
-    document.addEventListener('keydown', onKey);
-
-    return () => {
-      document.removeEventListener('pointerdown', onPointer);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
+  // เมนูวาดที่ <body> ด้วยตำแหน่ง fixed — ไม่โดนแผ่นเนื้อหาตัดขอบหรือแถบรองทับ
+  const { open, setOpen, anchorRef, menuRef } = useAnchoredMenu(align === 'right' ? 'end' : 'start');
 
   return (
-    <div ref={ref} className="relative">
+    <div className="relative">
       <button
+        ref={anchorRef}
         type="button"
         aria-label={label}
         title={label}
@@ -394,14 +390,8 @@ export function Menu({
       >
         {trigger}
       </button>
-      {open && (
-        <ul
-          role="menu"
-          className={cx(
-            'absolute z-40 mt-1 min-w-52 rounded-xl border border-line bg-surface py-1 shadow-csmju-lg',
-            align === 'right' ? 'right-0' : 'left-0',
-          )}
-        >
+      <FloatingPanel open={open} menuRef={menuRef} label={label} className="min-w-52 rounded-xl border border-line bg-surface py-1 shadow-csmju-lg">
+        <ul role="none">
           {items.map((item) => (
             <li key={item.label} role="none">
               <button
@@ -425,7 +415,7 @@ export function Menu({
             </li>
           ))}
         </ul>
-      )}
+      </FloatingPanel>
     </div>
   );
 }
