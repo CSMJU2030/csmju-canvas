@@ -4,6 +4,8 @@
 /// ก่อนหมุน · หมุนรอบจุดกึ่งกลางกล่องเป็นองศาตามเข็มนาฬิกา
 /// ลำดับใน `elements` คือลำดับชั้น: ตัวแรกอยู่ล่างสุด ตัวสุดท้ายอยู่บนสุด
 
+import { normalizeFrame, normalizeGrid } from './frames';
+
 export const DOCUMENT_VERSION = 1;
 
 export interface BaseElement {
@@ -195,8 +197,52 @@ export interface PathElement extends BaseElement {
   brush: BrushKind;
 }
 
-export type ElementType = 'text' | 'shape' | 'image' | 'svg' | 'path';
-export type CanvasElement = TextElement | ShapeElement | ImageElement | SvgElement | PathElement;
+/// รูปในกรอบหรือในช่องของกริด — วางแบบเต็มช่อง (cover) แล้วซูม/เลื่อนได้ (สูตรใน lib/editor/frames.ts)
+export interface FrameImage {
+  src: string;
+  assetId: string | null;
+  /// ขนาดจริงของรูป (พิกเซล) — ใช้คำนวณการวางก่อนรูปโหลดเสร็จ
+  naturalWidth: number;
+  naturalHeight: number;
+  /// 1 = พอดีเต็มช่อง · 1–5 = ซูมเข้า
+  zoom: number;
+  /// ตำแหน่งรูปในช่องแบบ CSS object-position: 0 = ชิดซ้าย/บน · 0.5 = กึ่งกลาง · 1 = ชิดขวา/ล่าง
+  offsetX: number;
+  offsetY: number;
+  name?: string;
+  flipX?: boolean;
+  flipY?: boolean;
+  adjust?: Partial<ImageAdjust> | null;
+  filter?: string | null;
+  filterIntensity?: number;
+  colorEdits?: ColorEdit[] | null;
+  erase?: EraseStroke[] | null;
+}
+
+export type FrameShape = 'circle' | 'rounded' | 'square' | 'heart' | 'star' | 'blob' | 'arch' | 'polaroid' | 'phone' | 'laptop';
+
+/// กรอบ: รูปทรงที่เป็นหน้ากาก ใส่รูปได้หนึ่งรูป · ว่าง = แสดงช่องเทาให้ลากรูปมาวาง
+export interface FrameElement extends BaseElement {
+  type: 'frame';
+  shape: FrameShape;
+  image: FrameImage | null;
+}
+
+export type GridLayout = 'cols-2' | 'rows-2' | 'cols-3' | 'grid-2x2' | 'big-2' | 'big-3' | 'collage-5' | 'collage-6';
+
+/// กริด: หลายช่องตามเค้าโครงสำเร็จรูป แต่ละช่องใส่รูปได้หนึ่งรูป
+export interface GridElement extends BaseElement {
+  type: 'grid';
+  layout: GridLayout;
+  /// ระยะห่างระหว่างช่อง (px ของหน้า)
+  gap: number;
+  cornerRadius: number;
+  /// เรียงตามช่องของเค้าโครง · null = ช่องว่าง
+  cells: (FrameImage | null)[];
+}
+
+export type ElementType = 'text' | 'shape' | 'image' | 'svg' | 'path' | 'frame' | 'grid';
+export type CanvasElement = TextElement | ShapeElement | ImageElement | SvgElement | PathElement | FrameElement | GridElement;
 
 export interface Page {
   id: string;
@@ -266,10 +312,12 @@ export function normalizeDocument(input: unknown): DesignDocument {
 function isKnownElement(value: unknown): value is CanvasElement {
   const type = (value as { type?: unknown } | null)?.type;
 
-  return type === 'text' || type === 'shape' || type === 'image' || type === 'svg' || type === 'path';
+  return type === 'text' || type === 'shape' || type === 'image' || type === 'svg' || type === 'path' || type === 'frame' || type === 'grid';
 }
 
-function withDefaults(element: CanvasElement): CanvasElement {
+function withDefaults(input: CanvasElement): CanvasElement {
+  const element = input.type === 'frame' ? normalizeFrame(input) : input.type === 'grid' ? normalizeGrid(input) : input;
+
   return {
     ...element,
     id: element.id || newId(),

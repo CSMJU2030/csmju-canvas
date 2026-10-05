@@ -2,16 +2,22 @@
 
 import {
   AlignCenter, AlignJustify, AlignLeft, AlignRight, Bold, CaseSensitive, Clock, Eraser, FlipHorizontal2, FlipVertical2,
-  Group, Italic, List, ListOrdered, Minus, PaintRoller, Plus, RotateCcw, Trash2, Underline, Undo2, Ungroup, Strikethrough,
+  Group, ImageOff, Italic, List, ListOrdered, Minus, Move, PaintRoller, Plus, RotateCcw, Trash2, Underline, Undo2, Ungroup, Unlink, Upload, Strikethrough,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cx } from '@/components/csmju/primitives';
+import { clearCell, detachCell, isFrameLike, patchCellImage, type FrameLike } from '@/lib/editor/frame-actions';
+import { FRAME_SHAPES, GRID_LAYOUTS, cellImages, gridCellRects, maxGridGap, relayoutCells } from '@/lib/editor/frames';
 import { FONT_FAMILIES, cssFamily } from '@/lib/editor/fonts';
 import { isGradient } from '@/lib/editor/paint';
 import { currentPage, useEditor } from '@/lib/editor/store';
-import { isLineShape, type CanvasElement, type ImageElement, type PathElement, type ShapeElement, type StrokeStyle, type TextElement } from '@/lib/editor/types';
+import {
+  isLineShape, type CanvasElement, type FrameElement, type FrameImage, type GridElement, type ImageElement, type PathElement, type ShapeElement, type StrokeStyle,
+  type TextElement,
+} from '@/lib/editor/types';
 import { useEditorUi, type ColorTarget } from '@/lib/editor/ui-store';
 import { PopoverButton, RangeField, ToolbarButton, ToolbarDivider } from './controls';
+import { FrameShapeGlyph, GridLayoutGlyph } from './frame-glyphs';
 
 /// แถบเครื่องมือลอยกลางด้านบนผืนผ้าใบ (ภาพบรีฟ "แถบบนของข้อความ/รูป/เส้นวาด")
 ///
@@ -25,11 +31,19 @@ export function ContextToolbar() {
   const only = types.size === 1 ? selected[0].type : null;
   const imageErase = useEditorUi((s) => s.imageErase);
   const erasing = imageErase && selected.length === 1 && selected[0].id === imageErase.id ? (selected[0] as ImageElement) : null;
+  const frameEdit = useEditorUi((s) => s.frameEdit);
+  const frameCell = useEditorUi((s) => s.frameCell);
+  const framing = frameEdit && selected.length === 1 && selected[0].id === frameEdit.id && isFrameLike(selected[0]) ? selected[0] : null;
 
   let content: React.ReactNode;
 
   if (erasing) content = <EraseTools el={erasing} size={imageErase!.size} />;
+  else if (framing) content = <FrameEditTools el={framing} cell={frameEdit!.cell} />;
   else if (selected.length === 0) content = <PageTools />;
+  else if (only === 'frame' && selected.length === 1) content = <FrameTools el={selected[0] as FrameElement} />;
+  else if (only === 'grid' && selected.length === 1) {
+    content = <GridTools el={selected[0] as GridElement} cell={frameCell?.id === selected[0].id ? frameCell.cell : null} />;
+  }
   else if (only === 'text') content = <TextTools els={selected as TextElement[]} />;
   else if (only === 'shape') content = <ShapeTools els={selected as ShapeElement[]} />;
   else if (only === 'image' && selected.length === 1) content = <ImageTools el={selected[0] as ImageElement} />;
@@ -545,6 +559,204 @@ function ImageTools({ el }: { el: ImageElement }) {
       </PopoverButton>
       <TransparencyButton els={[el]} />
       <TrailingTools effects={false} />
+    </>
+  );
+}
+
+// ── กรอบและกริด ────────────────────────────────────────────────────
+
+const MENU_ITEM = 'flex min-h-11 items-center gap-3 rounded-lg px-3 text-left text-csmju-caption text-ink hover:bg-surface-muted';
+
+/// ปุ่มของช่องที่มีรูป: แก้ไข · แทนที่ · ปรับตำแหน่ง · แยกรูปออก · ลบรูป · พลิก
+function CellImageTools({ el, cell, image }: { el: FrameLike; cell: number; image: FrameImage }) {
+  const ui = useEditorUi.getState;
+
+  return (
+    <>
+      <PanelButton panel="image-edit" label="แก้ไข" />
+      <PanelButton panel="replace" label="แทนที่" />
+      <ToolbarButton
+        label="ปรับตำแหน่งรูปในกรอบ (ดับเบิลคลิกหรือกด Enter)"
+        wide
+        disabled={el.locked}
+        onClick={() => ui().set({ frameCell: { id: el.id, cell }, frameEdit: { id: el.id, cell } })}
+      >
+        <Move aria-hidden className="size-5" /> ปรับตำแหน่ง
+      </ToolbarButton>
+      <ToolbarButton label="แยกรูปออกจากกรอบเป็นรูปเดี่ยว" wide disabled={el.locked} onClick={() => detachCell(el.id, cell)}>
+        <Unlink aria-hidden className="size-5" /> แยกรูปออก
+      </ToolbarButton>
+      <ToolbarButton label="ลบรูปออกจากกรอบ (กรอบยังอยู่)" wide disabled={el.locked} onClick={() => clearCell(el.id, cell)}>
+        <ImageOff aria-hidden className="size-5" /> ลบรูป
+      </ToolbarButton>
+      <PopoverButton label="พลิกรูปในกรอบ" wide trigger={<><FlipHorizontal2 aria-hidden className="size-5" /> พลิก</>} panelClassName="w-60 p-1">
+        {(close) => (
+          <div className="flex flex-col">
+            <button type="button" onClick={() => { patchCellImage(el.id, cell, { flipX: !image.flipX }); close(); }} className={MENU_ITEM}>
+              <FlipHorizontal2 aria-hidden className="size-5" /> พลิกแนวนอน
+            </button>
+            <button type="button" onClick={() => { patchCellImage(el.id, cell, { flipY: !image.flipY }); close(); }} className={MENU_ITEM}>
+              <FlipVertical2 aria-hidden className="size-5" /> พลิกแนวตั้ง
+            </button>
+          </div>
+        )}
+      </PopoverButton>
+    </>
+  );
+}
+
+/// ช่องว่าง: ปุ่มเปิดแผงอัปโหลด (กดรูปในแผงแล้วรูปจะลงช่องนี้) + คำแนะนำการลากวาง
+function EmptyCellTools({ el, cell }: { el: FrameLike; cell: number }) {
+  return (
+    <>
+      <ToolbarButton
+        label="เลือกรูปจากแผงอัปโหลดมาใส่ช่องนี้"
+        wide
+        disabled={el.locked}
+        onClick={() => {
+          useEditorUi.getState().set({ frameCell: { id: el.id, cell } });
+          useEditorUi.getState().setPanel('uploads');
+        }}
+      >
+        <Upload aria-hidden className="size-5" /> เลือกรูป
+      </ToolbarButton>
+      <span className="px-2 text-csmju-caption whitespace-nowrap text-muted">หรือลากรูปมาวางในช่อง</span>
+    </>
+  );
+}
+
+function FrameShapePopover({ el }: { el: FrameElement }) {
+  return (
+    <PopoverButton label="รูปทรงกรอบ" trigger={<FrameShapeGlyph shape={el.shape} className="size-6" />} panelClassName="w-72">
+      {(close) => (
+        <div className="grid grid-cols-5 gap-2">
+          {FRAME_SHAPES.map((s) => (
+            <button
+              key={s.key}
+              type="button"
+              aria-label={s.label}
+              title={s.label}
+              aria-pressed={el.shape === s.key}
+              onClick={() => {
+                patch([el.id], { shape: s.key });
+                close();
+              }}
+              className={cx(
+                'flex aspect-square items-center justify-center rounded-xl border-2 text-ink',
+                el.shape === s.key ? 'border-primary bg-primary-soft' : 'border-line hover:border-line-strong',
+              )}
+            >
+              <FrameShapeGlyph shape={s.key} className="size-8" />
+            </button>
+          ))}
+        </div>
+      )}
+    </PopoverButton>
+  );
+}
+
+function FrameTools({ el }: { el: FrameElement }) {
+  return (
+    <>
+      <FrameShapePopover el={el} />
+      <ToolbarDivider />
+      {el.image ? <CellImageTools el={el} cell={0} image={el.image} /> : <EmptyCellTools el={el} cell={0} />}
+      <ToolbarDivider />
+      <TransparencyButton els={[el]} />
+      <TrailingTools />
+    </>
+  );
+}
+
+function GridTools({ el, cell }: { el: GridElement; cell: number | null }) {
+  const active = cell !== null && cell >= 0 && cell < el.cells.length ? cell : null;
+  const image = active !== null ? el.cells[active] : null;
+  const maxRadius = Math.max(1, Math.min(...gridCellRects(el).map((c) => Math.min(c.width, c.height) / 2)));
+
+  return (
+    <>
+      <PopoverButton label="เค้าโครงกริด" trigger={<GridLayoutGlyph layout={el.layout} className="size-6" />} panelClassName="w-72">
+        {(close) => (
+          <div className="grid grid-cols-4 gap-2">
+            {GRID_LAYOUTS.map((l) => (
+              <button
+                key={l.key}
+                type="button"
+                aria-label={l.label}
+                title={l.label}
+                aria-pressed={el.layout === l.key}
+                onClick={() => {
+                  patch([el.id], (e) => ({ layout: l.key, cells: relayoutCells((e as GridElement).cells, l.key) }));
+                  useEditorUi.getState().set({ frameCell: { id: el.id, cell: 0 } });
+                  close();
+                }}
+                className={cx(
+                  'flex aspect-square items-center justify-center rounded-xl border-2 text-ink',
+                  el.layout === l.key ? 'border-primary bg-primary-soft' : 'border-line hover:border-line-strong',
+                )}
+              >
+                <GridLayoutGlyph layout={l.key} className="size-9" />
+              </button>
+            ))}
+          </div>
+        )}
+      </PopoverButton>
+      <PopoverButton label="ระยะห่างระหว่างช่อง" trigger={<SpacingIcon />}>
+        <RangeField label="ระยะห่าง" value={Math.round(el.gap)} min={0} max={maxGridGap(el)} onChange={(v) => patch([el.id], { gap: v })} />
+      </PopoverButton>
+      <CornerPopover value={el.cornerRadius} max={maxRadius} onChange={(v) => patch([el.id], { cornerRadius: v })} />
+      <ToolbarDivider />
+      {active === null ? (
+        <span className="px-2 text-csmju-caption whitespace-nowrap text-muted">คลิกช่องเพื่อใส่หรือแก้รูป</span>
+      ) : (
+        <>
+          <span className="px-2 text-csmju-caption font-semibold whitespace-nowrap text-ink">ช่อง {active + 1}</span>
+          {image ? <CellImageTools el={el} cell={active} image={image} /> : <EmptyCellTools el={el} cell={active} />}
+        </>
+      )}
+      <ToolbarDivider />
+      <TransparencyButton els={[el]} />
+      <TrailingTools />
+    </>
+  );
+}
+
+/// โหมดจัดตำแหน่งรูปในกรอบ: ลากบนผืนผ้าใบเพื่อเลื่อน · สไลเดอร์/ล้อเมาส์เพื่อซูม · เสร็จแล้ว (Enter/Esc)
+function FrameEditTools({ el, cell }: { el: FrameLike; cell: number }) {
+  const image = cellImages(el)[cell];
+  const done = () => useEditorUi.getState().set({ frameEdit: null });
+
+  if (!image) return null;
+
+  const zoom = Math.round(image.zoom * 100);
+
+  return (
+    <>
+      <span className="flex items-center gap-2 px-2 text-csmju-caption font-semibold whitespace-nowrap text-ink">
+        <Move aria-hidden className="size-5" /> ลากรูปเพื่อจัดตำแหน่ง
+      </span>
+      <ToolbarDivider />
+      <label className="flex items-center gap-2 px-2 text-csmju-caption text-ink">
+        ซูม
+        <input
+          type="range"
+          min={100}
+          max={500}
+          value={zoom}
+          onPointerDown={() => useEditor.getState().beginGesture()}
+          onPointerUp={() => useEditor.getState().endGesture()}
+          onChange={(e) => patchCellImage(el.id, cell, { zoom: Number(e.target.value) / 100 })}
+          className="w-28 accent-primary"
+        />
+        <span className="w-12 tabular-nums">{zoom}%</span>
+      </label>
+      <ToolbarButton label="รีเซ็ตตำแหน่งและการซูม" wide onClick={() => patchCellImage(el.id, cell, { zoom: 1, offsetX: 0.5, offsetY: 0.5 })}>
+        <RotateCcw aria-hidden className="size-5" /> รีเซ็ต
+      </ToolbarButton>
+      <ToolbarDivider />
+      <button type="button" onClick={done} className="min-h-10 rounded-lg bg-primary px-4 text-csmju-caption font-semibold text-on-inverse hover:bg-primary-hover">
+        เสร็จแล้ว
+      </button>
     </>
   );
 }

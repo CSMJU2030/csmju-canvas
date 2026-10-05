@@ -1,10 +1,17 @@
-import { cssFamily, ensureFont, isFontReady } from './fonts';
+import { DEFAULT_FONT, cssFamily, ensureFont, isFontReady } from './fonts';
+import {
+  PLACEHOLDER_FILL, PLACEHOLDER_HINT, PLACEHOLDER_ICON, PLACEHOLDER_INK, cellArea, cellImages, coverRect, frameArea, frameDecor, frameMaskPath, gridCellRects,
+  roundRectPath, type Box,
+} from './frames';
 import { applyAdjust, applyColorEdits, effectiveAdjust, findFilter, isNeutral } from './image-filters';
 import { canvasPaint } from './paint';
 import {
   isLineShape,
   pageSizeOf,
   type CanvasElement,
+  type FrameElement,
+  type FrameImage,
+  type GridElement,
   type ImageElement,
   type Page,
   type PathElement,
@@ -72,6 +79,22 @@ export async function preloadPage(page: Page): Promise<void> {
     }
 
     if (el.type === 'text') jobs.push(ensureFont(el.fontFamily, el.fontWeight));
+
+    if (el.type === 'frame' || el.type === 'grid') {
+      for (const image of cellImages(el)) {
+        if (!image) continue;
+        getImage(image.src);
+
+        const img = images.get(image.src)!;
+
+        if (!img.complete) {
+          jobs.push(new Promise((resolve) => {
+            img.addEventListener('load', resolve, { once: true });
+            img.addEventListener('error', resolve, { once: true });
+          }));
+        }
+      }
+    }
   }
 
   await Promise.all(jobs);
@@ -665,7 +688,10 @@ function drawPath(ctx: CanvasRenderingContext2D, el: PathElement) {
 const processed = new Map<string, HTMLCanvasElement>();
 const PROCESS_LIMIT = 1600;
 
-function sourceRect(el: ImageElement, img: HTMLImageElement) {
+/// ค่าของรูปที่ตัวประมวลผลพิกเซลใช้ — รูปเดี่ยว (ImageElement) และรูปในกรอบ/กริด (FrameImage)
+type ProcessSpec = Pick<ImageElement, 'src' | 'crop' | 'adjust' | 'filter' | 'filterIntensity' | 'colorEdits' | 'erase'>;
+
+function sourceRect(el: ProcessSpec, img: HTMLImageElement) {
   const crop = el.crop ?? { x: 0, y: 0, width: 1, height: 1 };
 
   return {
@@ -692,7 +718,7 @@ function eraseHash(strokes: EraseStroke[]): string {
   return `${strokes.length}:${(h >>> 0).toString(36)}`;
 }
 
-function processedImage(el: ImageElement, img: HTMLImageElement): { source: CanvasImageSource; sx: number; sy: number; sw: number; sh: number } {
+function processedImage(el: ProcessSpec, img: HTMLImageElement): { source: CanvasImageSource; sx: number; sy: number; sw: number; sh: number } {
   const rect = sourceRect(el, img);
   const filter = findFilter(el.filter);
   const intensity = el.filterIntensity ?? 100;
@@ -833,6 +859,150 @@ function paintImage(
   ctx.restore();
 }
 
+// ── กรอบและกริด ─────────────────────────────────────────────────────
+
+/// วาดรูปของกรอบ/ช่องลงในพื้นที่ `area` ตัดตามหน้ากาก `mask` (รูปเต็มช่อง ซูม เลื่อน พลิก ปรับสี)
+function drawFrameImage(ctx: CanvasRenderingContext2D, image: FrameImage, area: Box, mask: Path2D) {
+  const img = getImage(image.src);
+
+  ctx.save();
+  ctx.clip(mask);
+
+  if (!img) {
+    // ระหว่างรอโหลด
+    ctx.fillStyle = 'rgba(100, 116, 139, 0.15)';
+    ctx.fill(mask);
+    ctx.restore();
+    return;
+  }
+
+  const { source, sx, sy, sw, sh } = processedImage({ ...image, crop: null }, img);
+  const dest = coverRect(area, img.naturalWidth, img.naturalHeight, image.zoom, image.offsetX, image.offsetY);
+  const blur = image.adjust?.blur ?? 0;
+
+  ctx.translate(dest.x + dest.width / 2, dest.y + dest.height / 2);
+  ctx.scale(image.flipX ? -1 : 1, image.flipY ? -1 : 1);
+  if (blur > 0) ctx.filter = `blur(${(blur / 100) * Math.min(area.width, area.height) * 0.05}px)`;
+  ctx.drawImage(source, sx, sy, sw, sh, -dest.width / 2, -dest.height / 2, dest.width, dest.height);
+  ctx.restore();
+}
+
+/// ช่องว่าง: พื้นเทา + ไอคอนรูปภาพ + คำแนะนำ (ถ้าช่องใหญ่พอ)
+function drawPlaceholder(ctx: CanvasRenderingContext2D, area: Box, mask: Path2D) {
+  ctx.save();
+  ctx.fillStyle = PLACEHOLDER_FILL;
+  ctx.fill(mask);
+  ctx.clip(mask);
+
+  const short = Math.min(area.width, area.height);
+  const icon = Math.min(64, short * 0.28);
+  const hint = area.width >= 110 && area.height >= 90;
+  const fontSize = Math.max(10, Math.min(24, short * 0.075));
+  const cx = area.x + area.width / 2;
+  const cy = area.y + area.height / 2 - (hint ? fontSize * 0.9 : 0);
+
+  ctx.save();
+  ctx.translate(cx - icon / 2, cy - icon / 2);
+  ctx.scale(icon / 24, icon / 24);
+  ctx.strokeStyle = PLACEHOLDER_INK;
+  ctx.lineWidth = 1.6;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.stroke(new Path2D(PLACEHOLDER_ICON));
+  ctx.restore();
+
+  if (hint) {
+    ctx.fillStyle = PLACEHOLDER_INK;
+    ctx.font = `400 ${fontSize}px ${cssFamily(DEFAULT_FONT)}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(PLACEHOLDER_HINT, cx, cy + icon / 2 + fontSize, area.width * 0.9);
+  }
+
+  ctx.restore();
+}
+
+function fillCell(ctx: CanvasRenderingContext2D, image: FrameImage | null, area: Box, mask: Path2D) {
+  if (image) drawFrameImage(ctx, image, area, mask);
+  else drawPlaceholder(ctx, area, mask);
+}
+
+function drawDecor(ctx: CanvasRenderingContext2D, layers: ReturnType<typeof frameDecor>['back']) {
+  for (const layer of layers) {
+    const path = new Path2D(layer.d);
+
+    ctx.fillStyle = layer.fill;
+    ctx.fill(path);
+    ctx.shadowColor = 'transparent';
+
+    if (layer.stroke) {
+      ctx.strokeStyle = layer.stroke;
+      ctx.lineWidth = 1;
+      ctx.stroke(path);
+    }
+  }
+}
+
+function drawFrame(ctx: CanvasRenderingContext2D, el: FrameElement) {
+  const area = frameArea(el.shape, el);
+  const mask = new Path2D(frameMaskPath(el.shape, area));
+  const decor = frameDecor(el.shape, el);
+
+  if (decor.back.length > 0) {
+    drawDecor(ctx, decor.back);
+  } else if (el.shadow) {
+    // เงาต้องตามรูปทรงของกรอบ: วาดพื้นทึบที่มีเงาก่อน แล้วค่อยวาดรูปที่ตัดขอบทับ
+    ctx.fillStyle = 'rgb(255 255 255)';
+    ctx.fill(mask);
+  }
+
+  ctx.shadowColor = 'transparent';
+  fillCell(ctx, el.image, area, mask);
+  drawDecor(ctx, decor.front);
+}
+
+function drawGrid(ctx: CanvasRenderingContext2D, el: GridElement) {
+  const cells = gridCellRects(el).map((area) => ({ area, mask: new Path2D(roundRectPath(area, el.cornerRadius)) }));
+
+  if (el.shadow) {
+    ctx.fillStyle = 'rgb(255 255 255)';
+    for (const c of cells) ctx.fill(c.mask);
+  }
+
+  ctx.shadowColor = 'transparent';
+  cells.forEach((c, i) => fillCell(ctx, el.cells[i] ?? null, c.area, c.mask));
+}
+
+/// โหมดจัดตำแหน่งรูปในกรอบ: แสดงส่วนที่ล้นกรอบแบบจาง ๆ แล้ววาดกรอบทับ (ให้เห็นว่ากำลังเลื่อนส่วนไหนของรูป)
+export function drawFrameEditGhost(ctx: CanvasRenderingContext2D, el: FrameElement | GridElement, index: number) {
+  const image = cellImages(el)[index];
+  const area = cellArea(el, index);
+  const img = image ? getImage(image.src) : null;
+
+  if (!image || !area || !img) return;
+
+  const dest = coverRect(area, img.naturalWidth, img.naturalHeight, image.zoom, image.offsetX, image.offsetY);
+
+  ctx.save();
+
+  if (el.rotation) {
+    const cx = el.x + el.width / 2;
+    const cy = el.y + el.height / 2;
+
+    ctx.translate(cx, cy);
+    ctx.rotate((el.rotation * Math.PI) / 180);
+    ctx.translate(-cx, -cy);
+  }
+
+  ctx.globalAlpha = 0.4;
+  ctx.translate(dest.x + dest.width / 2, dest.y + dest.height / 2);
+  ctx.scale(image.flipX ? -1 : 1, image.flipY ? -1 : 1);
+  ctx.drawImage(img, -dest.width / 2, -dest.height / 2, dest.width, dest.height);
+  ctx.restore();
+
+  drawElement(ctx, { ...el, opacity: 1, shadow: null });
+}
+
 function drawSvg(ctx: CanvasRenderingContext2D, el: SvgElement) {
   const img = getImage(svgDataUrl(el));
 
@@ -880,6 +1050,12 @@ export function drawElement(ctx: CanvasRenderingContext2D, el: CanvasElement, pr
       break;
     case 'path':
       drawPath(ctx, el);
+      break;
+    case 'frame':
+      drawFrame(ctx, el);
+      break;
+    case 'grid':
+      drawGrid(ctx, el);
       break;
   }
 

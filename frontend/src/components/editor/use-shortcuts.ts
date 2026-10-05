@@ -74,6 +74,13 @@ export function useShortcuts() {
         return;
       }
 
+      // จัดตำแหน่งรูปในกรอบเสร็จ (กรอบยังถูกเลือกอยู่)
+      if ((event.key === 'Escape' || event.key === 'Enter') && useEditorUi.getState().frameEdit) {
+        event.preventDefault();
+        useEditorUi.getState().set({ frameEdit: null });
+        return;
+      }
+
       if (event.key === 'Escape' && useEditorUi.getState().painting) {
         useEditorUi.getState().setPainting(false);
         return;
@@ -185,6 +192,18 @@ export function useShortcuts() {
         if (state.selection.length === 1 && only?.type === 'text' && !only.locked) {
           event.preventDefault();
           state.setEditingText(only.id);
+        }
+
+        // Enter บนกรอบ/กริดที่มีรูป = เข้าโหมดจัดตำแหน่งรูปของช่องที่เลือก
+        if (state.selection.length === 1 && (only?.type === 'frame' || only?.type === 'grid') && !only.locked) {
+          const picked = useEditorUi.getState().frameCell;
+          const cell = picked?.id === only.id ? picked.cell : 0;
+          const image = only.type === 'frame' ? only.image : only.cells[cell];
+
+          if (image) {
+            event.preventDefault();
+            useEditorUi.getState().set({ frameCell: { id: only.id, cell }, frameEdit: { id: only.id, cell } });
+          }
         }
 
         return;

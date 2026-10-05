@@ -43,6 +43,10 @@ interface EditorUi {
   overlay: 'versions' | 'find' | 'accessibility' | 'analytics' | 'resize' | 'move' | null;
   /// โหมดยางลบพิกเซลของรูป · size = เส้นผ่านศูนย์กลางแปรงเป็นพิกเซลของหน้า
   imageErase: { id: string; size: number } | null;
+  /// ช่องของกรอบ/กริดที่เลือกอยู่ (กรอบมีช่องเดียว = 0) — ปุ่มแทนที่/ลบรูป และการเลือกรูปจากแผงอัปโหลดทำกับช่องนี้
+  frameCell: { id: string; cell: number } | null;
+  /// โหมดจัดตำแหน่งรูปในกรอบ/ช่อง (ดับเบิลคลิก): ลากเพื่อเลื่อน ล้อเมาส์/สไลเดอร์เพื่อซูม · Enter/Esc = เสร็จ
+  frameEdit: { id: string; cell: number } | null;
 
   setPanel(panel: PanelKey | null): void;
   togglePanel(panel: PanelKey): void;
@@ -55,7 +59,7 @@ interface EditorUi {
   toggleRulers(): void;
   addGuide(guide: { axis: 'x' | 'y'; at: number }): void;
   moveGuide(index: number, at: number | null): void;
-  set(patch: Partial<Pick<EditorUi, 'margins' | 'bleed' | 'commentsOpen' | 'commentPins' | 'overlay' | 'stripOpen' | 'imageErase'>>): void;
+  set(patch: Partial<Pick<EditorUi, 'margins' | 'bleed' | 'commentsOpen' | 'commentPins' | 'overlay' | 'stripOpen' | 'imageErase' | 'frameCell' | 'frameEdit'>>): void;
 }
 
 export const useEditorUi = create<EditorUi>((set, get) => ({
@@ -75,6 +79,8 @@ export const useEditorUi = create<EditorUi>((set, get) => ({
   stripOpen: true,
   overlay: null,
   imageErase: null,
+  frameCell: null,
+  frameEdit: null,
 
   setPanel(panel) {
     set({ panel, toolsOpen: false });

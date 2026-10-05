@@ -19,8 +19,10 @@ import {
   type Point,
   type Rect,
 } from '@/lib/editor/geometry';
-import { createPath } from '@/lib/editor/factory';
-import { brushStyle, drawPage, strokeFreehand, subscribeImageReady } from '@/lib/editor/render';
+import { createImage, createPath } from '@/lib/editor/factory';
+import { fillCell, hasImageDrag, isFrameLike, moveImageIntoCell, patchCellImage, readImageDragData, type FrameLike } from '@/lib/editor/frame-actions';
+import { cellArea, cellAt, cellCorners, cellImages, clampZoom as clampFrameZoom, panOffset, toLocalDelta } from '@/lib/editor/frames';
+import { brushStyle, drawFrameEditGhost, drawPage, getImage, strokeFreehand, subscribeImageReady } from '@/lib/editor/render';
 import { snapRect } from '@/lib/editor/snapping';
 import { brushWidth, canEditDoc, currentPage, selectionBox, useEditor, type DrawBrush } from '@/lib/editor/store';
 import type { CanvasElement, ImageElement, PathElement, TextElement } from '@/lib/editor/types';
@@ -46,7 +48,8 @@ type Gesture =
   | { kind: 'pinch'; distance: number; zoom: number; mid: Point; pan: Point }
   | { kind: 'draw'; points: number[] }
   | { kind: 'erase'; last: Point }
-  | { kind: 'image-erase'; id: string };
+  | { kind: 'image-erase'; id: string }
+  | { kind: 'frame-pan'; id: string; cell: number; start: Point; origin: { offsetX: number; offsetY: number } };
 
 function cssVar(name: string, fallback: string): string {
   if (typeof window === 'undefined') return fallback;
@@ -70,6 +73,10 @@ export function Stage() {
   const hover = useRef<Point | null>(null);
   /// ใช้วาดเฟรมถัดไประหว่างเล่นตัวอย่างแอนิเมชัน (อ้างถึง draw ล่าสุดโดยไม่ต้องอ้างตัวเอง)
   const drawLoop = useRef<() => void>(() => undefined);
+  /// กรอบ/ช่องที่จะรับรูปถ้าปล่อยตอนนี้ (ลากรูปจากแผง หรือลากรูปบนหน้าไปทับกรอบ)
+  const dropTarget = useRef<{ id: string; cell: number } | null>(null);
+  /// รวมการซูมด้วยล้อเมาส์ในโหมดจัดตำแหน่งรูปเป็น undo ขั้นเดียว
+  const wheelTimer = useRef<number | null>(null);
 
   const editingTextId = useEditor((s) => s.editingTextId);
 
@@ -148,6 +155,13 @@ export function Stage() {
 
     ctx.restore();
 
+    // โหมดจัดตำแหน่งรูปในกรอบ: รูปส่วนที่ล้นกรอบแสดงจาง ๆ (วาดนอกขอบหน้าได้)
+    const ui = useEditorUi.getState();
+    const frameEdit = ui.frameEdit;
+    const editingFrame = frameEdit ? page.elements.find((el): el is FrameLike => el.id === frameEdit.id && isFrameLike(el)) : undefined;
+
+    if (editingFrame && frameEdit) drawFrameEditGhost(ctx, editingFrame, frameEdit.cell);
+
     // ส่วนควบคุม (พิกัดจอ)
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
@@ -159,7 +173,32 @@ export function Stage() {
       outline(ctx, corners(el).map(toScreen), primary, el.locked ? [4, 4] : []);
     }
 
-    if (selected.length === 1 && !selected[0].locked && state.editingTextId !== selected[0].id) {
+    // ช่องของกริดที่เลือก · ช่องที่กำลังจัดตำแหน่งรูป · ช่องที่จะรับรูปที่ลากมา
+    const single = selected.length === 1 ? selected[0] : null;
+
+    if (editingFrame && frameEdit) {
+      outline(ctx, cellCorners(editingFrame, frameEdit.cell).map(toScreen), primary, [], 2.5);
+    } else if (single?.type === 'grid' && ui.frameCell?.id === single.id) {
+      outline(ctx, cellCorners(single, ui.frameCell.cell).map(toScreen), primary, [], 2.5);
+    }
+
+    const drop = dropTarget.current;
+    const dropEl = drop ? page.elements.find((el): el is FrameLike => el.id === drop.id && isFrameLike(el)) : undefined;
+
+    if (drop && dropEl) {
+      const pts = cellCorners(dropEl, drop.cell).map(toScreen);
+
+      ctx.save();
+      ctx.fillStyle = 'rgba(0, 76, 153, 0.18)';
+      ctx.beginPath();
+      pts.forEach((pt, i) => (i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y)));
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+      outline(ctx, pts, primary, [6, 4], 2.5);
+    }
+
+    if (single && !single.locked && state.editingTextId !== single.id && frameEdit?.id !== single.id) {
       drawHandles(ctx, selected[0], toScreen, primary);
     } else if (selected.length > 1) {
       const box = selectionBox(page, state.selection)!;
@@ -268,14 +307,29 @@ export function Stage() {
     const unsubscribeImages = subscribeImageReady(requestDraw);
 
     const unsubscribeUi = useEditorUi.subscribe((ui, prev) => {
-      if (ui.preview !== prev.preview || ui.imageErase !== prev.imageErase) requestDraw();
+      if (ui.preview !== prev.preview || ui.imageErase !== prev.imageErase || ui.frameCell !== prev.frameCell || ui.frameEdit !== prev.frameEdit) requestDraw();
     });
     const unsubscribe = useEditor.subscribe((state, prev) => {
-      const erasing = useEditorUi.getState().imageErase;
+      const { imageErase: erasing, frameEdit } = useEditorUi.getState();
 
       // เลือกชิ้นอื่นหรือเปลี่ยนหน้า = ออกจากโหมดยางลบพิกเซล
       if (erasing && (state.selection.length !== 1 || state.selection[0] !== erasing.id || state.pageIndex !== prev.pageIndex)) {
         useEditorUi.getState().set({ imageErase: null });
+      }
+
+      // เช่นเดียวกับโหมดจัดตำแหน่งรูปในกรอบ (และเมื่อช่องนั้นไม่มีรูปแล้ว)
+      if (frameEdit) {
+        const target = currentPage(state).elements.find((el) => el.id === frameEdit.id);
+
+        if (
+          state.selection.length !== 1 ||
+          state.selection[0] !== frameEdit.id ||
+          state.pageIndex !== prev.pageIndex ||
+          !isFrameLike(target) ||
+          !cellImages(target)[frameEdit.cell]
+        ) {
+          useEditorUi.getState().set({ frameEdit: null });
+        }
       }
 
       if (state.width !== prev.width || state.height !== prev.height) {
@@ -326,6 +380,23 @@ export function Stage() {
       const el = page.elements[i];
 
       if (!el.hidden && hitElement(el, p, 4 / zoom)) return el;
+    }
+
+    return null;
+  }, []);
+
+  /// กรอบ/ช่องบนสุดใต้จุดนี้ที่รับรูปได้ (ข้าม `exclude` = รูปที่กำลังลาก)
+  const frameDropAt = useCallback((p: Point, exclude: string | null): { id: string; cell: number } | null => {
+    const page = currentPage(useEditor.getState());
+
+    for (let i = page.elements.length - 1; i >= 0; i--) {
+      const el = page.elements[i];
+
+      if (el.id === exclude || el.hidden || el.locked || !isFrameLike(el)) continue;
+
+      const cell = cellAt(el, p);
+
+      if (cell >= 0) return { id: el.id, cell };
     }
 
     return null;
@@ -395,6 +466,23 @@ export function Stage() {
     const screen = { x: event.clientX - rect.left, y: event.clientY - rect.top };
     const p = toPage(event.clientX, event.clientY);
 
+    // โหมดจัดตำแหน่งรูปในกรอบ: ลากในช่อง = เลื่อนรูป · คลิกนอกช่อง = เสร็จ
+    const frameEdit = useEditorUi.getState().frameEdit;
+
+    if (frameEdit) {
+      const target = currentPage(state).elements.find((el) => el.id === frameEdit.id);
+      const image = isFrameLike(target) ? cellImages(target)[frameEdit.cell] : null;
+
+      if (isFrameLike(target) && image && !target.locked && cellAt(target, p) === frameEdit.cell) {
+        state.beginGesture();
+        gesture.current = { kind: 'frame-pan', id: target.id, cell: frameEdit.cell, start: p, origin: { offsetX: image.offsetX, offsetY: image.offsetY } };
+        setCursor('grabbing');
+        return;
+      }
+
+      useEditorUi.getState().set({ frameEdit: null });
+    }
+
     // ยางลบพิกเซล: ลากบนรูปที่เลือกเพื่อลบส่วนนั้นให้โปร่งใส (หนึ่งรอยลาก = undo หนึ่งขั้น)
     const imageErase = useEditorUi.getState().imageErase;
 
@@ -456,7 +544,7 @@ export function Stage() {
           handle,
           id: selected[0].id,
           start: selected[0],
-          keepAspect: selected[0].type === 'image' || selected[0].type === 'svg',
+          keepAspect: selected[0].type === 'image' || selected[0].type === 'svg' || selected[0].type === 'frame',
         };
         return;
       }
@@ -483,6 +571,13 @@ export function Stage() {
         state.select(ids);
       } else if (!ids.includes(hit.id)) {
         state.select([hit.id]);
+      }
+
+      // คลิกบนกริด/กรอบ = เลือกช่องนั้นด้วย (ปุ่มแทนที่/ลบรูป และการเลือกรูปจากแผงทำกับช่องนี้)
+      if (isFrameLike(hit)) {
+        const cell = cellAt(hit, p);
+
+        if (cell >= 0) useEditorUi.getState().set({ frameCell: { id: hit.id, cell } });
       }
 
       const fresh = useEditor.getState();
@@ -538,6 +633,22 @@ export function Stage() {
         state.updateElements([target.id], () => ({ erase: [...strokes.slice(0, -1), { ...last, points: [...last.points, point.u, point.v] }] }));
       }
 
+      return;
+    }
+
+    if (g.kind === 'frame-pan') {
+      const p = toPage(event.clientX, event.clientY);
+      const target = currentPage(state).elements.find((el) => el.id === g.id);
+      const image = isFrameLike(target) ? cellImages(target)[g.cell] : null;
+      const area = isFrameLike(target) ? cellArea(target, g.cell) : null;
+
+      if (!target || !image || !area) return;
+
+      const img = getImage(image.src);
+      const natural = { width: img?.naturalWidth || image.naturalWidth, height: img?.naturalHeight || image.naturalHeight };
+      const delta = toLocalDelta(target.rotation, p.x - g.start.x, p.y - g.start.y);
+
+      patchCellImage(g.id, g.cell, panOffset(area, { ...image, ...g.origin }, natural, delta.dx, delta.dy));
       return;
     }
 
@@ -622,6 +733,12 @@ export function Stage() {
 
         return { x: Math.round((o.x + dx) * 10) / 10, y: Math.round((o.y + dy) * 10) / 10 };
       });
+
+      // ลากรูปเดี่ยวไปทับกรอบ/ช่องของกริด → เน้นช่องที่จะรับรูปเมื่อปล่อย
+      const movingId = g.origin.size === 1 ? [...g.origin.keys()][0] : null;
+      const movingEl = movingId ? page.elements.find((el) => el.id === movingId) : undefined;
+
+      dropTarget.current = movingEl?.type === 'image' ? frameDropAt(p, movingEl.id) : null;
       return;
     }
 
@@ -686,8 +803,20 @@ export function Stage() {
       return;
     }
 
-    if (g.kind === 'move' || g.kind === 'resize' || g.kind === 'rotate' || g.kind === 'erase' || g.kind === 'image-erase') state.endGesture();
+    // ปล่อยรูปเดี่ยวบนกรอบ/ช่อง = ย้ายรูปเข้าไปในช่อง (อยู่ใน gesture เดียวกับการลาก → ย้อนกลับขั้นเดียว)
+    const drop = dropTarget.current;
+
+    dropTarget.current = null;
+
+    if (g.kind === 'move' && g.moved && drop) {
+      const image = currentPage(state).elements.find((el): el is ImageElement => el.type === 'image' && g.origin.has(el.id));
+
+      if (image) moveImageIntoCell(image, drop.id, drop.cell);
+    }
+
+    if (g.kind === 'move' || g.kind === 'resize' || g.kind === 'rotate' || g.kind === 'erase' || g.kind === 'image-erase' || g.kind === 'frame-pan') state.endGesture();
     if (g.kind === 'pan') setCursor(spaceDown.current ? 'grab' : 'default');
+    if (g.kind === 'frame-pan') setCursor('grab');
 
     if (g.kind === 'draw' && state.tool.brush !== 'eraser') {
       const brush = state.tool.brush;
@@ -716,6 +845,14 @@ export function Stage() {
     if (useEditorUi.getState().painting) return setCursor(PAINT_CURSOR);
 
     const page = currentPage(state);
+    const frameEdit = useEditorUi.getState().frameEdit;
+
+    if (frameEdit) {
+      const target = page.elements.find((el) => el.id === frameEdit.id);
+
+      return setCursor(isFrameLike(target) && cellAt(target, toPage(event.clientX, event.clientY)) === frameEdit.cell ? 'grab' : 'default');
+    }
+
     const selected = page.elements.filter((el) => state.selection.includes(el.id));
     const rect = canvasRef.current!.getBoundingClientRect();
     const screen = { x: event.clientX - rect.left, y: event.clientY - rect.top };
@@ -750,7 +887,27 @@ export function Stage() {
   const onDoubleClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
     if (useEditor.getState().tool.mode === 'draw') return;
 
-    const hit = topElementAt(toPage(event.clientX, event.clientY));
+    const p = toPage(event.clientX, event.clientY);
+    const hit = topElementAt(p);
+
+    // ดับเบิลคลิกกรอบ/ช่องที่มีรูป = จัดตำแหน่งรูป · ช่องว่าง = เปิดแผงอัปโหลดเพื่อเลือกรูปใส่ช่องนี้
+    if (isFrameLike(hit) && !hit.locked && canEditDoc(useEditor.getState())) {
+      const cell = cellAt(hit, p);
+      const ui = useEditorUi.getState();
+
+      if (cell < 0) return;
+
+      useEditor.getState().select([hit.id]);
+
+      if (cellImages(hit)[cell]) {
+        ui.set({ frameCell: { id: hit.id, cell }, frameEdit: { id: hit.id, cell } });
+      } else {
+        ui.set({ frameCell: { id: hit.id, cell } });
+        ui.setPanel('uploads');
+      }
+
+      return;
+    }
 
     if (hit?.type === 'text' && !hit.locked && canEditDoc(useEditor.getState())) {
       const state = useEditor.getState();
@@ -767,6 +924,25 @@ export function Stage() {
       event.preventDefault();
 
       const state = useEditor.getState();
+      const frameEdit = useEditorUi.getState().frameEdit;
+
+      // โหมดจัดตำแหน่งรูปในกรอบ: ล้อเมาส์ = ซูมรูปในช่อง (Ctrl+ล้อยังซูมผืนผ้าใบ)
+      if (frameEdit && !event.ctrlKey && !event.metaKey) {
+        const target = currentPage(state).elements.find((el) => el.id === frameEdit.id);
+        const image = isFrameLike(target) ? cellImages(target)[frameEdit.cell] : null;
+
+        if (image) {
+          if (wheelTimer.current === null) state.beginGesture();
+          else window.clearTimeout(wheelTimer.current);
+
+          wheelTimer.current = window.setTimeout(() => {
+            wheelTimer.current = null;
+            useEditor.getState().endGesture();
+          }, 400);
+          patchCellImage(frameEdit.id, frameEdit.cell, { zoom: clampFrameZoom(image.zoom * Math.exp(-event.deltaY * 0.002)) });
+          return;
+        }
+      }
 
       if (event.ctrlKey || event.metaKey) {
         const rect = canvas.getBoundingClientRect();
@@ -812,8 +988,63 @@ export function Stage() {
     };
   }, []);
 
+  // ── ลากรูปจากแผง (อัปโหลด/คลังภาพ) มาวาง: บนกรอบ/ช่อง = ใส่รูป · ที่อื่น = เพิ่มรูปตรงจุดที่ปล่อย ──
+
+  const onDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+    if (!hasImageDrag(event.dataTransfer) || !canEditDoc(useEditor.getState())) return;
+
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+
+    const next = frameDropAt(toPage(event.clientX, event.clientY), null);
+    const current = dropTarget.current;
+
+    if (next?.id !== current?.id || next?.cell !== current?.cell) {
+      dropTarget.current = next;
+      requestDraw();
+    }
+  };
+
+  const onDragLeave = () => {
+    if (!dropTarget.current) return;
+
+    dropTarget.current = null;
+    requestDraw();
+  };
+
+  const onDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    if (!hasImageDrag(event.dataTransfer)) return;
+
+    event.preventDefault();
+
+    const state = useEditor.getState();
+    const source = readImageDragData(event.dataTransfer);
+    const p = toPage(event.clientX, event.clientY);
+    const target = frameDropAt(p, null);
+
+    dropTarget.current = null;
+    requestDraw();
+
+    if (!source || !canEditDoc(state)) return;
+
+    if (target) {
+      fillCell(target.id, target.cell, source);
+      return;
+    }
+
+    const image = createImage({ width: state.width, height: state.height }, source);
+
+    state.addElements([{ ...image, x: Math.round(p.x - image.width / 2), y: Math.round(p.y - image.height / 2) }]);
+  };
+
   return (
-    <div ref={wrapRef} className="relative min-h-0 flex-1 touch-none overflow-hidden">
+    <div
+      ref={wrapRef}
+      className="relative min-h-0 flex-1 touch-none overflow-hidden"
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
       <canvas
         ref={canvasRef}
         role="img"
@@ -943,10 +1174,10 @@ function rectCorners(r: Rect): Point[] {
   ];
 }
 
-function outline(ctx: CanvasRenderingContext2D, pts: Point[], color: string, dash: number[]) {
+function outline(ctx: CanvasRenderingContext2D, pts: Point[], color: string, dash: number[], width = 1.5) {
   ctx.save();
   ctx.strokeStyle = color;
-  ctx.lineWidth = 1.5;
+  ctx.lineWidth = width;
   ctx.setLineDash(dash);
   ctx.beginPath();
   pts.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));

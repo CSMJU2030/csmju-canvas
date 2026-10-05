@@ -787,6 +787,8 @@ const STYLE_KEYS: Record<CanvasElement['type'], string[]> = {
   image: ['cornerRadius', 'adjust', 'filter', 'filterIntensity', 'border'],
   svg: ['color'],
   path: ['color', 'strokeWidth'],
+  frame: ['shape'],
+  grid: ['gap', 'cornerRadius'],
 };
 
 function pick(el: CanvasElement, keys: string[]): Partial<CanvasElement> {
@@ -796,7 +798,7 @@ function pick(el: CanvasElement, keys: string[]): Partial<CanvasElement> {
 }
 
 export function styleOf(el: CanvasElement): StyleSnapshot {
-  const color = el.type === 'shape' ? el.fill : el.type === 'image' ? null : el.color;
+  const color = el.type === 'shape' ? el.fill : 'color' in el ? el.color : null;
 
   return {
     type: el.type,
@@ -813,7 +815,7 @@ export function applyStyle(el: CanvasElement, style: StyleSnapshot): Partial<Can
 
   if (style.color) {
     if (el.type === 'shape') out.fill = style.color;
-    else if (el.type !== 'image') out.color = style.color;
+    else if ('color' in el) out.color = style.color;
   }
 
   return out as Partial<CanvasElement>;

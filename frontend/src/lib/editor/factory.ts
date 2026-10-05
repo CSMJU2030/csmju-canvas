@@ -1,5 +1,8 @@
 import { DEFAULT_FONT } from './fonts';
-import type { BrushKind, CanvasElement, ImageElement, PathElement, ShapeElement, ShapeKind, SvgElement, TextElement } from './types';
+import { frameShapeSpec, gridLayoutSpec } from './frames';
+import type {
+  BrushKind, CanvasElement, FrameElement, FrameShape, GridElement, GridLayout, ImageElement, PathElement, ShapeElement, ShapeKind, SvgElement, TextElement,
+} from './types';
 import { isLineShape, newId } from './types';
 
 /// สร้าง element ใหม่วางกลางหน้า · ขนาดตั้งต้นคิดตามสัดส่วนของหน้า
@@ -232,6 +235,32 @@ export function createImage(
     cornerRadius: 0,
     flipX: false,
     flipY: false,
+  };
+}
+
+/// กรอบรูปว่าง (ด้านยาวราว 45% ของด้านสั้นของหน้า) ตามสัดส่วนของรูปทรง
+export function createFrame(page: PageSize, shape: FrameShape): FrameElement {
+  const spec = frameShapeSpec(shape);
+  const max = Math.min(page.width, page.height) * 0.45;
+  const width = spec.aspect >= 1 ? max : max * spec.aspect;
+  const height = spec.aspect >= 1 ? max / spec.aspect : max;
+
+  return { ...base(page, Math.round(width), Math.round(height), `กรอบ${spec.label}`), type: 'frame', shape: spec.key, image: null };
+}
+
+/// กริดรูปว่าง (กว้างราว 70% ของหน้า) ตามเค้าโครง
+export function createGrid(page: PageSize, layout: GridLayout): GridElement {
+  const spec = gridLayoutSpec(layout);
+  const width = Math.min(page.width * 0.7, page.height * 0.7 * spec.aspect);
+  const height = width / spec.aspect;
+
+  return {
+    ...base(page, Math.round(width), Math.round(height), `กริด ${spec.label}`),
+    type: 'grid',
+    layout: spec.key,
+    gap: Math.round(Math.min(width, height) * 0.015),
+    cornerRadius: 0,
+    cells: spec.cells.map(() => null),
   };
 }
 
