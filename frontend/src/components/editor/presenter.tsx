@@ -9,6 +9,7 @@ import { createPortal } from 'react-dom';
 import { create } from 'zustand';
 import { FloatingPanel, useAnchoredMenu } from '@/components/csmju/floating';
 import { cx } from '@/components/csmju/primitives';
+import { mirrorFonts } from '@/lib/editor/fonts';
 import { entryLength, entryProgress } from '@/lib/editor/motion-export';
 import { drawPage, preloadPage, strokeFreehand, subscribeImageReady } from '@/lib/editor/render';
 import { useEditor } from '@/lib/editor/store';
@@ -40,6 +41,10 @@ interface PresentState {
   startedAt: number;
   /// หน้าต่างผู้พรีเซนต์ (เปิดตอนกดปุ่ม เพื่อไม่ให้เบราว์เซอร์บล็อกป๊อปอัป)
   popup: Window | null;
+  /// กล่องในหน้าต่างผู้พรีเซนต์ที่ React วาดลงไป (สร้างใหม่ทุกครั้งที่เปิด — ไม่ปนกับของค้างจากรอบก่อน)
+  container: HTMLElement | null;
+  /// เพิ่มขึ้นเมื่อฟอนต์ในหน้าต่างผู้พรีเซนต์โหลดเสร็จ ให้สไลด์วาดใหม่
+  fontTick: number;
   start(mode: PresentMode, slide: number): void;
   stop(): void;
   go(slide: number): void;
@@ -64,27 +69,32 @@ export const usePresent = create<PresentState>((set, get) => ({
   quiet: false,
   startedAt: 0,
   popup: null,
+  container: null,
+  fontTick: 0,
   start(mode, slide) {
     let popup = get().popup;
+    let container = get().container;
 
-    if (mode === 'presenter' && (!popup || popup.closed)) {
+    if (mode === 'presenter' && (!popup || popup.closed || !container)) {
       popup = window.open('', 'csc-presenter', 'width=1180,height=760');
       // ป๊อปอัปถูกบล็อก — พรีเซนต์เต็มจอแทน
       if (!popup) mode = 'fullscreen';
+      else container = setupPopup(popup);
     }
 
     if (mode !== 'presenter' && popup && !popup.closed) {
       popup.close();
       popup = null;
+      container = null;
     }
 
-    set({ mode, slide, popup, enteredAt: performance.now(), playing: mode === 'autoplay', ink: {}, tool: 'none', effect: null, blurred: false, quiet: false, startedAt: Date.now() });
+    set({ mode, slide, popup, container, enteredAt: performance.now(), playing: mode === 'autoplay', ink: {}, tool: 'none', effect: null, blurred: false, quiet: false, startedAt: Date.now() });
   },
   stop() {
     const popup = get().popup;
 
     if (popup && !popup.closed) popup.close();
-    set({ mode: null, effect: null, tool: 'none', popup: null });
+    set({ mode: null, effect: null, tool: 'none', popup: null, container: null });
   },
   go(slide) {
     set({ slide, enteredAt: performance.now(), effect: null });
@@ -110,19 +120,50 @@ export const usePresent = create<PresentState>((set, get) => ({
   },
 }));
 
-/// คัดลอกสไตล์ของหน้าแก้ไขไปหน้าต่างผู้พรีเซนต์ และจบการพรีเซนต์เมื่อปิดหน้าต่างนั้น
-function preparePopup(win: Window): () => void {
-  win.document.title = 'หน้าต่างผู้พรีเซนต์ · CS Canvas';
-  win.document.documentElement.lang = 'th';
-  for (const node of document.querySelectorAll('link[rel="stylesheet"], style')) win.document.head.appendChild(node.cloneNode(true));
-  win.document.documentElement.setAttribute('data-theme', 'dark');
-  win.document.body.className = document.body.className;
+/// เตรียมหน้าต่างผู้พรีเซนต์ทันทีที่เปิด: คัดลอกสไตล์ (URL เต็ม) และล้างของค้าง
+///
+/// หน้าต่างตั้งชื่อไว้ จึงอาจเป็นหน้าต่างเดิมที่ค้างจากก่อนรีเฟรชหน้าแก้ไข — ต้องล้างเนื้อหาเก่าทิ้งก่อน
+function setupPopup(win: Window): HTMLElement {
+  const doc = win.document;
 
+  doc.title = 'หน้าต่างผู้พรีเซนต์ · CS Canvas';
+  doc.documentElement.lang = 'th';
+  doc.documentElement.setAttribute('data-theme', 'dark');
+  doc.head.querySelectorAll('[data-csc-clone]').forEach((node) => node.remove());
+
+  for (const node of document.querySelectorAll('link[rel="stylesheet"], style')) {
+    const copy = node.cloneNode(true) as HTMLElement;
+
+    if (node instanceof HTMLLinkElement) copy.setAttribute('href', node.href);
+    copy.setAttribute('data-csc-clone', '');
+    doc.head.appendChild(copy);
+  }
+
+  doc.body.className = document.body.className;
+  doc.body.replaceChildren();
+
+  const root = doc.createElement('div');
+
+  root.id = 'csc-presenter-root';
+  doc.body.appendChild(root);
+
+  return root;
+}
+
+/// จบการพรีเซนต์เมื่อปิดหน้าต่างผู้พรีเซนต์ · ปิดหน้าต่างนั้นเมื่อหน้าแก้ไขถูกปิดหรือรีเฟรช · ติดตั้งฟอนต์ของงาน
+function preparePopup(win: Window): () => void {
   const onClose = () => usePresent.getState().stop();
+  const onLeave = () => win.close();
+  const unmirror = mirrorFonts(win.document, () => usePresent.setState((st) => ({ fontTick: st.fontTick + 1 })));
 
   win.addEventListener('beforeunload', onClose);
+  window.addEventListener('pagehide', onLeave);
 
-  return () => win.removeEventListener('beforeunload', onClose);
+  return () => {
+    win.removeEventListener('beforeunload', onClose);
+    window.removeEventListener('pagehide', onLeave);
+    unmirror();
+  };
 }
 
 function visiblePages(pages: Page[]): Page[] {
@@ -193,6 +234,7 @@ function PresenterInner({ mode }: { mode: PresentMode }) {
   const enteredAt = usePresent((s) => s.enteredAt);
   const rootRef = useRef<HTMLDivElement>(null);
   const popup = usePresent((s) => s.popup);
+  const container = usePresent((s) => s.container);
   const [isFull, setIsFull] = useState(false);
   const [toastVisible, setToastVisible] = useState(true);
   const page = pages[slide];
@@ -254,7 +296,7 @@ function PresenterInner({ mode }: { mode: PresentMode }) {
           </p>
         )}
       </div>
-      {popup && createPortal(<PresenterWindow pages={pages} />, popup.document.body)}
+      {popup && container && createPortal(<PresenterWindow pages={pages} />, container)}
     </>
   );
 }
@@ -276,10 +318,18 @@ function SlideView({ page, interactive = false, className }: { page: Page; inter
   const drawing = useRef<Ink | null>(null);
   const raf = useRef<number | null>(null);
   const paintRef = useRef<() => void>(() => undefined);
+  // หน้าต่างที่สไลด์นี้อยู่จริง (อาจเป็นหน้าต่างผู้พรีเซนต์) — ใช้ตัวจับขนาด เฟรม และความละเอียดจอของหน้าต่างนั้น
+  // ถ้าใช้ของหน้าหลัก เมื่อหน้าหลักถูกบังหรือย่อ เบราว์เซอร์จะหยุดส่งเฟรม สไลด์ในหน้าต่างผู้พรีเซนต์จะว่างหรือค้าง
+  const winRef = useRef<(Window & typeof globalThis) | null>(null);
+  const fontTick = usePresent((s) => s.fontTick);
 
   useEffect(() => {
     const wrap = wrapRef.current!;
-    const observer = new ResizeObserver(([entry]) => setBox({ width: entry.contentRect.width, height: entry.contentRect.height }));
+    const win = (wrap.ownerDocument.defaultView ?? window) as Window & typeof globalThis;
+
+    winRef.current = win;
+
+    const observer = new win.ResizeObserver(([entry]) => setBox({ width: entry.contentRect.width, height: entry.contentRect.height }));
 
     observer.observe(wrap);
 
@@ -295,7 +345,8 @@ function SlideView({ page, interactive = false, className }: { page: Page; inter
 
     if (!canvas || !scale) return;
 
-    const dpr = window.devicePixelRatio || 1;
+    const win = winRef.current ?? window;
+    const dpr = win.devicePixelRatio || 1;
     const ctx = canvas.getContext('2d')!;
     const now = performance.now();
     const elapsed = now - enteredAt;
@@ -320,8 +371,13 @@ function SlideView({ page, interactive = false, className }: { page: Page; inter
 
     const effectRunning = effect && drawMagic(ctx, effect.kind, now - effect.at, size);
 
-    if (elapsed < entryLength(page) + 100 || effectRunning) raf.current = requestAnimationFrame(() => paintRef.current());
+    if (elapsed < entryLength(page) + 100 || effectRunning) raf.current = win.requestAnimationFrame(() => paintRef.current());
   }, [page, size, scale, enteredAt, ink, effect]);
+
+  // ฟอนต์ในหน้าต่างนี้โหลดเสร็จ → วาดใหม่
+  useEffect(() => {
+    paintRef.current();
+  }, [fontTick]);
 
   useEffect(() => {
     paintRef.current = paint;
@@ -331,7 +387,7 @@ function SlideView({ page, interactive = false, className }: { page: Page; inter
     paint();
 
     return () => {
-      if (raf.current) cancelAnimationFrame(raf.current);
+      if (raf.current) (winRef.current ?? window).cancelAnimationFrame(raf.current);
       unsubscribe();
     };
   }, [paint, page]);
@@ -688,6 +744,7 @@ function MiniSlide({ page }: { page: Page }) {
   const baseWidth = useEditor((s) => s.baseWidth);
   const baseHeight = useEditor((s) => s.baseHeight);
   const { width: pageWidth, height: pageHeight } = pageSizeOf(page, { width: baseWidth, height: baseHeight });
+  const fontTick = usePresent((s) => s.fontTick);
 
   useEffect(() => {
     let cancelled = false;
@@ -714,7 +771,8 @@ function MiniSlide({ page }: { page: Page }) {
     return () => {
       cancelled = true;
     };
-  }, [page, pageWidth, pageHeight]);
+    // fontTick: วาดใหม่เมื่อฟอนต์ในหน้าต่างผู้พรีเซนต์โหลดเสร็จ
+  }, [page, pageWidth, pageHeight, fontTick]);
 
   return <canvas ref={canvasRef} aria-hidden className="h-full w-auto" />;
 }

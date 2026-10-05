@@ -84,6 +84,42 @@ export function cssFamily(id: string): string {
 const loaded = new Map<string, Promise<void>>();
 const ready = new Set<string>();
 
+interface FontSource {
+  family: string;
+  url: string;
+  weight: string;
+}
+
+/// ฟอนต์ที่โหลดแล้ว — ใช้ติดตั้งซ้ำในหน้าต่างอื่น (หน้าต่างผู้พรีเซนต์) เพราะ FontFace ผูกกับเอกสารของตัวเอง
+const sources = new Map<string, FontSource>();
+const mirrors = new Set<(source: FontSource) => void>();
+
+/// ติดตั้งฟอนต์ที่โหลดแล้วทั้งหมด (และที่จะโหลดต่อจากนี้) ลงเอกสารอื่น · onReady เรียกทุกครั้งที่ฟอนต์พร้อม ให้วาดใหม่
+export function mirrorFonts(doc: Document, onReady: () => void): () => void {
+  const win = doc.defaultView as (Window & typeof globalThis) | null;
+
+  if (!win || typeof win.FontFace === 'undefined') return () => undefined;
+
+  const install = (source: FontSource) => {
+    const face = new win.FontFace(source.family, source.url, { weight: source.weight });
+
+    void face
+      .load()
+      .then((done) => {
+        doc.fonts.add(done);
+        onReady();
+      })
+      .catch(() => undefined);
+  };
+
+  sources.forEach(install);
+  mirrors.add(install);
+
+  return () => {
+    mirrors.delete(install);
+  };
+}
+
 export function isFontReady(id: string, weight: 400 | 700): boolean {
   return ready.has(`${id}:${weight}`);
 }
@@ -101,14 +137,20 @@ export function ensureFont(id: string, weight: 400 | 700): Promise<void> {
     return Promise.resolve();
   }
 
-  const face = new FontFace(`CSC ${family.id}`, `url(/fonts/${file})`, {
+  const source: FontSource = {
+    family: `CSC ${family.id}`,
+    // URL เต็ม ให้หน้าต่างที่เปิดจากหน้านี้ (about:blank) โหลดได้ด้วย
+    url: `url(${window.location.origin}/fonts/${file})`,
     weight: file.includes('Variable') ? '100 900' : String(weight),
-  });
+  };
+  const face = new FontFace(source.family, source.url, { weight: source.weight });
   const promise = face
     .load()
     .then((face) => {
       document.fonts.add(face);
       ready.add(key);
+      sources.set(key, source);
+      mirrors.forEach((install) => install(source));
     })
     .catch(() => {
       // โหลดไม่ได้ก็วาดด้วยฟอนต์สำรอง ดีกว่าค้างทั้งหน้า · ให้ลองใหม่ครั้งหน้า
