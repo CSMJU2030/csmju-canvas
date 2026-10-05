@@ -8,6 +8,8 @@ import { Reflector } from '@nestjs/core';
 import type { Layer2Role } from '../../generated/prisma/enums.js';
 import { subsystemRoleFor } from '../../auth/role-mapping.js';
 import type { RequestWithCoreUser } from './core-user.js';
+import { CORE_ROLES_KEY } from './core-roles.decorator.js';
+import type { CoreRole } from './core-user.js';
 import { LAYER2_ROLES_KEY } from './layer2-roles.decorator.js';
 
 /// ด่านที่สอง "คุณทำสิ่งนี้ได้ไหม" — สิทธิ์ Layer 2 ของ CS Canvas
@@ -26,11 +28,19 @@ export class RolesGuard implements CanActivate {
       [context.getHandler(), context.getClass()],
     );
 
-    if (!required?.length) return true;
+    const requiredCore = this.reflector.getAllAndOverride<CoreRole[]>(CORE_ROLES_KEY, [context.getHandler(), context.getClass()]);
+
+    if (!required?.length && !requiredCore?.length) return true;
 
     const user = context.switchToHttp().getRequest<RequestWithCoreUser>().coreUser;
 
     if (!user) throw new ForbiddenException('ไม่พบตัวตนของผู้เรียก');
+
+    if (requiredCore?.length && !requiredCore.includes(user.coreRole)) {
+      throw new ForbiddenException('เฉพาะผู้ดูแลระบบ');
+    }
+
+    if (!required?.length) return true;
 
     if (!required.includes(subsystemRoleFor(user.coreRole))) {
       throw new ForbiddenException('บัญชีนี้ไม่มีสิทธิ์ทำรายการนี้');

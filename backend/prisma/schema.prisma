@@ -273,3 +273,23 @@ model TemplateFavorite {
   @@unique([coreUserId, templateId])
   @@map("template_favorites")
 }
+
+/// บันทึกการกระทำสำคัญที่ผู้ดูแลตรวจย้อนหลังได้ (แผงผู้ดูแล → Audit log)
+///
+/// `action` เป็นคำแบบ `<สิ่งของ>.<กริยา>` เช่น design.purge · report.resolved · member.quota_change
+/// `metadata` เก็บบริบทตอนเกิดเหตุ (เช่นเจ้าของของที่ถูกลบ) — ห้ามเก็บชื่อจริง อีเมล หรือ token
+model AuditLog {
+  id              String   @id @default(uuid()) @db.Uuid
+  actorCoreUserId String   @map("actor_core_user_id")
+  actorCoreRole   String   @map("actor_core_role") @db.VarChar(20)
+  action          String   @db.VarChar(60)
+  targetKind      String   @map("target_kind") @db.VarChar(30)
+  targetId        String?  @map("target_id") @db.VarChar(100)
+  metadata        Json?
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([createdAt])
+  @@index([action, createdAt])
+  @@index([actorCoreUserId, createdAt])
+  @@map("audit_logs")
+}

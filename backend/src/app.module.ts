@@ -4,6 +4,7 @@ import { AuthModule } from './auth/auth.module.js';
 import { PrismaModule } from './common/prisma/prisma.module.js';
 import { HealthModule } from './health/health.module.js';
 import { AssetsModule } from './modules/assets/assets.module.js';
+import { AuditModule } from './modules/audit/audit.js';
 import { DataExportsModule } from './modules/data-exports/data-exports.js';
 import { DesignsModule } from './modules/designs/designs.module.js';
 import { FeedbacksModule } from './modules/feedbacks/feedbacks.js';
@@ -20,6 +21,8 @@ import { TemplatesModule } from './modules/templates/templates.module.js';
     PrismaModule,
     // @Global — งานและเทมเพลตสร้างแจ้งเตือนได้โดยไม่ต้อง import
     NotificationsModule,
+    // @Global — ทุกโมดูลบันทึก audit log ได้
+    AuditModule,
     AuthModule,
     HealthModule,
     DesignsModule,
