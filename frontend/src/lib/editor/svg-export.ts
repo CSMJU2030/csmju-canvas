@@ -1,3 +1,4 @@
+import { chartSvg } from './chart';
 import { cssFamily } from './fonts';
 import { isGradient, parseGradient } from './paint';
 import { HIGHLIGHTER_ALPHA, dashFor, drawElement, layoutLines, preloadPage, svgDataUrl } from './render';
@@ -91,6 +92,8 @@ async function elementSvg(
       return imageSvg(el);
     case 'table':
       return tableSvg(el);
+    case 'chart':
+      return chartSvg(el);
   }
 }
 

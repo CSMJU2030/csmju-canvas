@@ -6,6 +6,8 @@ import { normalizeTable } from './table';
 /// ก่อนหมุน · หมุนรอบจุดกึ่งกลางกล่องเป็นองศาตามเข็มนาฬิกา
 /// ลำดับใน `elements` คือลำดับชั้น: ตัวแรกอยู่ล่างสุด ตัวสุดท้ายอยู่บนสุด
 
+import { normalizeChart } from './chart-data';
+
 export const DOCUMENT_VERSION = 1;
 
 export interface BaseElement {
@@ -233,8 +235,37 @@ export interface TableElement extends BaseElement {
   lines: TableLines;
 }
 
-export type ElementType = 'text' | 'shape' | 'image' | 'svg' | 'path' | 'table';
-export type CanvasElement = TextElement | ShapeElement | ImageElement | SvgElement | PathElement | TableElement;
+export type ChartKind = 'bar' | 'column' | 'line' | 'area' | 'pie' | 'donut' | 'progress-ring';
+
+/// ชุดข้อมูลหนึ่งชุดของชาร์ต · `values[i]` คือค่าของรายการ `labels[i]` (ยาวเท่า labels เสมอหลัง normalize)
+export interface ChartSeries {
+  name: string;
+  values: number[];
+}
+
+/// ชาร์ต (แท่ง เส้น พื้นที่ วงกลม โดนัท วงแหวนความคืบหน้า) — วาดเป็นเวกเตอร์จากข้อมูล แก้ข้อมูลได้ตลอด
+///
+/// `colors[i]` ใช้กับชุดข้อมูลที่ i (แท่ง/เส้น/พื้นที่) หรือชิ้นที่ i (วงกลม/โดนัท) · วนซ้ำเมื่อสีไม่พอ
+/// วงกลม/โดนัทใช้ชุดข้อมูลแรก · วงแหวนความคืบหน้าใช้ค่าแรกของชุดแรกเป็นเปอร์เซ็นต์ 0–100
+export interface ChartElement extends BaseElement {
+  type: 'chart';
+  chart: ChartKind;
+  labels: string[];
+  series: ChartSeries[];
+  colors: string[];
+  showLegend: boolean;
+  /// ตัวเลขบนแท่ง/จุด หรือเปอร์เซ็นต์บนชิ้นวงกลม
+  showLabels: boolean;
+  /// เส้นตารางและตัวเลขแกนค่า (เฉพาะแท่ง เส้น พื้นที่)
+  showGrid: boolean;
+  fontFamily: string;
+  fontSize: number;
+  /// สีตัวอักษรและเส้นแกน
+  color: string;
+}
+
+export type ElementType = 'text' | 'shape' | 'image' | 'svg' | 'path' | 'table' | 'chart';
+export type CanvasElement = TextElement | ShapeElement | ImageElement | SvgElement | PathElement | TableElement | ChartElement;
 
 export interface Page {
   id: string;
@@ -306,7 +337,7 @@ function isKnownElement(value: unknown): value is CanvasElement {
 
   if (type === 'table') return isTableShape(value);
 
-  return type === 'text' || type === 'shape' || type === 'image' || type === 'svg' || type === 'path';
+  return type === 'text' || type === 'shape' || type === 'image' || type === 'svg' || type === 'path' || type === 'chart';
 }
 
 /// ตารางต้องมีช่องอย่างน้อยหนึ่งช่อง ไม่งั้นข้ามทิ้ง (ค่าอื่นเติมให้ใน normalizeTable)
@@ -320,7 +351,7 @@ function withDefaults(element: CanvasElement): CanvasElement {
   if (element.type === 'table') element = normalizeTable(element);
 
   return {
-    ...element,
+    ...(element.type === 'chart' ? normalizeChart(element) : element),
     id: element.id || newId(),
     name: element.name ?? '',
     rotation: element.rotation ?? 0,

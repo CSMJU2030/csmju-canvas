@@ -34,6 +34,7 @@ import { ColorPicker, RainbowSwatch, Swatch } from './color-picker';
 import { matchFonts, usePreloadFonts } from './font-picker';
 import { CreateFolderDialog, ProjectsPanel } from './project-panel';
 import { AnimatePanel, ColorPanel, EffectsPanel, PositionPanel } from './side-panels';
+import { ChartDataPanel } from './chart-panel';
 import { PanelHeader, UnderlineTabs } from './controls';
 import { CropPanel, FontPanel, ImageEditPanel, ReplacePanel } from './side-panels-media';
 import { SignaturePanel } from './signature-panel';
@@ -80,6 +81,7 @@ export const PANEL_LABELS: Record<PanelKey, string> = {
   'image-edit': 'แก้ไขรูปภาพ',
   crop: 'ครอปภาพ',
   replace: 'แทนที่รูป',
+  'chart-data': 'แก้ไขข้อมูลชาร์ต',
 };
 
 export function PanelContent({
@@ -140,6 +142,8 @@ export function PanelContent({
       return <CropPanel />;
     case 'replace':
       return <ReplacePanel />;
+    case 'chart-data':
+      return <ChartDataPanel />;
   }
 }
 

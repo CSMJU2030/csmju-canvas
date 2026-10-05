@@ -9,8 +9,9 @@ import { cx } from '@/components/csmju/primitives';
 import { FONT_FAMILIES, cssFamily } from '@/lib/editor/fonts';
 import { isGradient } from '@/lib/editor/paint';
 import { currentPage, useEditor } from '@/lib/editor/store';
-import { isLineShape, type CanvasElement, type ImageElement, type PathElement, type ShapeElement, type StrokeStyle, type TableElement, type TextElement } from '@/lib/editor/types';
+import { isLineShape, type CanvasElement, type ChartElement, type ImageElement, type PathElement, type ShapeElement, type StrokeStyle, type TableElement, type TextElement } from '@/lib/editor/types';
 import { useEditorUi, type ColorTarget } from '@/lib/editor/ui-store';
+import { ChartTools } from './chart-panel';
 import { PopoverButton, RangeField, ToolbarButton, ToolbarDivider } from './controls';
 import { TableTools } from './table-tools';
 
@@ -42,6 +43,14 @@ export function ContextToolbar() {
         el={selected[0] as TableElement}
         trailing={<><TransparencyButton els={selected} /><TrailingTools effects={false} /></>}
       />
+    );
+  }
+  else if (only === 'chart' && selected.length === 1) {
+    content = (
+      <ChartTools el={selected[0] as ChartElement}>
+        <TransparencyButton els={selected} />
+        <TrailingTools />
+      </ChartTools>
     );
   }
   else content = <MixedTools els={selected} />;

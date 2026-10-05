@@ -5,7 +5,7 @@ import { create } from 'zustand';
 /// แยกจาก store ของงานเพื่อไม่ให้การเปิด/ปิดแผงไปอยู่ในประวัติ undo หรือทำให้บันทึกอัตโนมัติ
 
 export type RailPanel = 'templates' | 'elements' | 'text' | 'uploads' | 'projects' | 'starred' | 'background';
-export type ContextPanel = 'position' | 'color' | 'effects' | 'animate' | 'font' | 'image-edit' | 'crop' | 'replace';
+export type ContextPanel = 'position' | 'color' | 'effects' | 'animate' | 'font' | 'image-edit' | 'crop' | 'replace' | 'chart-data';
 export type UtilityPanel = 'signature' | 'layers' | 'pages' | 'notes';
 export type PanelKey = RailPanel | ContextPanel | UtilityPanel;
 

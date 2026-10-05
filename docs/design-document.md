@@ -21,7 +21,7 @@ CMS ของคณะดึงงานได้ที่ `GET /api/v1/designs/
 
 | ฟิลด์ | ความหมาย |
 |---|---|
-| `id`, `type`, `name` | `type` เป็น `text`, `shape`, `image`, `svg`, `path` หรือ `table` |
+| `id`, `type`, `name` | `type` เป็น `text`, `shape`, `image`, `svg`, `path`, `table` หรือ `chart` |
 | `x`, `y`, `width`, `height` | กล่องก่อนหมุน (มุมซ้ายบน) หน่วยพิกเซลของหน้า |
 | `rotation` | องศา ตามเข็มนาฬิกา รอบจุดกึ่งกลางกล่อง |
 | `opacity` | 0–1 |
@@ -54,5 +54,10 @@ CMS ของคณะดึงงานได้ที่ `GET /api/v1/designs/
   - `borderColor`, `borderWidth` (px วาดกึ่งกลางเส้นแบ่ง), `lines` (`all` เส้นรอบและเส้นแบ่งทุกเส้น · `horizontal` เฉพาะเส้นแนวนอนรวมขอบบน/ล่าง · `none` ไม่มีเส้น)
   - ความสูงแถว = ค่ามากกว่าระหว่าง `rows[i] × height` กับความสูงที่ข้อความในแถวต้องใช้ (`บรรทัดมากสุด × fontSize × 1.4 + fontSize`) · editor บันทึก `height`/`rows` ที่ขยายแล้วเสมอ ตัว render ภายนอกคำนวณซ้ำได้จากสูตรนี้
   - ตัวอย่าง: `{ "type": "table", "cells": [[{ "text": "วิชา" }, { "text": "หน่วยกิต" }], [{ "text": "การเขียนโปรแกรม" }, { "text": "3" }]], "columns": [0.7, 0.3], "rows": [0.5, 0.5], "fontFamily": "Noto Sans Thai", "fontSize": 24, "color": "rgb(15 23 42)", "align": "left", "header": true, "headerFill": "rgb(125 42 232)", "headerColor": "rgb(255 255 255)", "stripeFill": null, "borderColor": "rgb(196 170 245)", "borderWidth": 1.4, "lines": "all" }` (ค่ากล่องและค่าร่วมละไว้)
+- **chart:** ชาร์ตที่วาดจากข้อมูล (เวกเตอร์) · `chart` (`column` แท่งตั้ง · `bar` แท่งนอน · `line` · `area` · `pie` · `donut` · `progress-ring`), `labels` (ชื่อรายการ เรียงตามแกน/ชิ้น), `series` (`[{ name, values }]` · `values[i]` คือค่าของ `labels[i]` เป็นตัวเลข), `colors` (สี `rgb()` · ลำดับที่ i ใช้กับชุดข้อมูลที่ i ของแท่ง/เส้น/พื้นที่ หรือชิ้นที่ i ของ pie/donut · วนซ้ำเมื่อสีไม่พอ), `showLegend`, `showLabels` (ตัวเลขบนแท่ง/จุด หรือเปอร์เซ็นต์บนชิ้น), `showGrid` (เส้นตารางและตัวเลขแกน เฉพาะแท่ง/เส้น/พื้นที่), `fontFamily`, `fontSize` (px), `color` (สีตัวอักษรและเส้นแกน)
+  - แกนค่าเริ่มที่ 0 เสมอ ปัดเป็นเลขสวย 1·2·5×10ⁿ · `area` ระบายพื้นใต้เส้นความทึบ 0.32
+  - `pie`/`donut` ใช้ชุดข้อมูลแรก ค่าติดลบนับเป็น 0 · เปอร์เซ็นต์ปัดให้รวมได้ 100 · เริ่มที่ 12 นาฬิกาวนตามเข็ม · โดนัทรัศมีในเท่ากับ 0.58 ของรัศมีนอก
+  - `progress-ring` ใช้ `series[0].values[0]` เป็นเปอร์เซ็นต์ 0–100 และ `labels[0]` เป็นชื่อใต้ตัวเลข (เมื่อ `showLegend`) · สีวงคือ `colors[0]`
+  - ค่าที่ขาดหรือผิดรูป ตัว editor เติมให้ตาม `normalizeChart` ใน `chart-data.ts` · สูตรจัดวางอ้างอิงอยู่ที่ `frontend/src/lib/editor/chart.ts` (ใช้ทั้งวาดบนจอและส่งออก SVG)
 
 ตัว render อ้างอิงอยู่ที่ `frontend/src/lib/editor/render.ts` · element ชนิดที่ไม่รู้จักให้ข้าม

@@ -44,6 +44,8 @@ export function fitTemplate(
         return { ...base, type: 'path', strokeWidth: el.strokeWidth * scale } as CanvasElement;
       case 'table':
         return { ...base, type: 'table', fontSize: el.fontSize * scale, borderWidth: el.borderWidth * scale } as CanvasElement;
+      case 'chart':
+        return { ...base, type: 'chart', fontSize: el.fontSize * scale } as CanvasElement;
       default:
         return base as CanvasElement;
     }
