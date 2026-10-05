@@ -42,6 +42,8 @@ export function fitTemplate(
         return { ...base, type: 'image', cornerRadius: el.cornerRadius * scale } as CanvasElement;
       case 'path':
         return { ...base, type: 'path', strokeWidth: el.strokeWidth * scale } as CanvasElement;
+      case 'chart':
+        return { ...base, type: 'chart', fontSize: el.fontSize * scale } as CanvasElement;
       default:
         return base as CanvasElement;
     }

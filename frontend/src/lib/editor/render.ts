@@ -1,3 +1,4 @@
+import { drawChart } from './chart';
 import { cssFamily, ensureFont, isFontReady } from './fonts';
 import { applyAdjust, applyColorEdits, effectiveAdjust, findFilter, isNeutral } from './image-filters';
 import { canvasPaint } from './paint';
@@ -72,6 +73,7 @@ export async function preloadPage(page: Page): Promise<void> {
     }
 
     if (el.type === 'text') jobs.push(ensureFont(el.fontFamily, el.fontWeight));
+    if (el.type === 'chart') jobs.push(ensureFont(el.fontFamily, 400), ensureFont(el.fontFamily, 700));
   }
 
   await Promise.all(jobs);
@@ -839,6 +841,21 @@ function drawSvg(ctx: CanvasRenderingContext2D, el: SvgElement) {
   if (img) ctx.drawImage(img, el.x, el.y, el.width, el.height);
 }
 
+// ── ชาร์ต ───────────────────────────────────────────────────────────
+
+/// ฟอนต์ของชาร์ต — สั่งโหลดครั้งเดียว แล้ววาดใหม่ทั้งหน้าเมื่อพร้อม (แบบเดียวกับข้อความ)
+function watchFont(family: string, weight: 400 | 700) {
+  const key = `${family}:${weight}`;
+
+  if (pendingFonts.has(key) || isFontReady(family, weight)) return;
+
+  pendingFonts.add(key);
+  void ensureFont(family, weight).then(() => {
+    pendingFonts.delete(key);
+    onImageReady();
+  });
+}
+
 // ── element และหน้า ─────────────────────────────────────────────────
 
 export function drawElement(ctx: CanvasRenderingContext2D, el: CanvasElement, progress?: number) {
@@ -880,6 +897,12 @@ export function drawElement(ctx: CanvasRenderingContext2D, el: CanvasElement, pr
       break;
     case 'path':
       drawPath(ctx, el);
+      break;
+    case 'chart':
+      watchFont(el.fontFamily, 400);
+      watchFont(el.fontFamily, 700);
+      // แท่ง/เส้น/ชิ้นงอกขึ้นเฉพาะตอนเล่นแอนิเมชันเข้า
+      drawChart(ctx, el, el.animation ? progress : undefined);
       break;
   }
 

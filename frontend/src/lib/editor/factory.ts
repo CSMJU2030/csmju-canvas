@@ -1,5 +1,6 @@
+import { DEFAULT_CHART_COLORS, DEFAULT_CHART_TEXT, chartKindLabel, defaultLabel, defaultSeriesName, isAxisChart } from './chart-data';
 import { DEFAULT_FONT } from './fonts';
-import type { BrushKind, CanvasElement, ImageElement, PathElement, ShapeElement, ShapeKind, SvgElement, TextElement } from './types';
+import type { BrushKind, CanvasElement, ChartElement, ChartKind, ImageElement, PathElement, ShapeElement, ShapeKind, SvgElement, TextElement } from './types';
 import { isLineShape, newId } from './types';
 
 /// สร้าง element ใหม่วางกลางหน้า · ขนาดตั้งต้นคิดตามสัดส่วนของหน้า
@@ -246,6 +247,42 @@ export function createSvg(page: PageSize, svg: string, name: string): SvgElement
   };
 }
 
+/// ชาร์ตใหม่พร้อมค่าตัวอย่างที่ผู้ใช้พิมพ์ทับได้ทันที (ชื่อ "รายการ 1…" บอกชัดว่าเป็นค่าที่ต้องแก้)
+///
+/// แท่ง/เส้น/พื้นที่ได้ 2 ชุดข้อมูล × 4 รายการ · วงกลม/โดนัทได้ 1 ชุด × 4 ชิ้น · วงแหวนความคืบหน้าได้ค่าเดียว
+export function createChart(page: PageSize, kind: ChartKind): ChartElement {
+  const short = Math.min(page.width, page.height);
+  const axis = isAxisChart(kind);
+  const width = Math.round(short * (kind === 'progress-ring' ? 0.4 : 0.62));
+  const height = kind === 'progress-ring' ? width : Math.round(width * (axis ? 0.72 : 0.92));
+  const fontSize = Math.max(12, Math.round(short * 0.022));
+  const labels = kind === 'progress-ring' ? ['ความคืบหน้า'] : [0, 1, 2, 3].map(defaultLabel);
+  const series =
+    kind === 'progress-ring'
+      ? [{ name: defaultSeriesName(0), values: [70] }]
+      : axis
+        ? [
+            { name: defaultSeriesName(0), values: [12, 19, 9, 15] },
+            { name: defaultSeriesName(1), values: [8, 11, 14, 10] },
+          ]
+        : [{ name: defaultSeriesName(0), values: [40, 25, 20, 15] }];
+
+  return {
+    ...base(page, width, height, chartKindLabel(kind)),
+    type: 'chart',
+    chart: kind,
+    labels,
+    series,
+    colors: [...DEFAULT_CHART_COLORS],
+    showLegend: kind !== 'progress-ring',
+    showLabels: !axis,
+    showGrid: true,
+    fontFamily: DEFAULT_FONT,
+    fontSize,
+    color: DEFAULT_CHART_TEXT,
+  };
+}
+
 // ── เซ็ตฟอนต์ (แผงข้อความ) ─────────────────────────────────────────
 
 export interface FontSetLine {
@@ -392,5 +429,5 @@ export function createFontSet(page: PageSize, set: FontSet, measure: (el: TextEl
 export function layerLabel(el: { type: string; name: string; text?: string }): string {
   if (el.type === 'text' && el.text) return el.text.split('\n')[0].slice(0, 40) || 'ข้อความ';
 
-  return el.name || (el.type === 'path' ? 'ภาพวาด' : 'ชิ้นงาน');
+  return el.name || (el.type === 'path' ? 'ภาพวาด' : el.type === 'chart' ? 'ชาร์ต' : 'ชิ้นงาน');
 }

@@ -2,7 +2,7 @@
 
 import {
   AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignHorizontalDistributeCenter,
-  AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ChevronsDown, ChevronsUp, ChevronDown, ChevronUp,
+  AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ChartColumn, ChevronsDown, ChevronsUp, ChevronDown, ChevronUp,
   Eye, EyeOff, GripVertical, Image as ImageIcon, Lock, LockOpen, Pipette, Play, Search, Shapes, Type,
 } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
@@ -191,6 +191,7 @@ const TYPE_ICON: Record<CanvasElement['type'], ReactNode> = {
   image: <ImageIcon aria-hidden className="size-4" />,
   svg: <Shapes aria-hidden className="size-4" />,
   path: <Shapes aria-hidden className="size-4" />,
+  chart: <ChartColumn aria-hidden className="size-4" />,
 };
 
 /// แท็บเลเยอร์: ลากเรียงลำดับ · คลิกเพื่อเลือก · ทั้งหมด/ทับซ้อน

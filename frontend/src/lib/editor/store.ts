@@ -787,6 +787,7 @@ const STYLE_KEYS: Record<CanvasElement['type'], string[]> = {
   image: ['cornerRadius', 'adjust', 'filter', 'filterIntensity', 'border'],
   svg: ['color'],
   path: ['color', 'strokeWidth'],
+  chart: ['colors', 'fontFamily', 'fontSize', 'color', 'showLegend', 'showLabels', 'showGrid'],
 };
 
 function pick(el: CanvasElement, keys: string[]): Partial<CanvasElement> {

@@ -1,3 +1,4 @@
+import { chartSvg } from './chart';
 import { cssFamily } from './fonts';
 import { isGradient, parseGradient } from './paint';
 import { HIGHLIGHTER_ALPHA, dashFor, drawElement, layoutLines, preloadPage, svgDataUrl } from './render';
@@ -88,6 +89,8 @@ async function elementSvg(
       return `<image x="${n(el.x)}" y="${n(el.y)}" width="${n(el.width)}" height="${n(el.height)}" href="${esc(svgDataUrl(el))}"/>`;
     case 'image':
       return imageSvg(el);
+    case 'chart':
+      return chartSvg(el);
   }
 }
 

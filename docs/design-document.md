@@ -21,7 +21,7 @@ CMS ของคณะดึงงานได้ที่ `GET /api/v1/designs/
 
 | ฟิลด์ | ความหมาย |
 |---|---|
-| `id`, `type`, `name` | `type` เป็น `text`, `shape`, `image`, `svg` หรือ `path` |
+| `id`, `type`, `name` | `type` เป็น `text`, `shape`, `image`, `svg`, `path` หรือ `chart` |
 | `x`, `y`, `width`, `height` | กล่องก่อนหมุน (มุมซ้ายบน) หน่วยพิกเซลของหน้า |
 | `rotation` | องศา ตามเข็มนาฬิกา รอบจุดกึ่งกลางกล่อง |
 | `opacity` | 0–1 |
@@ -43,5 +43,10 @@ CMS ของคณะดึงงานได้ที่ `GET /api/v1/designs/
   - ค่าเสริม: `crop` `{x, y, width, height}` สัดส่วน 0–1 ของรูปต้นฉบับ · `border` `{style, width, color}` · `adjust` ค่าปรับ −100..100 (temperature tint brightness contrast highlights shadows whites blacks vibrance saturation sharpness clarity · vignette/blur 0..100) · `filter` + `filterIntensity` ฟิลเตอร์สำเร็จรูปใน `lib/editor/image-filters.ts`
 - **svg:** `svg` (markup ทั้งก้อน ใช้ `currentColor`), `color` (สีที่แทน `currentColor`)
 - **path:** เส้นวาดมือและลายเซ็น · `strokes` (อาร์เรย์ของเส้น แต่ละเส้นคือ `[x0, y0, x1, y1, …]` เป็นสัดส่วน 0–1 ของกล่อง), `color`, `strokeWidth` (px), `brush` (`pen` · `marker` · `highlighter` — ไฮไลท์วาดความทึบ 0.45) · ปลายและมุมเส้นกลม
+- **chart:** ชาร์ตที่วาดจากข้อมูล (เวกเตอร์) · `chart` (`column` แท่งตั้ง · `bar` แท่งนอน · `line` · `area` · `pie` · `donut` · `progress-ring`), `labels` (ชื่อรายการ เรียงตามแกน/ชิ้น), `series` (`[{ name, values }]` · `values[i]` คือค่าของ `labels[i]` เป็นตัวเลข), `colors` (สี `rgb()` · ลำดับที่ i ใช้กับชุดข้อมูลที่ i ของแท่ง/เส้น/พื้นที่ หรือชิ้นที่ i ของ pie/donut · วนซ้ำเมื่อสีไม่พอ), `showLegend`, `showLabels` (ตัวเลขบนแท่ง/จุด หรือเปอร์เซ็นต์บนชิ้น), `showGrid` (เส้นตารางและตัวเลขแกน เฉพาะแท่ง/เส้น/พื้นที่), `fontFamily`, `fontSize` (px), `color` (สีตัวอักษรและเส้นแกน)
+  - แกนค่าเริ่มที่ 0 เสมอ ปัดเป็นเลขสวย 1·2·5×10ⁿ · `area` ระบายพื้นใต้เส้นความทึบ 0.32
+  - `pie`/`donut` ใช้ชุดข้อมูลแรก ค่าติดลบนับเป็น 0 · เปอร์เซ็นต์ปัดให้รวมได้ 100 · เริ่มที่ 12 นาฬิกาวนตามเข็ม · โดนัทรัศมีในเท่ากับ 0.58 ของรัศมีนอก
+  - `progress-ring` ใช้ `series[0].values[0]` เป็นเปอร์เซ็นต์ 0–100 และ `labels[0]` เป็นชื่อใต้ตัวเลข (เมื่อ `showLegend`) · สีวงคือ `colors[0]`
+  - ค่าที่ขาดหรือผิดรูป ตัว editor เติมให้ตาม `normalizeChart` ใน `chart-data.ts` · สูตรจัดวางอ้างอิงอยู่ที่ `frontend/src/lib/editor/chart.ts` (ใช้ทั้งวาดบนจอและส่งออก SVG)
 
 ตัว render อ้างอิงอยู่ที่ `frontend/src/lib/editor/render.ts` · element ชนิดที่ไม่รู้จักให้ข้าม

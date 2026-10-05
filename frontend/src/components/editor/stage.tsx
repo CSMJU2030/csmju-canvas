@@ -758,6 +758,12 @@ export function Stage() {
       state.select([hit.id]);
       state.setEditingText(hit.id);
     }
+
+    // ดับเบิลคลิกชาร์ต = เปิดแผงแก้ไขข้อมูล (แบบ Canva)
+    if (hit?.type === 'chart' && !hit.locked && canEditDoc(useEditor.getState())) {
+      useEditor.getState().select([hit.id]);
+      useEditorUi.getState().setPanel('chart-data');
+    }
   };
 
   // ซูมด้วย Ctrl+ล้อ (หรือถ่างบนทัชแพด) · เลื่อนมุมมองด้วยล้อ
