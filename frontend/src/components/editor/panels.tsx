@@ -17,6 +17,7 @@ import {
 } from '@/lib/editor/factory';
 import { COLOR_FILTERS, colorFilterOf } from '@/lib/editor/color';
 import { fitTemplate } from '@/lib/editor/fit-template';
+import { fillSelectedFrame, setImageDragData } from '@/lib/editor/frame-actions';
 import { cssFamily, ensureFont } from '@/lib/editor/fonts';
 import { ICONS, iconSvg } from '@/lib/editor/icons';
 import {
@@ -567,7 +568,11 @@ interface RecentElement {
 }
 
 function insertImage(page: { width: number; height: number }, src: string, naturalWidth: number, naturalHeight: number, name: string) {
-  useEditor.getState().addElements([createImage(page, { src, assetId: null, naturalWidth, naturalHeight, name })]);
+  const source = { src, assetId: null, naturalWidth, naturalHeight, name };
+
+  // กรอบ/ช่องว่างที่เลือกอยู่ = ใส่รูปลงช่องนั้นแทนการเพิ่มรูปใหม่
+  if (fillSelectedFrame(source)) return;
+  useEditor.getState().addElements([createImage(page, source)]);
 }
 
 function addElement(item: RecentElement, page: { width: number; height: number }) {
@@ -914,6 +919,8 @@ function PhotoGrid({ photos, onPick }: { photos: LibraryPhoto[]; onPick: (item: 
         <li key={p.id} className="mb-2 break-inside-avoid">
           <button
             type="button"
+            draggable
+            onDragStart={(event) => setImageDragData(event.dataTransfer, { src: photoSrc(p.id), assetId: null, naturalWidth: p.w, naturalHeight: p.h, name: 'ภาพถ่าย' })}
             onClick={() => onPick({ id: `photo:${p.id}`, w: p.w, h: p.h })}
             aria-label={`เพิ่มภาพ ${p.title}`}
             title={`${p.title} — ${p.credit} (Cleveland Museum of Art, CC0)`}
@@ -1287,16 +1294,19 @@ function UploadsPanel() {
   const insert = (asset: Asset) => {
     const img = new Image();
 
-    img.onload = () =>
-      useEditor.getState().addElements([
-        createImage(page, {
-          src: asset.contentUrl,
-          assetId: asset.id,
-          naturalWidth: img.naturalWidth || 400,
-          naturalHeight: img.naturalHeight || 400,
-          name: asset.fileName,
-        }),
-      ]);
+    img.onload = () => {
+      const source = {
+        src: asset.contentUrl,
+        assetId: asset.id,
+        naturalWidth: img.naturalWidth || 400,
+        naturalHeight: img.naturalHeight || 400,
+        name: asset.fileName,
+      };
+
+      // กรอบ/ช่องว่างที่เลือกอยู่ = ใส่รูปลงช่องนั้นแทนการเพิ่มรูปใหม่
+      if (fillSelectedFrame(source)) return;
+      useEditor.getState().addElements([createImage(page, source)]);
+    };
     img.onerror = () => toast('เปิดรูปนี้ไม่ได้', 'error');
     img.src = asset.contentUrl;
   };
@@ -1462,7 +1472,7 @@ function UploadsPanel() {
     >
       {tab === 'images' ? (
         <>
-          <p className="mb-3 text-csmju-caption text-muted">PNG, JPEG, WebP, GIF, SVG ไม่เกิน 10 MB · รูปของคุณเห็นได้เฉพาะคุณ</p>
+          <p className="mb-3 text-csmju-caption text-muted">PNG, JPEG, WebP, GIF, SVG ไม่เกิน 10 MB · รูปของคุณเห็นได้เฉพาะคุณ · ลากรูปไปวางบนกรอบหรือกริดเพื่อใส่รูปในช่อง</p>
           <AssetGrid q={q.trim()} folders={folders.data?.items ?? []} onInsert={insert} emptyText={q.trim() ? 'ไม่พบรูปที่ค้นหา' : null} />
         </>
       ) : folders.isLoading ? (
@@ -1606,6 +1616,18 @@ function AssetGrid({
         <li key={asset.id} className="group relative mb-2 break-inside-avoid">
           <button
             type="button"
+            draggable
+            onDragStart={(event) => {
+              const img = event.currentTarget.querySelector('img');
+
+              setImageDragData(event.dataTransfer, {
+                src: asset.contentUrl,
+                assetId: asset.id,
+                naturalWidth: img?.naturalWidth || 400,
+                naturalHeight: img?.naturalHeight || 400,
+                name: asset.fileName,
+              });
+            }}
             onClick={() => onInsert(asset)}
             aria-label={`ใส่รูป ${asset.fileName}`}
             title={asset.fileName}

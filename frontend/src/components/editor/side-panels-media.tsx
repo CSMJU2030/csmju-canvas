@@ -8,6 +8,8 @@ import { api, qs } from '@/lib/csmju/api';
 import { FONT_SETS } from '@/lib/editor/factory';
 import { FONT_FAMILIES, cssFamily, ensureFont, type FontFamily } from '@/lib/editor/fonts';
 import { ADJUST_ZERO, FILTER_GROUPS, FILTER_PRESETS, applyAdjust, dominantColors, effectiveAdjust, type FilterPreset } from '@/lib/editor/image-filters';
+import { fillCell, isFrameLike, loadImageSource, patchCellImage } from '@/lib/editor/frame-actions';
+import { cellImages } from '@/lib/editor/frames';
 import { getImage } from '@/lib/editor/render';
 import { currentPage, useEditor } from '@/lib/editor/store';
 import type { CanvasElement, Crop, ImageAdjust, ImageElement, TextElement } from '@/lib/editor/types';
@@ -30,6 +32,37 @@ function useSelected() {
 
 function patch(ids: string[], values: Partial<CanvasElement> | ((el: CanvasElement) => Partial<CanvasElement>)) {
   useEditor.getState().updateElements(ids, typeof values === 'function' ? values : () => values);
+}
+
+/// ค่าของรูปที่แผงแก้ไขรูปเปลี่ยน — ใช้ได้ทั้งรูปเดี่ยวและรูปในกรอบ/กริด
+type ImageValues = Partial<Pick<ImageElement, 'adjust' | 'filter' | 'filterIntensity' | 'colorEdits'>>;
+type ImageLike = Pick<ImageElement, 'src' | 'adjust' | 'filter' | 'filterIntensity' | 'colorEdits'>;
+
+interface ImageTarget {
+  /// element ที่ถือรูป (เงาใส่ที่นี่)
+  owner: CanvasElement;
+  image: ImageLike;
+  /// ช่องของกรอบ/กริด · null = รูปเดี่ยว
+  cell: number | null;
+  apply: (values: ImageValues) => void;
+}
+
+/// รูปที่แผงแก้ไข/แทนที่ทำงานด้วย: รูปเดี่ยวที่เลือก หรือรูปในช่องที่เลือกของกรอบ/กริด
+function useImageTarget(): ImageTarget | null {
+  const selected = useSelected();
+  const frameCell = useEditorUi((s) => s.frameCell);
+  const image = selected.find((e): e is ImageElement => e.type === 'image');
+
+  if (image) return { owner: image, image, cell: null, apply: (values) => patch([image.id], values) };
+
+  const holder = selected.length === 1 && isFrameLike(selected[0]) ? selected[0] : null;
+
+  if (!holder) return null;
+
+  const cell = frameCell?.id === holder.id ? frameCell.cell : 0;
+  const fill = cellImages(holder)[cell];
+
+  return fill ? { owner: holder, image: fill, cell, apply: (values) => patchCellImage(holder.id, cell, values) } : null;
 }
 
 // ── ฟอนต์ ──────────────────────────────────────────────────────────
@@ -261,7 +294,7 @@ const ADJUST_GROUPS: { title: string; fields: { key: keyof ImageAdjust; label: s
 ];
 
 /// ภาพตัวอย่างฟิลเตอร์ — ย่อรูปจริงแล้วประมวลผลด้วยฟิลเตอร์นั้น
-function useFilterThumbs(el: ImageElement | undefined) {
+function useFilterThumbs(el: Pick<ImageElement, 'src'> | undefined) {
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const src = el?.src;
 
@@ -319,7 +352,7 @@ function useFilterThumbs(el: ImageElement | undefined) {
 }
 
 /// แก้ไขสี: เลือกสีเด่นของรูป แล้วหมุนเฉดสี ปรับความอิ่มตัว และความสว่างเฉพาะช่วงสีนั้น
-function SelectiveColor({ el, colors }: { el: ImageElement; colors: string[] }) {
+function SelectiveColor({ el, colors, apply }: { el: ImageLike; colors: string[]; apply: (values: ImageValues) => void }) {
   const [picked, setPicked] = useState<string | null>(null);
 
   if (colors.length === 0) return null;
@@ -331,7 +364,7 @@ function SelectiveColor({ el, colors }: { el: ImageElement; colors: string[] }) 
 
     const next = { ...current, [key]: value };
 
-    patch([el.id], { colorEdits: [...edits.filter((e) => e.color !== next.color), next] });
+    apply({ colorEdits: [...edits.filter((e) => e.color !== next.color), next] });
   };
 
   return (
@@ -371,8 +404,8 @@ function SelectiveColor({ el, colors }: { el: ImageElement; colors: string[] }) 
 }
 
 export function ImageEditPanel() {
-  const selected = useSelected();
-  const el = selected.find((e): e is ImageElement => e.type === 'image');
+  const target = useImageTarget();
+  const el = target?.image;
   const [view, setView] = useState<'main' | 'adjust' | 'filters'>('main');
   const thumbs = useFilterThumbs(el);
   const colors = useMemo(() => {
@@ -382,7 +415,7 @@ export function ImageEditPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- คำนวณใหม่เมื่อเปลี่ยนรูป
   }, [el?.src, thumbs]);
 
-  if (!el) {
+  if (!el || !target) {
     return (
       <div className="flex min-h-0 flex-1 flex-col">
         <PanelHeader title="แก้ไขรูปภาพ" onClose={close} />
@@ -391,10 +424,10 @@ export function ImageEditPanel() {
     );
   }
 
-  const ids = [el.id];
+  const apply = target.apply;
   const adjust = { ...ADJUST_ZERO, ...(el.adjust ?? {}) };
   const filterThumb = (preset: FilterPreset | null) => (
-    <PresetTile key={preset?.key ?? 'none'} label={preset?.label ?? 'ไม่มี'} selected={(el.filter ?? null) === (preset?.key ?? null)} onClick={() => patch(ids, { filter: preset?.key ?? null, filterIntensity: 100 })}>
+    <PresetTile key={preset?.key ?? 'none'} label={preset?.label ?? 'ไม่มี'} selected={(el.filter ?? null) === (preset?.key ?? null)} onClick={() => apply({ filter: preset?.key ?? null, filterIntensity: 100 })}>
       {thumbs[preset?.key ?? 'none'] ? (
         // eslint-disable-next-line @next/next/no-img-element -- ภาพตัวอย่างสร้างจาก canvas ในเครื่อง
         <img src={thumbs[preset?.key ?? 'none']} alt="" className="size-full object-cover" />
@@ -421,16 +454,16 @@ export function ImageEditPanel() {
                     min={field.min ?? -100}
                     max={100}
                     trackClassName={field.track}
-                    onChange={(v) => patch(ids, { adjust: { ...(el.adjust ?? {}), [field.key]: v } })}
+                    onChange={(v) => apply({ adjust: { ...(el.adjust ?? {}), [field.key]: v } })}
                   />
                 ))}
               </section>
-              {group.title === 'สี' && <SelectiveColor el={el} colors={colors} />}
+              {group.title === 'สี' && <SelectiveColor el={el} colors={colors} apply={apply} />}
             </Fragment>
           ))}
         </div>
         <div className="shrink-0 border-t border-line p-3">
-          <button type="button" onClick={() => patch(ids, { adjust: null, colorEdits: null })} className="min-h-11 w-full rounded-xl border border-line-strong text-csmju-caption font-semibold text-ink hover:bg-surface-muted">
+          <button type="button" onClick={() => apply({ adjust: null, colorEdits: null })} className="min-h-11 w-full rounded-xl border border-line-strong text-csmju-caption font-semibold text-ink hover:bg-surface-muted">
             รีเซ็ตการปรับค่า
           </button>
         </div>
@@ -445,7 +478,7 @@ export function ImageEditPanel() {
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-2 pb-6">
           {el.filter && (
             <div className="mb-5">
-              <RangeField label="ความแรง" value={el.filterIntensity ?? 100} min={0} max={100} onChange={(v) => patch(ids, { filterIntensity: v })} />
+              <RangeField label="ความแรง" value={el.filterIntensity ?? 100} min={0} max={100} onChange={(v) => apply({ filterIntensity: v })} />
             </div>
           )}
           <div className="mb-5 grid grid-cols-3 gap-3">{filterThumb(null)}</div>
@@ -480,13 +513,13 @@ export function ImageEditPanel() {
           <div className="grid grid-cols-3 gap-3">{[null, FILTER_PRESETS[0], FILTER_PRESETS[1]].map(filterThumb)}</div>
           {el.filter && (
             <div className="mt-4">
-              <RangeField label="ความแรงของฟิลเตอร์" value={el.filterIntensity ?? 100} min={0} max={100} onChange={(v) => patch(ids, { filterIntensity: v })} />
+              <RangeField label="ความแรงของฟิลเตอร์" value={el.filterIntensity ?? 100} min={0} max={100} onChange={(v) => apply({ filterIntensity: v })} />
             </div>
           )}
         </section>
         <section className="mb-6">
           <h3 className="mb-3 text-csmju-body font-bold text-ink">เงา</h3>
-          <ShadowControls els={[el]} />
+          <ShadowControls els={[target.owner]} />
         </section>
         {colors.length > 0 && (
           <section>
@@ -705,12 +738,27 @@ export function CropPanel() {
 export function ReplacePanel() {
   const selected = useSelected();
   const el = selected.find((e): e is ImageElement => e.type === 'image');
+  const frameCell = useEditorUi((s) => s.frameCell);
+  // กรอบ/กริดที่เลือก: แทนที่รูปในช่องที่เลือก (กรอบ = ช่องเดียว)
+  const holder = !el && selected.length === 1 && isFrameLike(selected[0]) ? selected[0] : null;
+  const holderCell = holder && frameCell?.id === holder.id ? frameCell.cell : 0;
   const input = useRef<HTMLInputElement>(null);
   const toast = useToast();
   const queryClient = useQueryClient();
   const assets = useQuery({ queryKey: ['assets', 'replace'], queryFn: () => api.list<Asset>(`/assets${qs({ limit: 60 })}`) });
 
   const replace = (asset: Asset) => {
+    if (holder) {
+      loadImageSource(asset.contentUrl, asset.id, asset.fileName).then(
+        (source) => {
+          fillCell(holder.id, holderCell, source);
+          toast('แทนที่รูปในกรอบแล้ว');
+        },
+        () => toast('เปิดรูปนี้ไม่ได้', 'error'),
+      );
+      return;
+    }
+
     if (!el) return;
 
     const img = new Image();
@@ -758,7 +806,7 @@ export function ReplacePanel() {
         />
         <button
           type="button"
-          disabled={!el || upload.isPending}
+          disabled={(!el && !holder) || upload.isPending}
           onClick={() => input.current?.click()}
           className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary text-csmju-body font-semibold text-on-inverse hover:bg-primary-hover disabled:opacity-50"
         >
@@ -767,8 +815,8 @@ export function ReplacePanel() {
         <p className="mt-2 text-csmju-caption text-muted">หรือกดรูปที่เคยอัปโหลดไว้ · ตำแหน่ง ความกว้าง และเอฟเฟกต์ของรูปเดิมยังอยู่</p>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6">
-        {!el ? (
-          <p className="text-csmju-caption text-muted">เลือกรูปบนผืนผ้าใบก่อน</p>
+        {!el && !holder ? (
+          <p className="text-csmju-caption text-muted">เลือกรูปหรือกรอบบนผืนผ้าใบก่อน</p>
         ) : assets.isLoading ? (
           <Spinner />
         ) : assets.isError ? (

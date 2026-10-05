@@ -7,6 +7,7 @@ import { normalizeTable } from './table';
 /// ลำดับใน `elements` คือลำดับชั้น: ตัวแรกอยู่ล่างสุด ตัวสุดท้ายอยู่บนสุด
 
 import { normalizeChart } from './chart-data';
+import { normalizeFrame, normalizeGrid } from './frames';
 
 export const DOCUMENT_VERSION = 1;
 
@@ -264,8 +265,61 @@ export interface ChartElement extends BaseElement {
   color: string;
 }
 
-export type ElementType = 'text' | 'shape' | 'image' | 'svg' | 'path' | 'table' | 'chart';
-export type CanvasElement = TextElement | ShapeElement | ImageElement | SvgElement | PathElement | TableElement | ChartElement;
+/// รูปในกรอบหรือในช่องของกริด — วางแบบเต็มช่อง (cover) แล้วซูม/เลื่อนได้ (สูตรใน lib/editor/frames.ts)
+export interface FrameImage {
+  src: string;
+  assetId: string | null;
+  /// ขนาดจริงของรูป (พิกเซล) — ใช้คำนวณการวางก่อนรูปโหลดเสร็จ
+  naturalWidth: number;
+  naturalHeight: number;
+  /// 1 = พอดีเต็มช่อง · 1–5 = ซูมเข้า
+  zoom: number;
+  /// ตำแหน่งรูปในช่องแบบ CSS object-position: 0 = ชิดซ้าย/บน · 0.5 = กึ่งกลาง · 1 = ชิดขวา/ล่าง
+  offsetX: number;
+  offsetY: number;
+  name?: string;
+  flipX?: boolean;
+  flipY?: boolean;
+  adjust?: Partial<ImageAdjust> | null;
+  filter?: string | null;
+  filterIntensity?: number;
+  colorEdits?: ColorEdit[] | null;
+  erase?: EraseStroke[] | null;
+}
+
+export type FrameShape = 'circle' | 'rounded' | 'square' | 'heart' | 'star' | 'blob' | 'arch' | 'polaroid' | 'phone' | 'laptop';
+
+/// กรอบ: รูปทรงที่เป็นหน้ากาก ใส่รูปได้หนึ่งรูป · ว่าง = แสดงช่องเทาให้ลากรูปมาวาง
+export interface FrameElement extends BaseElement {
+  type: 'frame';
+  shape: FrameShape;
+  image: FrameImage | null;
+}
+
+export type GridLayout = 'cols-2' | 'rows-2' | 'cols-3' | 'grid-2x2' | 'big-2' | 'big-3' | 'collage-5' | 'collage-6';
+
+/// กริด: หลายช่องตามเค้าโครงสำเร็จรูป แต่ละช่องใส่รูปได้หนึ่งรูป
+export interface GridElement extends BaseElement {
+  type: 'grid';
+  layout: GridLayout;
+  /// ระยะห่างระหว่างช่อง (px ของหน้า)
+  gap: number;
+  cornerRadius: number;
+  /// เรียงตามช่องของเค้าโครง · null = ช่องว่าง
+  cells: (FrameImage | null)[];
+}
+
+export type ElementType = 'text' | 'shape' | 'image' | 'svg' | 'path' | 'table' | 'chart' | 'frame' | 'grid';
+export type CanvasElement =
+  | TextElement
+  | ShapeElement
+  | ImageElement
+  | SvgElement
+  | PathElement
+  | TableElement
+  | ChartElement
+  | FrameElement
+  | GridElement;
 
 export interface Page {
   id: string;
@@ -337,7 +391,7 @@ function isKnownElement(value: unknown): value is CanvasElement {
 
   if (type === 'table') return isTableShape(value);
 
-  return type === 'text' || type === 'shape' || type === 'image' || type === 'svg' || type === 'path' || type === 'chart';
+  return type === 'text' || type === 'shape' || type === 'image' || type === 'svg' || type === 'path' || type === 'chart' || type === 'frame' || type === 'grid';
 }
 
 /// ตารางต้องมีช่องอย่างน้อยหนึ่งช่อง ไม่งั้นข้ามทิ้ง (ค่าอื่นเติมให้ใน normalizeTable)
@@ -347,8 +401,9 @@ function isTableShape(value: unknown): boolean {
   return Array.isArray(cells) && cells.length > 0 && cells.every((row) => Array.isArray(row)) && cells.some((row) => (row as unknown[]).length > 0);
 }
 
-function withDefaults(element: CanvasElement): CanvasElement {
-  if (element.type === 'table') element = normalizeTable(element);
+function withDefaults(input: CanvasElement): CanvasElement {
+  const element =
+    input.type === 'table' ? normalizeTable(input) : input.type === 'frame' ? normalizeFrame(input) : input.type === 'grid' ? normalizeGrid(input) : input;
 
   return {
     ...(element.type === 'chart' ? normalizeChart(element) : element),

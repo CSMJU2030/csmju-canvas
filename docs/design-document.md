@@ -21,7 +21,7 @@ CMS ของคณะดึงงานได้ที่ `GET /api/v1/designs/
 
 | ฟิลด์ | ความหมาย |
 |---|---|
-| `id`, `type`, `name` | `type` เป็น `text`, `shape`, `image`, `svg`, `path`, `table` หรือ `chart` |
+| `id`, `type`, `name` | `type` เป็น `text`, `shape`, `image`, `svg`, `path`, `table`, `chart`, `frame` หรือ `grid` |
 | `x`, `y`, `width`, `height` | กล่องก่อนหมุน (มุมซ้ายบน) หน่วยพิกเซลของหน้า |
 | `rotation` | องศา ตามเข็มนาฬิกา รอบจุดกึ่งกลางกล่อง |
 | `opacity` | 0–1 |
@@ -59,5 +59,13 @@ CMS ของคณะดึงงานได้ที่ `GET /api/v1/designs/
   - `pie`/`donut` ใช้ชุดข้อมูลแรก ค่าติดลบนับเป็น 0 · เปอร์เซ็นต์ปัดให้รวมได้ 100 · เริ่มที่ 12 นาฬิกาวนตามเข็ม · โดนัทรัศมีในเท่ากับ 0.58 ของรัศมีนอก
   - `progress-ring` ใช้ `series[0].values[0]` เป็นเปอร์เซ็นต์ 0–100 และ `labels[0]` เป็นชื่อใต้ตัวเลข (เมื่อ `showLegend`) · สีวงคือ `colors[0]`
   - ค่าที่ขาดหรือผิดรูป ตัว editor เติมให้ตาม `normalizeChart` ใน `chart-data.ts` · สูตรจัดวางอ้างอิงอยู่ที่ `frontend/src/lib/editor/chart.ts` (ใช้ทั้งวาดบนจอและส่งออก SVG)
+- **frame (กรอบ):** รูปทรงที่เป็นหน้ากากของรูปหนึ่งรูป · `shape` (`circle` · `rounded` · `square` · `heart` · `star` · `blob` · `arch` · `polaroid` · `phone` · `laptop`), `image` (รูปในกรอบ ดูด้านล่าง · `null` = กรอบว่าง)
+  - `polaroid` `phone` `laptop` มีส่วนประดับรอบรูป (กระดาษขาว ขอบเครื่อง ฐานแล็ปท็อป) รูปจึงแสดงในพื้นที่ที่เล็กกว่ากล่อง · ขนาดพื้นที่รูป รูปทรงหน้ากาก และส่วนประดับคำนวณใน `frameArea` / `frameMaskPath` / `frameDecor` ของ `lib/editor/frames.ts` (ได้เป็นสตริง path ของ SVG ใช้ได้ทั้ง `<path d>` และ `new Path2D(d)`)
+- **grid (กริด):** หลายช่องตามเค้าโครง แต่ละช่องมีรูปของตัวเอง · `layout` (`cols-2` · `rows-2` · `cols-3` · `grid-2x2` · `big-2` 1 ใหญ่ + 2 เล็ก · `big-3` 1 ใหญ่ + 3 เล็ก · `collage-5` · `collage-6`), `gap` (px ระยะห่างระหว่างช่อง), `cornerRadius` (px มุมโค้งของทุกช่อง), `cells` (อาร์เรย์ตามลำดับช่องของเค้าโครง แต่ละช่องเป็นรูปในกรอบหรือ `null` = ช่องว่าง)
+  - ช่องเป็นสัดส่วน 0–1 ของกล่องตาม `GRID_LAYOUTS` ใน `lib/editor/frames.ts` · ระยะห่างแบ่งครึ่งให้ขอบด้านในของแต่ละช่อง ขอบนอกชิดกล่อง (`gridCellRects`)
+- **รูปในกรอบ/ช่อง** (`frame.image` และสมาชิกของ `grid.cells`): `src`, `assetId`, `naturalWidth`/`naturalHeight` (ขนาดจริงของรูป), `zoom` (1 = พอดีเต็มช่องแบบ cover · สูงสุด 5), `offsetX`/`offsetY` (0–1 แบบ CSS `object-position`: 0 = ชิดซ้าย/บน · 0.5 = กึ่งกลาง · 1 = ชิดขวา/ล่าง)
+  - ค่าเสริม: `name` · `flipX`/`flipY` (พลิกรูปในกรอบ) · `adjust` · `filter` + `filterIntensity` · `colorEdits` · `erase` (ความหมายเดียวกับของ **image**)
+  - วางรูป: `scale = max(พื้นที่กว้าง / naturalWidth, พื้นที่สูง / naturalHeight) × zoom` · กล่องรูป `x = พื้นที่.x + (พื้นที่กว้าง − naturalWidth × scale) × offsetX` (แกน y เช่นเดียวกัน) แล้วตัดตามหน้ากาก (`coverRect`)
+  - กรอบ/ช่องที่ว่าง editor วาดเป็นพื้นเทาพร้อมไอคอนรูปภาพและคำว่า "ลากรูปมาวางที่นี่" (รวมถึงตอนพรีเซนต์และดาวน์โหลด) · CMS จะไม่วาดช่องว่างก็ได้
 
 ตัว render อ้างอิงอยู่ที่ `frontend/src/lib/editor/render.ts` · element ชนิดที่ไม่รู้จักให้ข้าม

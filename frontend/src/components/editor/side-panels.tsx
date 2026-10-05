@@ -3,7 +3,7 @@
 import {
   AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignHorizontalDistributeCenter,
   AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ChartColumn, ChevronsDown, ChevronsUp, ChevronDown, ChevronUp,
-  Eye, EyeOff, GripVertical, Image as ImageIcon, Lock, LockOpen, Pipette, Play, Search, Shapes, Table2, Type,
+  Eye, EyeOff, Frame, GripVertical, Image as ImageIcon, LayoutGrid, Lock, LockOpen, Pipette, Play, Search, Shapes, Table2, Type,
 } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 import { cx } from '@/components/csmju/primitives';
@@ -193,6 +193,8 @@ const TYPE_ICON: Record<CanvasElement['type'], ReactNode> = {
   path: <Shapes aria-hidden className="size-4" />,
   table: <Table2 aria-hidden className="size-4" />,
   chart: <ChartColumn aria-hidden className="size-4" />,
+  frame: <Frame aria-hidden className="size-4" />,
+  grid: <LayoutGrid aria-hidden className="size-4" />,
 };
 
 /// แท็บเลเยอร์: ลากเรียงลำดับ · คลิกเพื่อเลือก · ทั้งหมด/ทับซ้อน
@@ -694,7 +696,7 @@ export function ColorPanel({ target: forced, embedded = false }: { target?: Colo
         if (el.type === 'shape') {
           add(el.fill);
           add(el.stroke);
-        } else if (el.type !== 'image') add(el.color);
+        } else if ('color' in el) add(el.color);
       }
     }
 
@@ -733,7 +735,7 @@ export function ColorPanel({ target: forced, embedded = false }: { target?: Colo
     ? doc.pages.reduce(
         (n, page) =>
           n +
-          page.elements.filter((el) => (el.type === 'shape' ? el.fill === changed.from || el.stroke === changed.from : el.type !== 'image' && el.color === changed.from)).length +
+          page.elements.filter((el) => (el.type === 'shape' ? el.fill === changed.from || el.stroke === changed.from : 'color' in el && el.color === changed.from)).length +
           (page.background === changed.from ? 1 : 0),
         0,
       )
