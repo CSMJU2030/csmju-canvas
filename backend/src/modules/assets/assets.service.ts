@@ -22,6 +22,13 @@ export const MAX_MEDIA_BYTES = 50 * 1024 * 1024;
 export const MAX_UPLOAD_BYTES = Math.max(MAX_ASSET_BYTES, MAX_MEDIA_BYTES);
 /// พื้นที่ต่อคน — นับรวมรูปในถังขยะด้วย จนกว่าจะลบถาวร
 export const QUOTA_BYTES_PER_USER = 500 * 1024 * 1024;
+/// เพดานโควตาที่ผู้ดูแลตั้งให้คนหนึ่งได้ (5 GB) — กันพิมพ์ศูนย์เกินจนคนเดียวจองดิสก์ทั้งเครื่อง
+export const MAX_QUOTA_BYTES = 5 * 1024 * 1024 * 1024;
+
+/// โควตาที่ใช้จริง: ค่าที่ผู้ดูแลตั้ง (subsystem_members.storage_quota_bytes) หรือค่าเริ่มต้นเมื่อเป็น null
+export function effectiveQuota(override: bigint | null): number {
+  return override === null ? QUOTA_BYTES_PER_USER : Number(override);
+}
 export const ASSET_TRASH_RETENTION_DAYS = 30;
 
 /// เก็บรูปบนดิสก์ของ backend แล้วเสิร์ฟผ่าน API ที่ต้องมี session เท่านั้น
@@ -81,10 +88,10 @@ export class AssetsService {
       throw new BadRequestException('ไฟล์วิดีโอหรือเสียงใหญ่เกิน 50 MB');
     }
 
-    const used = await this.usedBytes(coreUserId);
+    const [used, quota] = await Promise.all([this.usedBytes(coreUserId), this.quotaBytes(coreUserId)]);
 
-    if (used + file.size > QUOTA_BYTES_PER_USER) {
-      throw new ConflictException('พื้นที่เก็บไฟล์เต็มแล้ว ลบไฟล์ที่ไม่ใช้ออกจากถังขยะก่อน');
+    if (used + file.size > quota) {
+      throw new ConflictException('พื้นที่เก็บไฟล์เต็มแล้ว ลบไฟล์ที่ไม่ใช้ออกจากถังขยะก่อน หรือขอให้ผู้ดูแลระบบเพิ่มพื้นที่');
     }
 
     const id = randomUUID();
@@ -181,6 +188,16 @@ export class AssetsService {
     });
 
     return sum._sum.sizeBytes ?? 0;
+  }
+
+  /// โควตาของคนนี้ — ค่าที่ผู้ดูแลตั้งให้ (แผงผู้ดูแล → สมาชิกและพื้นที่) หรือค่าเริ่มต้น
+  async quotaBytes(coreUserId: string): Promise<number> {
+    const member = await this.prisma.subsystemMember.findUnique({
+      where: { coreUserId },
+      select: { storageQuotaBytes: true },
+    });
+
+    return effectiveQuota(member?.storageQuotaBytes ?? null);
   }
 
   private async find(coreUserId: string, id: string) {

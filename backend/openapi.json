@@ -2496,6 +2496,727 @@
           "feedbacks"
         ]
       }
+    },
+    "/api/v1/subsystem-members/me": {
+      "get": {
+        "description": "หน้าบ้านเรียกครั้งเดียวหลังโหลดตัวตนสำเร็จ · เก็บแค่ coreUserId เวลาเข้าใช้ล่าสุด และ core role ล่าสุด (ไว้แสดงในแผงผู้ดูแล)",
+        "operationId": "MembersController_me",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/MyMembershipDto"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "บันทึกว่าฉันเข้าใช้ และคืนพื้นที่เก็บไฟล์ของฉัน",
+        "tags": [
+          "subsystem-members"
+        ]
+      }
+    },
+    "/api/v1/subsystem-members": {
+      "get": {
+        "operationId": "MembersController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "example": 2,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "example": 50,
+              "type": "number"
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "ค้นจาก coreUserId บางส่วน",
+            "schema": {
+              "example": "user-00",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "required": false,
+            "in": "query",
+            "description": "recent = เข้าใช้ล่าสุดก่อน · usage = ใช้พื้นที่ใกล้เต็มก่อน (สัดส่วนต่อโควตา)",
+            "schema": {
+              "default": "recent",
+              "type": "string",
+              "enum": [
+                "recent",
+                "usage"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "สำเร็จ พร้อมข้อมูลแบ่งหน้า",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/MemberDto"
+                      }
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PaginationMeta"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "เฉพาะผู้ดูแลระบบ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "error"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "example": "NOT_FOUND"
+                        },
+                        "message": {
+                          "type": "string",
+                          "example": "ไม่พบคลิปนี้ อาจถูกลบไปแล้ว"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "รายชื่อสมาชิกพร้อมพื้นที่ที่ใช้ โควตา และจำนวนดีไซน์ (ผู้ดูแล)",
+        "tags": [
+          "subsystem-members"
+        ]
+      }
+    },
+    "/api/v1/subsystem-members/{coreUserId}/storage-quota": {
+      "patch": {
+        "description": "เพดาน 5 GB · null = กลับไปใช้ค่าเริ่มต้น 500 MB · ตั้งล่วงหน้าก่อนเจ้าตัวเปิดแอปครั้งแรกได้ · บันทึก audit log member.quota_change",
+        "operationId": "MembersController_updateQuota",
+        "parameters": [
+          {
+            "name": "coreUserId",
+            "required": true,
+            "in": "path",
+            "description": "ค่า sub จาก token ของ Core Hub",
+            "schema": {
+              "example": "user-002",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMemberQuotaDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/MemberDto"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "โควตาไม่ถูกต้องหรือเกิน 5 GB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "error"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "example": "NOT_FOUND"
+                        },
+                        "message": {
+                          "type": "string",
+                          "example": "ไม่พบคลิปนี้ อาจถูกลบไปแล้ว"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "เฉพาะผู้ดูแลระบบ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "error"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "example": "NOT_FOUND"
+                        },
+                        "message": {
+                          "type": "string",
+                          "example": "ไม่พบคลิปนี้ อาจถูกลบไปแล้ว"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "ปรับโควตาพื้นที่เก็บไฟล์ของสมาชิก (ผู้ดูแล)",
+        "tags": [
+          "subsystem-members"
+        ]
+      }
+    },
+    "/api/v1/admin-overview": {
+      "get": {
+        "operationId": "AdminOverviewController_overview",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/AdminOverviewDto"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "เฉพาะผู้ดูแลระบบ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "error"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "example": "NOT_FOUND"
+                        },
+                        "message": {
+                          "type": "string",
+                          "example": "ไม่พบคลิปนี้ อาจถูกลบไปแล้ว"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "ตัวเลขรวมของ CS Canvas สำหรับแผงผู้ดูแล",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin-activity": {
+      "get": {
+        "description": "ยอดรวมต่อวันตามเวลาไทย ไม่มีข้อมูลรายบุคคล · trends เทียบกับช่วงก่อนหน้าที่ยาวเท่ากัน",
+        "operationId": "AdminActivityController_activity",
+        "parameters": [
+          {
+            "name": "days",
+            "required": false,
+            "in": "query",
+            "description": "ช่วงเวลา (วัน)",
+            "schema": {
+              "default": 7,
+              "type": "number",
+              "enum": [
+                7,
+                30,
+                90
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/AdminActivityDto"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "days ต้องเป็น 7, 30 หรือ 90",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "error"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "example": "NOT_FOUND"
+                        },
+                        "message": {
+                          "type": "string",
+                          "example": "ไม่พบคลิปนี้ อาจถูกลบไปแล้ว"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "เฉพาะผู้ดูแลระบบ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "error"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "example": "NOT_FOUND"
+                        },
+                        "message": {
+                          "type": "string",
+                          "example": "ไม่พบคลิปนี้ อาจถูกลบไปแล้ว"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "กิจกรรมรายวันของ CS Canvas (ผู้ดูแล)",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/audit-logs": {
+      "get": {
+        "description": "ใหม่สุดก่อน · กรองตามการกระทำ ผู้กระทำ และช่วงเวลา · การกระทำที่บันทึก เช่น design.purge, design.restore_by_admin, report.resolved, report.rejected, member.quota_change, template.unpublish",
+        "operationId": "AuditLogsController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "example": 2,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "example": 50,
+              "type": "number"
+            }
+          },
+          {
+            "name": "action",
+            "required": false,
+            "in": "query",
+            "description": "กรองตามการกระทำ เช่น design.purge, report.resolved",
+            "schema": {
+              "example": "member.quota_change",
+              "type": "string"
+            }
+          },
+          {
+            "name": "actorCoreUserId",
+            "required": false,
+            "in": "query",
+            "description": "กรองตามผู้กระทำ (coreUserId หรือ system)",
+            "schema": {
+              "example": "user-002",
+              "type": "string"
+            }
+          },
+          {
+            "name": "since",
+            "required": false,
+            "in": "query",
+            "description": "ตั้งแต่เวลานี้ (ISO 8601)",
+            "schema": {
+              "example": "2026-10-01T00:00:00+07:00",
+              "type": "string"
+            }
+          },
+          {
+            "name": "until",
+            "required": false,
+            "in": "query",
+            "description": "จนถึงเวลานี้ (ISO 8601)",
+            "schema": {
+              "example": "2026-10-06T23:59:59+07:00",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "สำเร็จ พร้อมข้อมูลแบ่งหน้า",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AuditLogDto"
+                      }
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PaginationMeta"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ตัวกรองไม่ถูกต้อง",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "error"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "example": "NOT_FOUND"
+                        },
+                        "message": {
+                          "type": "string",
+                          "example": "ไม่พบคลิปนี้ อาจถูกลบไปแล้ว"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "เฉพาะผู้ดูแลระบบ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "error"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "example": "NOT_FOUND"
+                        },
+                        "message": {
+                          "type": "string",
+                          "example": "ไม่พบคลิปนี้ อาจถูกลบไปแล้ว"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "อ่าน audit log ของ CS Canvas (ผู้ดูแล)",
+        "tags": [
+          "audit-logs"
+        ]
+      }
     }
   },
   "info": {
@@ -3677,7 +4398,8 @@
           },
           "quotaBytes": {
             "type": "number",
-            "example": 524288000
+            "example": 524288000,
+            "description": "โควตาของฉัน — ค่าเริ่มต้น หรือค่าที่ผู้ดูแลระบบปรับให้"
           },
           "assetCount": {
             "type": "number"
@@ -3799,6 +4521,416 @@
         "required": [
           "kind",
           "message"
+        ]
+      },
+      "MyMembershipDto": {
+        "type": "object",
+        "properties": {
+          "coreUserId": {
+            "type": "string",
+            "example": "user-002"
+          },
+          "coreRole": {
+            "type": "string",
+            "example": "student",
+            "description": "จาก token ที่ตรวจแล้ว"
+          },
+          "storageUsedBytes": {
+            "type": "string",
+            "example": "48120040"
+          },
+          "storageQuotaBytes": {
+            "type": "string",
+            "example": "524288000"
+          },
+          "usagePercent": {
+            "type": "number",
+            "example": 9.2
+          },
+          "lastSeenAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "coreUserId",
+          "coreRole",
+          "storageUsedBytes",
+          "storageQuotaBytes",
+          "usagePercent",
+          "lastSeenAt"
+        ]
+      },
+      "MemberDto": {
+        "type": "object",
+        "properties": {
+          "coreUserId": {
+            "type": "string",
+            "example": "user-002"
+          },
+          "lastCoreRole": {
+            "type": "string",
+            "nullable": true,
+            "example": "student",
+            "description": "core role ตอนเข้าใช้ล่าสุด (แสดงผลเท่านั้น ไม่ใช้ตัดสินสิทธิ์) · null = ยังไม่เคยเปิดแอปหลังเริ่มบันทึก"
+          },
+          "storageUsedBytes": {
+            "type": "string",
+            "example": "48120040",
+            "description": "ไบต์ที่ใช้ไป (รวมไฟล์ในถังขยะ) เป็น string"
+          },
+          "storageQuotaBytes": {
+            "type": "string",
+            "example": "524288000",
+            "description": "โควตาที่ใช้จริงเป็น string"
+          },
+          "quotaOverridden": {
+            "type": "boolean",
+            "description": "true = ผู้ดูแลตั้งโควตาให้เอง · false = ค่าเริ่มต้น"
+          },
+          "usagePercent": {
+            "type": "number",
+            "example": 9.2,
+            "description": "ร้อยละของโควตาที่ใช้ไป (ทศนิยม 1 ตำแหน่ง)"
+          },
+          "designCount": {
+            "type": "number",
+            "description": "ดีไซน์ที่ยังไม่อยู่ในถังขยะ"
+          },
+          "assetCount": {
+            "type": "number"
+          },
+          "lastSeenAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "coreUserId",
+          "lastCoreRole",
+          "storageUsedBytes",
+          "storageQuotaBytes",
+          "quotaOverridden",
+          "usagePercent",
+          "designCount",
+          "assetCount",
+          "lastSeenAt",
+          "createdAt"
+        ]
+      },
+      "UpdateMemberQuotaDto": {
+        "type": "object",
+        "properties": {
+          "storageQuotaBytes": {
+            "type": "integer",
+            "nullable": true,
+            "example": 1073741824,
+            "description": "โควตาใหม่เป็นไบต์ สูงสุด 5368709120 (5 GB) · null = กลับไปใช้ค่าเริ่มต้น 524288000 (500 MB)"
+          },
+          "reason": {
+            "type": "string",
+            "example": "อาจารย์ขอพื้นที่เพิ่มสำหรับสื่อการสอน",
+            "description": "เหตุผล เก็บลง audit log"
+          }
+        },
+        "required": [
+          "storageQuotaBytes"
+        ]
+      },
+      "NearQuotaMemberDto": {
+        "type": "object",
+        "properties": {
+          "coreUserId": {
+            "type": "string",
+            "example": "user-002"
+          },
+          "storageUsedBytes": {
+            "type": "string",
+            "example": "497025024"
+          },
+          "storageQuotaBytes": {
+            "type": "string",
+            "example": "524288000"
+          },
+          "usagePercent": {
+            "type": "number",
+            "example": 94.8
+          }
+        },
+        "required": [
+          "coreUserId",
+          "storageUsedBytes",
+          "storageQuotaBytes",
+          "usagePercent"
+        ]
+      },
+      "AdminOverviewDto": {
+        "type": "object",
+        "properties": {
+          "subsystem": {
+            "type": "string",
+            "example": "csmju-canvas"
+          },
+          "memberCount": {
+            "type": "number",
+            "description": "สมาชิกทั้งหมด (คนที่เคยเปิดแอป หรือมีงาน/ไฟล์ในระบบ)"
+          },
+          "activeMemberCount7d": {
+            "type": "number",
+            "description": "สมาชิกที่เปิดแอปใน 7 วันที่ผ่านมา"
+          },
+          "designCount": {
+            "type": "number",
+            "description": "ดีไซน์ที่ยังไม่อยู่ในถังขยะ"
+          },
+          "trashedDesignCount": {
+            "type": "number"
+          },
+          "trashExpiredDesignCount": {
+            "type": "number",
+            "description": "ดีไซน์ในถังขยะที่เกินระยะเก็บแล้ว รอลบถาวร"
+          },
+          "templateCount": {
+            "type": "number",
+            "description": "เทมเพลตทั้งหมด (รวมเทมเพลตตั้งต้นของทีม)"
+          },
+          "userTemplateCount": {
+            "type": "number",
+            "description": "เทมเพลตที่ผู้ใช้เผยแพร่เอง"
+          },
+          "assetCount": {
+            "type": "number"
+          },
+          "storageUsedBytes": {
+            "type": "string",
+            "example": "734003200",
+            "description": "ไบต์รวมของไฟล์ทั้งหมด เป็น string"
+          },
+          "commentCount": {
+            "type": "number"
+          },
+          "openReportCount": {
+            "type": "number",
+            "description": "การรายงานเนื้อหา (ฟีดแบ็กชนิด REPORT)"
+          },
+          "nearQuotaMemberCount": {
+            "type": "number",
+            "description": "สมาชิกที่ใช้พื้นที่ถึง 90% ของโควตา"
+          },
+          "nearQuotaMembers": {
+            "description": "สูงสุด 5 คนที่ใกล้เต็มที่สุด",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NearQuotaMemberDto"
+            }
+          },
+          "defaultQuotaBytes": {
+            "type": "string",
+            "example": "524288000"
+          },
+          "generatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "subsystem",
+          "memberCount",
+          "activeMemberCount7d",
+          "designCount",
+          "trashedDesignCount",
+          "trashExpiredDesignCount",
+          "templateCount",
+          "userTemplateCount",
+          "assetCount",
+          "storageUsedBytes",
+          "commentCount",
+          "openReportCount",
+          "nearQuotaMemberCount",
+          "nearQuotaMembers",
+          "defaultQuotaBytes",
+          "generatedAt"
+        ]
+      },
+      "ActivityPointDto": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "example": "2026-10-06",
+            "description": "วันตามเวลาไทย"
+          },
+          "designsCreated": {
+            "type": "number",
+            "description": "ดีไซน์ที่สร้างใหม่"
+          },
+          "designsEdited": {
+            "type": "number",
+            "description": "ดีไซน์ (ไม่ซ้ำ) ที่มีการแก้ไข"
+          },
+          "uploads": {
+            "type": "number",
+            "description": "ไฟล์ที่อัปโหลด"
+          },
+          "templatesPublished": {
+            "type": "number",
+            "description": "เทมเพลตที่ผู้ใช้เผยแพร่"
+          },
+          "comments": {
+            "type": "number",
+            "description": "ความคิดเห็นบนงาน"
+          },
+          "activeMembers": {
+            "type": "number",
+            "description": "ผู้ใช้ (ไม่ซ้ำ) ที่มีความเคลื่อนไหว"
+          }
+        },
+        "required": [
+          "date",
+          "designsCreated",
+          "designsEdited",
+          "uploads",
+          "templatesPublished",
+          "comments",
+          "activeMembers"
+        ]
+      },
+      "ActivityTrendDto": {
+        "type": "object",
+        "properties": {
+          "metric": {
+            "type": "string",
+            "enum": [
+              "designsCreated",
+              "designsEdited",
+              "uploads",
+              "templatesPublished",
+              "comments",
+              "activeMembers"
+            ]
+          },
+          "current": {
+            "type": "number",
+            "description": "ยอดรวมช่วงนี้ (activeMembers = คนไม่ซ้ำทั้งช่วง)"
+          },
+          "previous": {
+            "type": "number",
+            "description": "ยอดรวมช่วงก่อนหน้าที่ยาวเท่ากัน"
+          },
+          "changePercent": {
+            "type": "number",
+            "nullable": true,
+            "description": "ร้อยละที่เปลี่ยน · null เมื่อช่วงก่อนเป็นศูนย์"
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "UP",
+              "DOWN",
+              "FLAT"
+            ]
+          }
+        },
+        "required": [
+          "metric",
+          "current",
+          "previous",
+          "changePercent",
+          "direction"
+        ]
+      },
+      "AdminActivityDto": {
+        "type": "object",
+        "properties": {
+          "days": {
+            "type": "number",
+            "enum": [
+              7,
+              30,
+              90
+            ]
+          },
+          "timeZone": {
+            "type": "string",
+            "example": "Asia/Bangkok"
+          },
+          "from": {
+            "type": "string",
+            "example": "2026-09-30"
+          },
+          "to": {
+            "type": "string",
+            "example": "2026-10-06"
+          },
+          "series": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ActivityPointDto"
+            }
+          },
+          "trends": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ActivityTrendDto"
+            }
+          }
+        },
+        "required": [
+          "days",
+          "timeZone",
+          "from",
+          "to",
+          "series",
+          "trends"
+        ]
+      },
+      "AuditLogDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "actorCoreUserId": {
+            "type": "string",
+            "example": "user-001"
+          },
+          "actorCoreRole": {
+            "type": "string",
+            "example": "staff"
+          },
+          "action": {
+            "type": "string",
+            "example": "member.quota_change"
+          },
+          "targetKind": {
+            "type": "string",
+            "example": "MEMBER"
+          },
+          "targetId": {
+            "type": "string",
+            "nullable": true,
+            "example": "user-002"
+          },
+          "metadata": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": true,
+            "description": "บริบทตอนเกิดเหตุ (ไม่มีชื่อจริง อีเมล หรือ token)"
+          },
+          "createdAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "actorCoreUserId",
+          "actorCoreRole",
+          "action",
+          "targetKind",
+          "targetId",
+          "metadata",
+          "createdAt"
         ]
       }
     }

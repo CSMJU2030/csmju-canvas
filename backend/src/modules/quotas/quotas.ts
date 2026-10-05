@@ -8,7 +8,7 @@ import { AssetsService, QUOTA_BYTES_PER_USER } from '../assets/assets.service.js
 
 export class QuotaDto {
   @ApiProperty({ description: 'ไบต์ที่ใช้ไป (รูปทั้งหมดรวมถังขยะ)' }) usedBytes!: number;
-  @ApiProperty({ example: QUOTA_BYTES_PER_USER }) quotaBytes!: number;
+  @ApiProperty({ example: QUOTA_BYTES_PER_USER, description: 'โควตาของฉัน — ค่าเริ่มต้น หรือค่าที่ผู้ดูแลระบบปรับให้' }) quotaBytes!: number;
   @ApiProperty() assetCount!: number;
   @ApiProperty({ description: 'งานที่ยังไม่อยู่ในถังขยะ' }) designCount!: number;
   @ApiProperty() trashedDesignCount!: number;
@@ -22,14 +22,15 @@ export class QuotasService {
   ) {}
 
   async get(coreUserId: string) {
-    const [usedBytes, assetCount, designCount, trashedDesignCount] = await Promise.all([
+    const [usedBytes, quotaBytes, assetCount, designCount, trashedDesignCount] = await Promise.all([
       this.assets.usedBytes(coreUserId),
+      this.assets.quotaBytes(coreUserId),
       this.prisma.asset.count({ where: { coreUserId } }),
       this.prisma.design.count({ where: { coreUserId, trashedAt: null } }),
       this.prisma.design.count({ where: { coreUserId, trashedAt: { not: null } } }),
     ]);
 
-    return { usedBytes, quotaBytes: QUOTA_BYTES_PER_USER, assetCount, designCount, trashedDesignCount };
+    return { usedBytes, quotaBytes, assetCount, designCount, trashedDesignCount };
   }
 }
 

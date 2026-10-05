@@ -125,7 +125,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     api
       .get<Me>('/me')
       .then((me) => {
-        if (alive) setState({ status: 'ready', me });
+        if (!alive) return;
+
+        setState({ status: 'ready', me });
+        // บันทึกว่าเข้าใช้ (แผงผู้ดูแล → สมาชิกและพื้นที่) แยกจาก /me ของชั้น auth แบบ nexus
+        // ล้มเหลวก็ไม่กระทบการใช้งาน จึงไม่รอและไม่แจ้ง
+        void api.get('/subsystem-members/me').catch(() => undefined);
       })
       .catch((error: unknown) => {
         if (!alive) return;
