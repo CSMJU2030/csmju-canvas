@@ -3,16 +3,18 @@
 import {
   AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignStartHorizontal, AlignStartVertical, AlignCenterHorizontal,
   Accessibility, ChevronRight, ChevronsDown, ChevronsUp, ChevronDown, ChevronUp, ClipboardPaste, Copy, CopyPlus, Download,
-  EyeOff, FilePlus, Info, Layers, Link, Lock, LockOpen, PaintRoller, Palette, Trash2, Wallpaper,
+  ExternalLink, EyeOff, FilePlus, Info, Layers, Link, Lock, LockOpen, PaintRoller, Palette, Quote, Trash2, Wallpaper,
 } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useToast } from '@/components/csmju/primitives';
 import { exportSelection } from '@/lib/editor/export';
 import { dominantColors } from '@/lib/editor/image-filters';
+import { canCredit, creditText } from '@/lib/editor/image-sources';
 import { getImage } from '@/lib/editor/render';
 import { canEditDoc, currentPage, useEditor } from '@/lib/editor/store';
 import { useEditorUi } from '@/lib/editor/ui-store';
+import { insertCreditFor } from './image-sources-panel';
 
 /// เมนูคลิกขวา / ปุ่ม … ของชิ้นงาน (ภาพบรีฟ "เมื่อคลิกขวา") — คีย์ลัดที่แสดงทำงานจริงทุกตัว
 export function ContextMenu() {
@@ -231,9 +233,32 @@ function MenuBody({ x, y }: { x: number; y: number }) {
                   onSelect: () => {
                     const img = getImage(single.src);
 
-                    toast(`${single.name || 'รูปภาพ'} · ${img ? `${img.naturalWidth} × ${img.naturalHeight} px` : 'ยังโหลดไม่เสร็จ'}${single.assetId ? ' · อยู่ในแท็บอัปโหลดของคุณ' : ''}`);
+                    toast(`${single.name || 'รูปภาพ'} · ${img ? `${img.naturalWidth} × ${img.naturalHeight} px` : 'ยังโหลดไม่เสร็จ'}${single.assetId ? ' · อยู่ในแท็บอัปโหลดของคุณ' : ''}${single.origin ? ` · ${creditText(single.origin)}` : ''}`);
                   },
                 },
+                ...(canCredit(single.origin?.site)
+                  ? [
+                      {
+                        label: 'ใส่เครดิตภาพ',
+                        icon: <Quote aria-hidden className="size-4" />,
+                        disabled: !editable,
+                        onSelect: () => {
+                          if (insertCreditFor(single)) toast('ใส่เครดิตภาพใต้รูปแล้ว');
+                        },
+                      },
+                    ]
+                  : []),
+                ...(single.origin?.url
+                  ? [
+                      {
+                        label: 'เปิดหน้าต้นฉบับ',
+                        icon: <ExternalLink aria-hidden className="size-4" />,
+                        onSelect: () => {
+                          window.open(single.origin!.url!, '_blank', 'noopener,noreferrer');
+                        },
+                      },
+                    ]
+                  : []),
               ] as Item[])
             : []),
         ];

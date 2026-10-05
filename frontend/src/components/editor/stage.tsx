@@ -29,7 +29,7 @@ import { activeCell, useTableUi } from '@/lib/editor/table-ui';
 import { brushWidth, canEditDoc, currentPage, selectionBox, useEditor, type DrawBrush } from '@/lib/editor/store';
 import type { CanvasElement, ImageElement, PathElement, TextElement } from '@/lib/editor/types';
 import { PREVIEW_MS, useEditorUi } from '@/lib/editor/ui-store';
-import { FileDropOverlay, dragHasFiles, imageUrlFrom, useFileImport } from './file-import';
+import { FileDropOverlay, dragHasFiles, imageUrlFrom, originFrom, useFileImport } from './file-import';
 import { TableCellEditor } from './table-editor';
 
 /// ผืนผ้าใบหลักของ editor — วาดด้วย Canvas 2D ทุกเฟรมที่มีการเปลี่ยน (requestAnimationFrame)
@@ -1093,8 +1093,10 @@ export function Stage() {
 
       dropTarget.current = null;
       requestDraw();
-      if (files.length > 0) void importFiles(files, { at: p, cell });
-      else if (url) void importImageUrl(url, { at: p, cell });
+      const origin = originFrom(event.dataTransfer, url);
+
+      if (files.length > 0) void importFiles(files, { at: p, cell, origin });
+      else if (url) void importImageUrl(url, { at: p, cell, origin });
       return;
     }
 

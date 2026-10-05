@@ -2,7 +2,7 @@ import { createFrame, createGrid } from './factory';
 import { cellArea, cellImages, toLocal, visibleCrop } from './frames';
 import { getImage } from './render';
 import { currentPage, useEditor } from './store';
-import { newId, type FrameElement, type FrameImage, type FrameShape, type GridElement, type GridLayout, type ImageElement } from './types';
+import { newId, type FrameElement, type FrameImage, type FrameShape, type GridElement, type GridLayout, type ImageElement, type ImageOrigin } from './types';
 import { useEditorUi } from './ui-store';
 
 /// คำสั่งของกรอบและกริดที่แตะ store (ใส่รูป แทนที่ ลบ แยกรูปออก ลากวาง)
@@ -21,6 +21,8 @@ export interface ImageSource {
   naturalWidth: number;
   naturalHeight: number;
   name: string;
+  /// แหล่งที่มาของภาพที่นำเข้าจากเว็บอื่น (ติดไปกับชิ้นรูปเมื่อใส่เป็นรูปเดี่ยว)
+  origin?: ImageOrigin | null;
 }
 
 export type FrameLike = FrameElement | GridElement;
@@ -248,8 +250,22 @@ export function readImageDragData(data: DataTransfer): ImageSource | null {
       naturalWidth: typeof raw.naturalWidth === 'number' && raw.naturalWidth > 0 ? raw.naturalWidth : 400,
       naturalHeight: typeof raw.naturalHeight === 'number' && raw.naturalHeight > 0 ? raw.naturalHeight : 400,
       name: typeof raw.name === 'string' ? raw.name : 'รูปภาพ',
+      ...(validOrigin(raw.origin) ? { origin: validOrigin(raw.origin) } : {}),
     };
   } catch {
     return null;
   }
+}
+
+const ORIGIN_SITES = new Set(['unsplash', 'pexels', 'pixabay', 'openverse', 'wikimedia', 'nasa', 'pinterest', 'google', 'other']);
+
+/// แหล่งที่มาที่ติดมากับข้อมูลการลาก — รับเฉพาะรูปแบบที่ถูกต้อง
+function validOrigin(value: unknown): ImageOrigin | null {
+  if (!value || typeof value !== 'object') return null;
+
+  const { site, url } = value as { site?: unknown; url?: unknown };
+
+  if (typeof site !== 'string' || !ORIGIN_SITES.has(site)) return null;
+
+  return { site: site as ImageOrigin['site'], url: typeof url === 'string' && /^https?:\/\//i.test(url) ? url.slice(0, 500) : null };
 }

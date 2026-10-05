@@ -9,6 +9,9 @@ import { prefersInternalPaste } from '@/lib/editor/clipboard-bridge';
 import { createImage, createTable, createText } from '@/lib/editor/factory';
 import { clampGrid, clampText, looksTabular, parseDelimited, planImport, pngName } from '@/lib/editor/file-import';
 import { fillCell, fillSelectedFrame, type ImageSource } from '@/lib/editor/frame-actions';
+import {
+  originFields, originFromHints, originOfAsset, readTransferHints, recentIntent, useImportHint, useSourceIntent, type ImageOrigin,
+} from '@/lib/editor/image-sources';
 import { canEditDoc, useEditor } from '@/lib/editor/store';
 import type { CanvasElement } from '@/lib/editor/types';
 import type { Asset } from '@/lib/types';
@@ -57,7 +60,7 @@ export function UploadDropZone({ children }: { children: ReactNode }) {
         if (!dragHasFiles(event.dataTransfer)) return;
         event.preventDefault();
         event.stopPropagation();
-        void importFiles(Array.from(event.dataTransfer.files), { insert: false });
+        void importFiles(Array.from(event.dataTransfer.files), { insert: false, origin: originFrom(event.dataTransfer) });
       }}
     >
       {children}
@@ -84,6 +87,15 @@ export function imageUrlFrom(data: DataTransfer | null): string | null {
   return uri && /^(https?:|data:image\/)/i.test(uri) && /\.(png|jpe?g|gif|webp|svg|avif|bmp)(\?|#|$)|^data:image\//i.test(uri) ? uri : null;
 }
 
+/// ภาพนี้คัดลอก/ลากมาจากเว็บอื่นหรือไม่ (ดูจาก HTML/ลิงก์ในคลิปบอร์ด และแหล่งที่เพิ่งเปิดจากแผงแหล่งภาพ)
+export function originFrom(data: DataTransfer | null, fallbackUrl?: string | null): ImageOrigin | null {
+  return originFromHints(readTransferHints(data), {
+    ownHost: typeof window === 'undefined' ? undefined : window.location.host,
+    intent: recentIntent(useSourceIntent.getState()),
+    fallbackUrl,
+  });
+}
+
 interface ImportOptions {
   /// จุดบนหน้าที่ปล่อยไฟล์ (หน่วยพิกเซลของหน้า) — ไม่มี = กลางหน้า
   at?: { x: number; y: number };
@@ -91,6 +103,8 @@ interface ImportOptions {
   cell?: { id: string; cell: number } | null;
   /// false = อัปโหลดเก็บไว้ในคลังอย่างเดียว (ลากลงแผงอัปโหลด)
   insert?: boolean;
+  /// แหล่งที่มาของภาพที่คัดลอก/ลากมาจากเว็บอื่น — ส่งไปเก็บกับไฟล์ (เฉพาะรูป)
+  origin?: ImageOrigin | null;
 }
 
 function loadSize(src: string): Promise<{ width: number; height: number }> {
@@ -217,22 +231,27 @@ export function useFileImport() {
 
     for (const file of uploads) {
       try {
-        const asset = await api.upload<Asset>('/assets', file);
+        const asset = await api.upload<Asset>('/assets', file, file.type.startsWith('image/') ? originFields(options.origin) : undefined);
 
         done++;
         if (!insert) continue;
 
         if (asset.mimeType.startsWith('image/')) {
           const size = await loadSize(asset.contentUrl);
-          const source: ImageSource = { src: asset.contentUrl, assetId: asset.id, naturalWidth: size.width, naturalHeight: size.height, name: asset.fileName };
+          const origin = originOfAsset(asset);
+          const source: ImageSource = { src: asset.contentUrl, assetId: asset.id, naturalWidth: size.width, naturalHeight: size.height, name: asset.fileName, origin };
           const now = useEditor.getState();
 
           if (cell) {
             fillCell(cell.id, cell.cell, source);
             cell = null;
           } else if (options.at || !fillSelectedFrame(source)) {
-            now.addElements([placeAt(createImage({ width: now.width, height: now.height }, source), options.at, offset)]);
+            const image = placeAt(createImage({ width: now.width, height: now.height }, source), options.at, offset);
+
+            now.addElements([image]);
             offset += 24;
+            // ภาพจากเว็บอื่น: เสนอทางลัดลบพื้นหลัง/ใส่เครดิต
+            if (origin) useImportHint.getState().show(image.id, origin);
           }
         } else {
           await insertMedia(asset);
@@ -251,6 +270,8 @@ export function useFileImport() {
 
   /// รูปจากเว็บอื่น: ดึงด้วยเบราว์เซอร์ (เว็บต้นทางต้องอนุญาต CORS) แล้วนำเข้าเหมือนไฟล์
   const importImageUrl = async (url: string, options: ImportOptions = {}) => {
+    const withOrigin: ImportOptions = { ...options, origin: options.origin ?? originFrom(null, url) };
+
     try {
       const response = await fetch(url, { mode: 'cors', credentials: 'omit' });
 
@@ -263,7 +284,7 @@ export function useFileImport() {
       const name = decodeURIComponent(url.split(/[?#]/)[0].split('/').pop() || 'image') || 'image';
       const ext = blob.type.split('/')[1]?.replace('svg+xml', 'svg').replace('jpeg', 'jpg') ?? 'png';
 
-      await importFiles([new File([blob], /\.[a-z0-9]+$/i.test(name) ? name : `${name}.${ext}`, { type: blob.type })], options);
+      await importFiles([new File([blob], /\.[a-z0-9]+$/i.test(name) ? name : `${name}.${ext}`, { type: blob.type })], withOrigin);
     } catch {
       toast('ดึงรูปจากเว็บนั้นไม่ได้ (เว็บต้นทางไม่อนุญาต) — บันทึกรูปลงเครื่องแล้วลากไฟล์มาวางแทน', 'error');
     }
@@ -291,7 +312,7 @@ export function usePasteAndDropImport() {
 
       if (files.length > 0) {
         event.preventDefault();
-        void importFiles(files);
+        void importFiles(files, { origin: originFrom(data) });
         return;
       }
 
@@ -305,7 +326,7 @@ export function usePasteAndDropImport() {
 
       if (url && !text.trim()) {
         event.preventDefault();
-        void importImageUrl(url);
+        void importImageUrl(url, { origin: originFrom(data, url) });
         return;
       }
 

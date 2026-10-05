@@ -27,6 +27,7 @@ import { Presenter, presentFromCurrent } from './presenter';
 import { TimerWidget, stopTimerAudio } from './timer';
 import { useAutosave } from './use-autosave';
 import { usePasteAndDropImport } from './file-import';
+import { ImportHintBar } from './image-sources-panel';
 import { useShortcuts } from './use-shortcuts';
 
 export function EditorScreen({ id }: { id: string }) {
@@ -182,6 +183,7 @@ function EditorLayout({ needsThumbnail }: { needsThumbnail: boolean }) {
             {!readOnly && <SelectionToolbar />}
             {!readOnly && toolsOpen && <ToolsPalette onClose={closeTools} onSignature={() => setPanel('signature')} />}
             <TimerWidget />
+            {!readOnly && <ImportHintBar />}
             {pagesView === 'grid' && <PagesGrid />}
           </div>
           <BottomBar readOnly={readOnly} onPresent={() => presentFromCurrent()} />

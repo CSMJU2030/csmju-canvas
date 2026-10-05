@@ -19,6 +19,7 @@ import {
 import { COLOR_FILTERS, colorFilterOf } from '@/lib/editor/color';
 import { fitTemplate } from '@/lib/editor/fit-template';
 import { fillSelectedFrame, setImageDragData } from '@/lib/editor/frame-actions';
+import { originOfAsset } from '@/lib/editor/image-sources';
 import { cssFamily, ensureFont } from '@/lib/editor/fonts';
 import { loadPhotos, matchPhoto, photoSrc, photoThumb, searchTerms, type LibraryPhoto } from '@/lib/editor/library';
 import { pushRecent, useRecent } from '@/lib/editor/recent';
@@ -40,6 +41,7 @@ import { SignaturePanel } from './signature-panel';
 import { BgRemovePanel } from './bg-remove-panel';
 import { ElementsPanel } from './elements-panel';
 import { UploadDropZone } from './file-import';
+import { ImageSourcesBrowser, ImportedImagesBrowser } from './image-sources-panel';
 import { AudioLibrary, VideoLibrary, useInsertMedia } from './media-panel';
 import { BackHeader, PanelFrame, PanelSearch, PanelTitle, SectionHeading, useLibrary, usePageSize } from './panel-parts';
 
@@ -709,7 +711,7 @@ function FontSetGrid({ sets, onPick }: { sets: FontSet[]; onPick: (set: FontSet)
 
 const ACCEPTED = [ACCEPT.image, ACCEPT.video, ACCEPT.audio].join(',');
 
-type UploadView = { kind: 'library' } | { kind: 'options' } | { kind: 'folder'; folder: AssetFolder };
+type UploadView = { kind: 'library' } | { kind: 'options' } | { kind: 'imported' } | { kind: 'folder'; folder: AssetFolder };
 
 /// แผง "อัปโหลด" (ภาพบรีฟ "พรีเซนเทชั่น 3"): แท็บรูป · โฟลเดอร์ · ปุ่ม "…" = ตัวเลือกการอัปโหลด
 function UploadsPanel() {
@@ -747,6 +749,7 @@ function UploadsPanel() {
         naturalWidth: img.naturalWidth || 400,
         naturalHeight: img.naturalHeight || 400,
         name: asset.fileName,
+        origin: originOfAsset(asset),
       };
 
       // กรอบ/ช่องว่างที่เลือกอยู่ = ใส่รูปลงช่องนั้นแทนการเพิ่มรูปใหม่
@@ -875,6 +878,18 @@ function UploadsPanel() {
         </button>
         <p className="mt-3 text-csmju-caption text-muted">อัปโหลดรูปทุกไฟล์ในโฟลเดอร์ที่เลือก (ไฟล์ที่ไม่ใช่รูปจะถูกข้าม)</p>
         <p className="mt-2 text-csmju-caption text-muted">CS Canvas ไม่เชื่อมต่อแอปภายนอก เพื่อไม่ให้ไฟล์ของคุณออกนอกระบบของคณะ</p>
+        <section aria-label="แหล่งภาพ" className="mt-6 border-t border-line pt-4">
+          <h3 className="mb-3 text-csmju-body font-bold text-ink">แหล่งภาพ</h3>
+          <ImageSourcesBrowser onShowImported={() => setView({ kind: 'imported' })} />
+        </section>
+      </PanelFrame>
+    );
+  }
+
+  if (view.kind === 'imported') {
+    return (
+      <PanelFrame header={<BackHeader title="ภาพที่นำเข้า" onBack={() => setView({ kind: 'options' })} />}>
+        <ImportedImagesBrowser onOpenSources={() => setView({ kind: 'options' })} />
       </PanelFrame>
     );
   }
@@ -1089,6 +1104,7 @@ function AssetGrid({
                 naturalWidth: img?.naturalWidth || 400,
                 naturalHeight: img?.naturalHeight || 400,
                 name: asset.fileName,
+                origin: originOfAsset(asset),
               });
             }}
             onClick={() => onInsert(asset)}

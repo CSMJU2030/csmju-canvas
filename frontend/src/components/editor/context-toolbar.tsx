@@ -3,7 +3,7 @@
 import {
   AlignCenter, AlignJustify, AlignLeft, AlignRight, Bold, CaseSensitive, Clock, Eraser, FlipHorizontal2, FlipVertical2,
   Group, ImageOff, Italic, List, ListOrdered, Minus, Move, PaintRoller, Plus, Repeat, RotateCcw, Scissors, Trash2, Underline, Undo2, Ungroup,
-  Unlink, Upload, Strikethrough, Volume2, VolumeX,
+  Quote, Unlink, Upload, Strikethrough, Volume2, VolumeX,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cx } from '@/components/csmju/primitives';
@@ -11,6 +11,7 @@ import { clearCell, detachCell, isFrameLike, patchCellImage, type FrameLike } fr
 import { FRAME_SHAPES, GRID_LAYOUTS, cellImages, gridCellRects, maxGridGap, relayoutCells } from '@/lib/editor/frames';
 import { FONT_FAMILIES, cssFamily } from '@/lib/editor/fonts';
 import { formatDuration, trimRange } from '@/lib/editor/media';
+import { SITE_LABELS, canCredit } from '@/lib/editor/image-sources';
 import { isGradient } from '@/lib/editor/paint';
 import { currentPage, useEditor } from '@/lib/editor/store';
 import {
@@ -21,6 +22,7 @@ import { useEditorUi, type ColorTarget } from '@/lib/editor/ui-store';
 import { ChartTools } from './chart-panel';
 import { PopoverButton, RangeField, ToolbarButton, ToolbarDivider } from './controls';
 import { FrameShapeGlyph, GridLayoutGlyph } from './frame-glyphs';
+import { insertCreditFor } from './image-sources-panel';
 import { TableTools } from './table-tools';
 
 /// แถบเครื่องมือลอยกลางด้านบนผืนผ้าใบ (ภาพบรีฟ "แถบบนของข้อความ/รูป/เส้นวาด")
@@ -549,6 +551,11 @@ function ImageTools({ el }: { el: ImageElement }) {
       <PanelButton panel="image-edit" label="แก้ไข" />
       <PanelButton panel="replace" label="แทนที่" />
       <PanelButton panel="bg-remove" label="ลบพื้นหลัง" />
+      {canCredit(el.origin?.site) && (
+        <ToolbarButton label={`ใส่เครดิตภาพจาก ${SITE_LABELS[el.origin!.site]} ใต้รูป`} wide disabled={el.locked} onClick={() => insertCreditFor(el)}>
+          <Quote aria-hidden className="size-5" /> ใส่เครดิตภาพ
+        </ToolbarButton>
+      )}
       <ToolbarButton label="ยางลบพิกเซล — ลากบนรูปเพื่อลบส่วนนั้น" wide disabled={el.locked} onClick={() => useEditorUi.getState().set({ imageErase: { id: el.id, size: 40 } })}>
         <Eraser aria-hidden className="size-5" /> ยางลบ
       </ToolbarButton>
