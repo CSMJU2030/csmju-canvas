@@ -26,6 +26,7 @@ import { BottomBar, PagesGrid } from './page-strip';
 import { Presenter, presentFromCurrent } from './presenter';
 import { TimerWidget, stopTimerAudio } from './timer';
 import { useAutosave } from './use-autosave';
+import { usePasteAndDropImport } from './file-import';
 import { useShortcuts } from './use-shortcuts';
 
 export function EditorScreen({ id }: { id: string }) {
@@ -139,6 +140,7 @@ function EditorLayout({ needsThumbnail }: { needsThumbnail: boolean }) {
   const { status, retry } = useAutosave(needsThumbnail && !readOnly);
 
   useShortcuts();
+  usePasteAndDropImport();
 
   return (
     <div className="flex h-dvh flex-col bg-stage">

@@ -87,12 +87,6 @@ export function useShortcuts() {
         return;
       }
 
-      if (mod && key === 'v' && state.clipboard.length > 0 && state.selection.length === 0) {
-        event.preventDefault();
-        state.paste();
-        return;
-      }
-
       if (state.selection.length === 0) return;
 
       if (event.key === 'Escape') {
@@ -156,11 +150,7 @@ export function useShortcuts() {
         return;
       }
 
-      if (mod && key === 'v') {
-        event.preventDefault();
-        state.paste();
-        return;
-      }
+      // Ctrl+V จัดการที่เหตุการณ์ paste (file-import.tsx) — วางได้ทั้งชิ้นงานที่คัดลอกและไฟล์/ข้อความจากนอกหน้าแก้ไข
 
       if (mod && key === 'd') {
         event.preventDefault();

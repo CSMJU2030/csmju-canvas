@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { CloudUpload, Lock, LockOpen, Ruler, Search, Sparkles } from 'lucide-react';
+import { Lock, LockOpen, Ruler, Search, Sparkles } from 'lucide-react';
 import { createContext, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Button,
@@ -27,6 +27,7 @@ import {
   type DesignType,
 } from '@/lib/design-types';
 import type { DesignTypeUsage, TemplateSummary } from '@/lib/types';
+import { UploadIcon } from '@/components/shell/upload-icon';
 
 type Tab = 'for-you' | DesignGroupKey | 'custom' | 'upload';
 
@@ -90,7 +91,7 @@ function CreateDesignDialog({
       available: g.available,
     })),
     { key: 'custom', label: 'กำหนดขนาดเอง', icon: <Ruler aria-hidden className="size-5" />, available: true },
-    { key: 'upload', label: 'อัปโหลด', icon: <CloudUpload aria-hidden className="size-5" />, available: true },
+    { key: 'upload', label: 'อัปโหลด', icon: <UploadIcon className="size-5" />, available: true },
   ];
 
   return (
@@ -394,6 +395,7 @@ function round(n: number): number {
 function UploadStart({ onClose }: { onClose: () => void }) {
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  const [over, setOver] = useState(false);
   const create = useCreateDesign();
   const toast = useToast();
 
@@ -414,9 +416,29 @@ function UploadStart({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-line-strong px-6 py-12 text-center">
-      <CloudUpload aria-hidden className="size-10 text-primary" />
-      <p className="text-csmju-body font-semibold text-ink">อัปโหลดรูปเพื่อเริ่มงานแต่งรูป</p>
+    <div
+      className={cx(
+        'flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed px-6 py-12 text-center transition-colors',
+        over ? 'border-primary bg-primary-soft' : 'border-line-strong',
+      )}
+      onDragOver={(event) => {
+        if (!Array.from(event.dataTransfer.types).includes('Files')) return;
+        event.preventDefault();
+        if (!over) setOver(true);
+      }}
+      onDragLeave={(event) => {
+        if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
+        setOver(false);
+      }}
+      onDrop={(event) => {
+        setOver(false);
+        if (event.dataTransfer.files.length === 0) return;
+        event.preventDefault();
+        void onFile(event.dataTransfer.files[0]);
+      }}
+    >
+      <UploadIcon className="size-10 text-primary" animate={over || busy || create.isPending} />
+      <p className="text-csmju-body font-semibold text-ink">{over ? 'ปล่อยรูปเพื่อเริ่มงาน' : 'ลากรูปมาวางที่นี่ หรือเลือกไฟล์จากเครื่อง'}</p>
       <p className="text-csmju-caption text-muted">PNG, JPEG, WebP, GIF หรือ SVG ไม่เกิน 10 MB · ผืนผ้าใบจะมีขนาดเท่ารูป</p>
       <input
         ref={input}

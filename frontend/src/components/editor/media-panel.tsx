@@ -1,13 +1,14 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CloudUpload, Ellipsis, Music, Pause, Play, Repeat, Trash2, Volume2 } from 'lucide-react';
+import { Ellipsis, Music, Pause, Play, Repeat, Trash2, Volume2 } from 'lucide-react';
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { EmptyState, ErrorState, IconButton, Menu, Spinner, cx, errorMessage, useToast } from '@/components/csmju/primitives';
 import { api, qs } from '@/lib/csmju/api';
 import { ACCEPT, createAudioTrack, createVideo, formatDuration, probeMedia, uploadProblem } from '@/lib/editor/media';
 import { canEditDoc, currentPage, useEditor } from '@/lib/editor/store';
 import type { Asset } from '@/lib/types';
+import { UploadIcon } from '@/components/shell/upload-icon';
 import { PopoverButton, RangeField, ToolbarButton } from './controls';
 
 /// วิดีโอและเสียงของผู้ใช้: รายการในแผงองค์ประกอบ/อัปโหลด · ปุ่มอัปโหลด · แถบเสียงประกอบใต้แถบภาพย่อหน้า
@@ -116,9 +117,9 @@ function UploadButton({ label, pending, onClick }: { label: string; pending: boo
       type="button"
       disabled={pending}
       onClick={onClick}
-      className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary text-csmju-body font-semibold text-on-inverse hover:bg-primary-hover disabled:opacity-60"
+      className="group inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary text-csmju-body font-semibold text-on-inverse hover:bg-primary-hover disabled:opacity-60"
     >
-      <CloudUpload aria-hidden className="size-5" /> {pending ? 'กำลังอัปโหลด…' : label}
+      <UploadIcon className="size-5" animate={pending || undefined} /> {pending ? 'กำลังอัปโหลด…' : label}
     </button>
   );
 }

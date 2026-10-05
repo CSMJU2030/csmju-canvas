@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { announceInternalCopy } from './clipboard-bridge';
 import { fitTemplate } from './fit-template';
 import { boundingBox, unionBox, type Rect } from './geometry';
 import { measureTextHeight } from './render';
@@ -534,7 +535,10 @@ export const useEditor = create<EditorState>((set, get) => {
       const { selection } = get();
       const page = currentPage(get());
 
-      set({ clipboard: page.elements.filter((el) => selection.includes(el.id)) });
+      const clipboard = page.elements.filter((el) => selection.includes(el.id));
+
+      set({ clipboard });
+      if (clipboard.length > 0) announceInternalCopy(clipboard.length);
     },
 
     paste() {

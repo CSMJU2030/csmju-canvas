@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { CloudUpload, Ellipsis, HardDrive, House, LayoutTemplate, Ruler, Search } from 'lucide-react';
+import { Ellipsis, HardDrive, House, LayoutTemplate, Ruler, Search } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useState, type ReactNode } from 'react';
@@ -21,6 +21,7 @@ import { MobileHome } from './mobile-home';
 import { MobileTemplatesShell } from './mobile-templates';
 import { CategoryChips, TemplatesTab } from './templates-tab';
 import type { DesignSummary, DesignTypeUsage, Quota, TemplateSummary } from '@/lib/types';
+import { UploadIcon } from '@/components/shell/upload-icon';
 
 /// หน้าแรกแบบ Canva สองแท็บ: หน้าหลัก (/) และเทมเพลต (/templates) ใช้หัวเดียวกัน
 /// (ภาพบรีฟ "ถ้ากด เทมเพลต มันจะไปโผล่ข้างล่าง")
@@ -173,7 +174,7 @@ function TypeShortcuts() {
       soon: !g.available,
     })),
     { label: 'กำหนดขนาดเอง', icon: <Ruler aria-hidden className="size-6 text-ink" />, tone: 'bg-surface border border-line', onClick: () => openCreate('custom') },
-    { label: 'อัปโหลด', icon: <CloudUpload aria-hidden className="size-6 text-ink" />, tone: 'bg-surface border border-line', onClick: () => openCreate('upload') },
+    { label: 'อัปโหลด', icon: <UploadIcon className="size-6 text-ink" />, tone: 'bg-surface border border-line', onClick: () => openCreate('upload') },
     { label: 'เพิ่มเติม', icon: <Ellipsis aria-hidden className="size-6 text-primary" />, tone: 'bg-primary-soft', onClick: () => openCreate('for-you') },
   ];
 

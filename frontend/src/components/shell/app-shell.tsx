@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  ArrowLeft, Bell, BookOpen, ChevronRight, Clock, CloudUpload, Ellipsis, FolderOpen, House, LayoutTemplate, PanelLeft, Plus, Sparkles,
+  ArrowLeft, Bell, BookOpen, ChevronRight, Clock, Ellipsis, FolderOpen, House, LayoutTemplate, PanelLeft, Plus, Sparkles,
   Star, Trash2, UserRound, MessageCircle,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -14,6 +14,7 @@ import { useMe } from '@/lib/csmju/session';
 import { relativeTime } from '@/lib/format';
 import type { Asset, DesignSummary, Folder, NotificationItem } from '@/lib/types';
 import { AssetPreview } from '@/components/projects/asset-preview';
+import { UploadIcon } from '@/components/shell/upload-icon';
 import { cx } from '../csmju/primitives';
 import { ACCOUNT_SECTIONS } from './account-sections';
 import { AccountPopover } from './account-popover';
@@ -433,7 +434,7 @@ function UploadsTree({ active, focus }: { active: boolean; focus: string | null 
           <ChevronRight aria-hidden className={cx('size-4 transition-transform', open && 'rotate-90')} />
         </button>
         <div className="min-w-0 flex-1">
-          <SideLink href="/projects?view=uploads" label="อัปโหลด" icon={<CloudUpload aria-hidden className="size-5 text-muted" />} active={active && !focus} />
+          <SideLink href="/projects?view=uploads" label="อัปโหลด" icon={<UploadIcon className="size-5 text-muted" />} active={active && !focus} />
         </div>
       </div>
       {open && (

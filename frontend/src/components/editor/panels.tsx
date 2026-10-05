@@ -4,12 +4,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowDown, ArrowUp, ChevronDown, Copy, Ellipsis, Eye, EyeOff, Folder as FolderIcon, FolderInput, FolderMinus,
   FolderOpen, FolderPlus, Globe, LayoutPanelLeft, Lock, LockOpen, PenLine, Pencil, Plus, Shapes,
-  SlidersHorizontal, Star, Trash2, Type, CloudUpload, Download, X,
+  SlidersHorizontal, Star, Trash2, Type, Download, X,
 } from 'lucide-react';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { FloatingPanel, useAnchoredMenu } from '@/components/csmju/floating';
 import { Button, EmptyState, ErrorState, IconButton, Menu, Spinner, cx, errorMessage, useToast } from '@/components/csmju/primitives';
 import { Thumbnail } from '@/components/designs/cards';
+import { UploadIcon, useUploadActivity } from '@/components/shell/upload-icon';
 import { api, qs } from '@/lib/csmju/api';
 import {
   FONT_SETS, createFontSet, createImage, createText, layerLabel,
@@ -37,6 +38,7 @@ import { PanelHeader, UnderlineTabs } from './controls';
 import { CropPanel, FontPanel, ImageEditPanel, ReplacePanel } from './side-panels-media';
 import { SignaturePanel } from './signature-panel';
 import { ElementsPanel } from './elements-panel';
+import { UploadDropZone } from './file-import';
 import { AudioLibrary, VideoLibrary, useInsertMedia } from './media-panel';
 import { BackHeader, PanelFrame, PanelSearch, PanelTitle, SectionHeading, useLibrary, usePageSize } from './panel-parts';
 
@@ -56,7 +58,7 @@ export const RAIL: { key: RailKey; label: string; icon: IconType; tone: string }
   { key: 'templates', label: 'เทมเพลต', icon: LayoutPanelLeft, tone: 'text-type-teal' },
   { key: 'elements', label: 'องค์ประกอบ', icon: Shapes, tone: 'text-type-purple' },
   { key: 'text', label: 'ข้อความ', icon: Type, tone: 'text-type-magenta' },
-  { key: 'uploads', label: 'อัปโหลด', icon: CloudUpload, tone: 'text-type-orange' },
+  { key: 'uploads', label: 'อัปโหลด', icon: UploadIcon, tone: 'text-type-orange' },
   { key: 'tools', label: 'เครื่องมือ', icon: PenLine, tone: 'text-type-green' },
   { key: 'projects', label: 'โปรเจกต์', icon: FolderOpen, tone: 'text-type-blue' },
 ];
@@ -102,7 +104,11 @@ export function PanelContent({
     case 'text':
       return <TextPanel />;
     case 'uploads':
-      return <UploadsPanel />;
+      return (
+        <UploadDropZone>
+          <UploadsPanel />
+        </UploadDropZone>
+      );
     case 'projects':
       return <ProjectsPanel key="projects" />;
     case 'starred':
@@ -757,10 +763,17 @@ function UploadsPanel() {
     mutationFn: async ({ files, insertFirst, folderId }: { files: File[]; insertFirst: boolean; folderId?: string }) => {
       const done: Asset[] = [];
 
-      for (const file of files) {
-        const asset = await api.upload<Asset>('/assets', file);
+      useUploadActivity.getState().begin(files.length);
 
-        done.push(folderId ? await api.patch<Asset>(`/assets/${asset.id}`, { folderId }) : asset);
+      try {
+        for (const file of files) {
+          const asset = await api.upload<Asset>('/assets', file);
+
+          done.push(folderId ? await api.patch<Asset>(`/assets/${asset.id}`, { folderId }) : asset);
+          useUploadActivity.getState().end();
+        }
+      } finally {
+        useUploadActivity.getState().end(files.length - done.length);
       }
 
       return { done, insertFirst };
@@ -829,9 +842,9 @@ function UploadsPanel() {
         type="button"
         disabled={upload.isPending}
         onClick={() => input.current?.click()}
-        className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-primary text-csmju-body font-semibold text-on-inverse hover:bg-primary-hover disabled:opacity-60"
+        className="group inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-primary text-csmju-body font-semibold text-on-inverse hover:bg-primary-hover disabled:opacity-60"
       >
-        {upload.isPending ? 'กำลังอัปโหลด…' : 'อัปโหลดไฟล์'}
+        <UploadIcon className="size-5" /> {upload.isPending ? 'กำลังอัปโหลด…' : 'อัปโหลดไฟล์'}
       </button>
       <button
         type="button"

@@ -581,6 +581,40 @@
   padding-bottom: env(safe-area-inset-bottom);
 }
 
+/* ไอคอนอัปโหลด: ลูกศรลอยขึ้นจากเมฆ — วนระหว่างอัปโหลด (.csmju-upload-busy) และหนึ่งรอบเมื่อชี้ปุ่ม (.group:hover) */
+@keyframes csmju-upload-arrow {
+  0% {
+    transform: translateY(4px);
+    opacity: 0;
+  }
+  25% {
+    opacity: 1;
+  }
+  70% {
+    transform: translateY(-2px);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-6px);
+    opacity: 0;
+  }
+}
+.csmju-upload-icon .csmju-upload-arrow {
+  transform-box: fill-box;
+}
+.csmju-upload-busy .csmju-upload-arrow {
+  animation: csmju-upload-arrow 1.1s ease-in-out infinite;
+}
+.group:hover .csmju-upload-icon:not(.csmju-upload-busy) .csmju-upload-arrow,
+.group:focus-visible .csmju-upload-icon:not(.csmju-upload-busy) .csmju-upload-arrow {
+  animation: csmju-upload-arrow 0.9s ease-in-out 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .csmju-upload-icon .csmju-upload-arrow {
+    animation: none !important;
+  }
+}
+
 /* เวทีพรีเซนต์ (เต็มจอ + หน้าต่างผู้พรีเซนต์) มืดเสมอแบบ Canva ไม่ว่าผู้ใช้เลือกธีมไหน —
    ธีมมืดกลับสี surface-inverse เป็นสีอ่อน ถ้าไม่ล็อกไว้ตัวอักษรขาวจะอยู่บนพื้นอ่อนจนอ่านไม่ออก */
 .csmju-stage {

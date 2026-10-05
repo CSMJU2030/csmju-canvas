@@ -29,6 +29,7 @@ import { activeCell, useTableUi } from '@/lib/editor/table-ui';
 import { brushWidth, canEditDoc, currentPage, selectionBox, useEditor, type DrawBrush } from '@/lib/editor/store';
 import type { CanvasElement, ImageElement, PathElement, TextElement } from '@/lib/editor/types';
 import { PREVIEW_MS, useEditorUi } from '@/lib/editor/ui-store';
+import { FileDropOverlay, dragHasFiles, imageUrlFrom, useFileImport } from './file-import';
 import { TableCellEditor } from './table-editor';
 
 /// ผืนผ้าใบหลักของ editor — วาดด้วย Canvas 2D ทุกเฟรมที่มีการเปลี่ยน (requestAnimationFrame)
@@ -70,6 +71,9 @@ export function Stage() {
   const spaceDown = useRef(false);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [cursor, setCursor] = useState('default');
+  // ลากไฟล์จากเครื่อง/รูปจากเว็บอื่นอยู่เหนือผืนผ้าใบ → แสดงแผ่น "ปล่อยไฟล์ที่นี่"
+  const [fileDrag, setFileDrag] = useState<'page' | 'cell' | null>(null);
+  const { importFiles, importImageUrl } = useFileImport();
   const fitted = useRef<string | null>(null);
   const sizeRef = useRef(size);
   /// ตำแหน่งเมาส์ล่าสุด (พิกัดหน้า) — ใช้วาดวงยางลบ
@@ -1038,16 +1042,24 @@ export function Stage() {
     };
   }, []);
 
-  // ── ลากรูปจากแผง (อัปโหลด/คลังภาพ) มาวาง: บนกรอบ/ช่อง = ใส่รูป · ที่อื่น = เพิ่มรูปตรงจุดที่ปล่อย ──
+  // ── ลากมาวาง: รูปจากแผง (อัปโหลด/คลังภาพ) · ไฟล์จากเครื่อง · รูปจากเว็บอื่น ──
+  // บนกรอบ/ช่อง = ใส่รูปลงช่อง · ที่อื่น = เพิ่มตรงจุดที่ปล่อย
 
   const onDragOver = (event: React.DragEvent<HTMLDivElement>) => {
-    if (!hasImageDrag(event.dataTransfer) || !canEditDoc(useEditor.getState())) return;
+    const types = Array.from(event.dataTransfer.types);
+    const panelImage = hasImageDrag(event.dataTransfer);
+    const external = !panelImage && (dragHasFiles(event.dataTransfer) || types.includes('text/uri-list') || types.includes('text/html'));
+
+    if ((!panelImage && !external) || !canEditDoc(useEditor.getState())) return;
 
     event.preventDefault();
     event.dataTransfer.dropEffect = 'copy';
 
     const next = frameDropAt(toPage(event.clientX, event.clientY), null);
     const current = dropTarget.current;
+    const overlay = external ? (next ? 'cell' : 'page') : null;
+
+    if (overlay !== fileDrag) setFileDrag(overlay);
 
     if (next?.id !== current?.id || next?.cell !== current?.cell) {
       dropTarget.current = next;
@@ -1055,7 +1067,10 @@ export function Stage() {
     }
   };
 
-  const onDragLeave = () => {
+  const onDragLeave = (event: React.DragEvent<HTMLDivElement>) => {
+    // ยังอยู่ในผืนผ้าใบ (แค่ข้ามไปลูกข้างใน) ไม่นับว่าออก
+    if (event.relatedTarget instanceof Node && wrapRef.current?.contains(event.relatedTarget)) return;
+    setFileDrag(null);
     if (!dropTarget.current) return;
 
     dropTarget.current = null;
@@ -1063,7 +1078,25 @@ export function Stage() {
   };
 
   const onDrop = (event: React.DragEvent<HTMLDivElement>) => {
-    if (!hasImageDrag(event.dataTransfer)) return;
+    setFileDrag(null);
+
+    if (!hasImageDrag(event.dataTransfer)) {
+      const files = Array.from(event.dataTransfer.files);
+      const url = files.length === 0 ? imageUrlFrom(event.dataTransfer) : null;
+
+      if (files.length === 0 && !url) return;
+
+      event.preventDefault();
+
+      const p = toPage(event.clientX, event.clientY);
+      const cell = frameDropAt(p, null);
+
+      dropTarget.current = null;
+      requestDraw();
+      if (files.length > 0) void importFiles(files, { at: p, cell });
+      else if (url) void importImageUrl(url, { at: p, cell });
+      return;
+    }
 
     event.preventDefault();
 
@@ -1114,6 +1147,7 @@ export function Stage() {
         className="block outline-none"
       />
       {editingTextId && <TextEditor id={editingTextId} />}
+      {fileDrag && <FileDropOverlay target={fileDrag} />}
       {editingTable && <TableCellEditor />}
     </div>
   );
