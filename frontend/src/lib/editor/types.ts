@@ -177,6 +177,14 @@ export interface ImageElement extends BaseElement {
   border?: Border | null;
   colorEdits?: ColorEdit[] | null;
   erase?: EraseStroke[] | null;
+  /// ลบพื้นหลังแล้ว: `src` เป็นรูป PNG โปร่งใสที่สร้างใหม่ · เก็บรูปเดิมและค่าที่ใช้ไว้ให้คืนหรือลบใหม่ได้
+  bgRemoved?: BgRemoved | null;
+}
+
+export interface BgRemoved {
+  originalSrc: string;
+  originalAssetId: string | null;
+  options: { mode: 'edges' | 'color'; tolerance: number; softness: number; sample?: [number, number, number] | null };
 }
 
 export interface SvgElement extends BaseElement {

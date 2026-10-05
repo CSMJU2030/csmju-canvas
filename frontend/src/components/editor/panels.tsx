@@ -37,6 +37,7 @@ import { ChartDataPanel } from './chart-panel';
 import { PanelHeader, UnderlineTabs } from './controls';
 import { CropPanel, FontPanel, ImageEditPanel, ReplacePanel } from './side-panels-media';
 import { SignaturePanel } from './signature-panel';
+import { BgRemovePanel } from './bg-remove-panel';
 import { ElementsPanel } from './elements-panel';
 import { UploadDropZone } from './file-import';
 import { AudioLibrary, VideoLibrary, useInsertMedia } from './media-panel';
@@ -82,6 +83,7 @@ export const PANEL_LABELS: Record<PanelKey, string> = {
   font: 'ฟอนต์',
   'image-edit': 'แก้ไขรูปภาพ',
   crop: 'ครอปภาพ',
+  'bg-remove': 'ลบพื้นหลัง',
   replace: 'แทนที่รูป',
   'chart-data': 'แก้ไขข้อมูลชาร์ต',
 };
@@ -145,6 +147,8 @@ export function PanelContent({
       return <ImageEditPanel />;
     case 'crop':
       return <CropPanel />;
+    case 'bg-remove':
+      return <BgRemovePanel />;
     case 'replace':
       return <ReplacePanel />;
     case 'chart-data':

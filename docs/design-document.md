@@ -41,11 +41,12 @@ CMS ของคณะดึงงานได้ที่ `GET /api/v1/designs/
   - รูปหลายเหลี่ยมมียอดแรกอยู่บนสุด (หกและแปดเหลี่ยมหมุนครึ่งช่องให้ขอบบนแบน)
 - **image:** `src` (รูปของผู้ใช้เป็น `/api/v1/assets/{id}/content` ซึ่งต้องมี session ของเจ้าของ), `assetId`, `cornerRadius`, `flipX`, `flipY`
   - ค่าเสริม: `crop` `{x, y, width, height}` สัดส่วน 0–1 ของรูปต้นฉบับ · `border` `{style, width, color}` · `adjust` ค่าปรับ −100..100 (temperature tint brightness contrast highlights shadows whites blacks vibrance saturation sharpness clarity · vignette/blur 0..100) · `filter` + `filterIntensity` ฟิลเตอร์สำเร็จรูปใน `lib/editor/image-filters.ts`
+  - `colorEdits` `[{ color, hue, saturation, lightness }]` แก้ไขสีเฉพาะช่วงสี (ค่า −100..100 · hue หมุน ±60°) · `erase` `[{ points, size }]` รอยยางลบพิกเซล (`points` = `[x0, y0, …]` สัดส่วน 0–1 ของรูปเต็มก่อนครอป · `size` สัดส่วนของความกว้างรูป) — ตัว render ต้องทำให้ส่วนนั้นโปร่งใส
+  - `bgRemoved` `{ originalSrc, originalAssetId, options }` เมื่อผู้ใช้ลบพื้นหลังแล้ว · `src` เป็นรูป PNG โปร่งใสที่สร้างใหม่อยู่แล้ว ตัว render ใช้ `src` ตามปกติ ไม่ต้องประมวลผลเพิ่ม (เก็บรูปเดิมไว้ให้คืนพื้นหลังได้)
 - **svg:** `svg` (markup ทั้งก้อน ใช้ `currentColor`), `color` (สีที่แทน `currentColor`)
 - **path:** เส้นวาดมือและลายเซ็น · `strokes` (อาร์เรย์ของเส้น แต่ละเส้นคือ `[x0, y0, x1, y1, …]` เป็นสัดส่วน 0–1 ของกล่อง), `color`, `strokeWidth` (px), `brush` (`pen` · `marker` · `highlighter` — ไฮไลท์วาดความทึบ 0.45) · ปลายและมุมเส้นกลม
 - **table:** ตาราง (เพิ่มในเวอร์ชัน 1 แบบไม่กระทบของเดิม — ตัว render รุ่นเก่าที่ไม่รู้จัก `table` ข้ามไปตามกติกาท้ายไฟล์)
-  - `cells` อาร์เรย์ของแถว แต่ละแถวเป็นอาร์เรย์ของช่อง `{ text, fill?, color? }` · ทุกแถวมีจำนวนช่องเท่ากัน · `text` ขึ้นบรรทัดด้วย `
-` และตัดคำตามความกว้างช่อง · `fill`/`color` ไม่มีหรือ null = ใช้ค่าของตาราง
+  - `cells` อาร์เรย์ของแถว แต่ละแถวเป็นอาร์เรย์ของช่อง `{ text, fill?, color? }` · ทุกแถวมีจำนวนช่องเท่ากัน · `text` ขึ้นบรรทัดด้วย `\n` และตัดคำตามความกว้างช่อง · `fill`/`color` ไม่มีหรือ null = ใช้ค่าของตาราง
   - `columns` สัดส่วนความกว้างของแต่ละคอลัมน์ · `rows` สัดส่วนความสูงของแต่ละแถว (รวมกันได้ 1 ทั้งคู่ เทียบกับ `width`/`height` ของกล่อง)
   - `fontFamily`, `fontSize`, `color` (สีตัวอักษร), `align` (`left` · `center` · `right`) ใช้กับทุกช่อง · ระยะบรรทัด 1.4 เท่า · ระยะจากขอบช่องถึงข้อความ = `fontSize × 0.5` ทุกด้าน · ข้อความจัดกึ่งกลางแนวตั้งในช่อง
   - `header` (true = แถวแรกเป็นหัวตาราง: ตัวหนา 700 · สีพื้น `headerFill` (null = ไม่มี) · สีตัวอักษร `headerColor`) · แถวอื่นน้ำหนัก 400

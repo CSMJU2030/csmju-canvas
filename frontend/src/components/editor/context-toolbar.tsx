@@ -112,7 +112,7 @@ function ColorButton({ label, value, target }: { label: string; value: string | 
 }
 
 /// ปุ่มคำที่เปิดแผงด้านซ้าย
-function PanelButton({ panel, label }: { panel: 'effects' | 'animate' | 'position' | 'image-edit' | 'crop' | 'replace'; label: string }) {
+function PanelButton({ panel, label }: { panel: 'effects' | 'animate' | 'position' | 'image-edit' | 'crop' | 'replace' | 'bg-remove'; label: string }) {
   const current = useEditorUi((s) => s.panel);
 
   return (
@@ -548,6 +548,7 @@ function ImageTools({ el }: { el: ImageElement }) {
     <>
       <PanelButton panel="image-edit" label="แก้ไข" />
       <PanelButton panel="replace" label="แทนที่" />
+      <PanelButton panel="bg-remove" label="ลบพื้นหลัง" />
       <ToolbarButton label="ยางลบพิกเซล — ลากบนรูปเพื่อลบส่วนนั้น" wide disabled={el.locked} onClick={() => useEditorUi.getState().set({ imageErase: { id: el.id, size: 40 } })}>
         <Eraser aria-hidden className="size-5" /> ยางลบ
       </ToolbarButton>
