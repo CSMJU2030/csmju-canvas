@@ -571,7 +571,7 @@ export function Stage() {
           handle,
           id: selected[0].id,
           start: selected[0],
-          keepAspect: selected[0].type === 'image' || selected[0].type === 'svg' || selected[0].type === 'frame',
+          keepAspect: selected[0].type === 'image' || selected[0].type === 'svg' || selected[0].type === 'frame' || selected[0].type === 'video',
         };
         return;
       }

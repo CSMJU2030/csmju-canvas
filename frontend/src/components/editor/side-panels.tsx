@@ -3,7 +3,7 @@
 import {
   AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignHorizontalDistributeCenter,
   AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ChartColumn, ChevronsDown, ChevronsUp, ChevronDown, ChevronUp,
-  Eye, EyeOff, Frame, GripVertical, Image as ImageIcon, LayoutGrid, Lock, LockOpen, Pipette, Play, Search, Shapes, Table2, Type,
+  Eye, EyeOff, Film, Frame, GripVertical, Image as ImageIcon, LayoutGrid, Lock, LockOpen, Pipette, Play, Search, Shapes, Table2, Type,
 } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 import { cx } from '@/components/csmju/primitives';
@@ -130,7 +130,7 @@ function Arrange({ selected }: { selected: CanvasElement[] }) {
 }
 
 function Advanced({ el }: { el: CanvasElement }) {
-  const [keepRatio, setKeepRatio] = useState(el.type === 'image' || el.type === 'svg');
+  const [keepRatio, setKeepRatio] = useState(el.type === 'image' || el.type === 'svg' || el.type === 'video');
   const ids = [el.id];
   const ratio = el.width / Math.max(1, el.height);
   const textLike = el.type === 'text';
@@ -195,6 +195,7 @@ const TYPE_ICON: Record<CanvasElement['type'], ReactNode> = {
   chart: <ChartColumn aria-hidden className="size-4" />,
   frame: <Frame aria-hidden className="size-4" />,
   grid: <LayoutGrid aria-hidden className="size-4" />,
+  video: <Film aria-hidden className="size-4" />,
 };
 
 /// แท็บเลเยอร์: ลากเรียงลำดับ · คลิกเพื่อเลือก · ทั้งหมด/ทับซ้อน

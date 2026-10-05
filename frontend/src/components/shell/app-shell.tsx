@@ -13,6 +13,7 @@ import { CORE_HUB_WEB_URL } from '@/lib/csmju/core-hub';
 import { useMe } from '@/lib/csmju/session';
 import { relativeTime } from '@/lib/format';
 import type { Asset, DesignSummary, Folder, NotificationItem } from '@/lib/types';
+import { AssetPreview } from '@/components/projects/asset-preview';
 import { cx } from '../csmju/primitives';
 import { ACCOUNT_SECTIONS } from './account-sections';
 import { AccountPopover } from './account-popover';
@@ -451,8 +452,7 @@ function UploadsTree({ active, focus }: { active: boolean; focus: string | null 
                 className={cx('flex min-h-11 items-center gap-3 rounded-xl px-3 text-csmju-caption hover:bg-surface/70', focus === file.id ? 'bg-primary-soft-hover font-semibold text-primary' : 'text-ink')}
               >
                 <span className="flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface">
-                  {/* eslint-disable-next-line @next/next/no-img-element -- รูปผ่าน API ที่ต้องมี session */}
-                  <img src={file.contentUrl} alt="" loading="lazy" className="size-full object-cover" />
+                  <AssetPreview asset={file} className="size-full object-cover" iconClassName="size-3.5" />
                 </span>
                 <span className="truncate">{file.fileName}</span>
               </Link>

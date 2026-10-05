@@ -17,7 +17,9 @@ import { api, qs } from '@/lib/csmju/api';
 import { useMe } from '@/lib/csmju/session';
 import { designFromAsset, useCreateDesign } from '@/lib/create-design';
 import { formatBytes, relativeTime } from '@/lib/format';
+import { ACCEPT } from '@/lib/editor/media';
 import type { Asset } from '@/lib/types';
+import { AssetPreview } from './asset-preview';
 
 const TYPE_OPTIONS = [
   { value: '', label: 'ประเภทใดก็ได้' },
@@ -26,6 +28,12 @@ const TYPE_OPTIONS = [
   { value: 'image/webp', label: 'รูปภาพ WebP' },
   { value: 'image/gif', label: 'รูปภาพ GIF' },
   { value: 'image/svg+xml', label: 'กราฟิก SVG' },
+  { value: 'video/mp4', label: 'วิดีโอ MP4' },
+  { value: 'video/webm', label: 'วิดีโอ WebM' },
+  { value: 'audio/mpeg', label: 'เสียง MP3' },
+  { value: 'audio/mp4', label: 'เสียง M4A' },
+  { value: 'audio/ogg', label: 'เสียง OGG' },
+  { value: 'audio/wav', label: 'เสียง WAV' },
 ];
 
 const SORT_OPTIONS = [
@@ -40,6 +48,12 @@ const MIME_LABEL: Record<string, string> = {
   'image/webp': 'WebP',
   'image/gif': 'GIF',
   'image/svg+xml': 'SVG',
+  'video/mp4': 'MP4',
+  'video/webm': 'WebM',
+  'audio/mpeg': 'MP3',
+  'audio/mp4': 'M4A',
+  'audio/ogg': 'OGG',
+  'audio/wav': 'WAV',
 };
 
 /// โฟลเดอร์ "อัปโหลด" แบบ Canva (ภาพบรีฟ "ส่วนของ โปรเจกต์ - อัพโหลดแบบใหม่ 2 และ 3")
@@ -96,7 +110,7 @@ export function UploadsView({ focusAssetId }: { focusAssetId: string | null }) {
           ref={input}
           type="file"
           multiple
-          accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+          accept={[ACCEPT.image, ACCEPT.video, ACCEPT.audio].join(',')}
           className="sr-only"
           aria-label="เลือกไฟล์ที่จะอัปโหลด"
           onChange={(event) => {
@@ -137,7 +151,7 @@ export function UploadsView({ focusAssetId }: { focusAssetId: string | null }) {
         ) : assets.data!.items.length === 0 ? (
           <EmptyState
             title={q || mimeType ? 'ไม่พบไฟล์ที่ตรงกับการค้นหา' : 'ยังไม่มีไฟล์อัปโหลด'}
-            description="รูปที่อัปโหลดในหน้าแก้ไขหรือจากปุ่ม “เพิ่มใหม่” จะเก็บไว้ที่นี่ ใช้ซ้ำได้ทุกงาน"
+            description="รูป วิดีโอ และเสียงที่อัปโหลดในหน้าแก้ไขหรือจากปุ่ม “เพิ่มใหม่” จะเก็บไว้ที่นี่ ใช้ซ้ำได้ทุกงาน"
             icon={<ImageIcon aria-hidden className="size-8" />}
           />
         ) : layout === 'grid' ? (
@@ -146,8 +160,7 @@ export function UploadsView({ focusAssetId }: { focusAssetId: string | null }) {
               <li key={asset.id} className="group relative">
                 <button type="button" onClick={() => setDetails(asset)} className="block w-full text-left" aria-label={`ดูรายละเอียดของ ${asset.fileName}`}>
                   <span className="flex aspect-4/3 items-center justify-center overflow-hidden rounded-xl bg-surface-muted p-3 transition-colors group-hover:bg-primary-soft">
-                    {/* eslint-disable-next-line @next/next/no-img-element -- รูปผ่าน API ที่ต้องมี session */}
-                    <img src={asset.contentUrl} alt="" loading="lazy" className="max-h-full max-w-full rounded object-contain shadow-csmju-sm" />
+                    <AssetPreview asset={asset} className="max-h-full max-w-full rounded object-contain shadow-csmju-sm" />
                   </span>
                   <span className="mt-2 block truncate text-csmju-caption font-semibold text-ink">{asset.fileName}</span>
                   <span className="flex items-center gap-1 text-csmju-caption text-muted">
@@ -177,8 +190,7 @@ export function UploadsView({ focusAssetId }: { focusAssetId: string | null }) {
                   <td className="py-2">
                     <button type="button" onClick={() => setDetails(asset)} className="flex items-center gap-3 text-left">
                       <span className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-surface-muted">
-                        {/* eslint-disable-next-line @next/next/no-img-element -- รูปผ่าน API ที่ต้องมี session */}
-                        <img src={asset.contentUrl} alt="" loading="lazy" className="max-h-full max-w-full object-contain" />
+                        <AssetPreview asset={asset} className="max-h-full max-w-full object-contain" iconClassName="size-5" />
                       </span>
                       <span className="truncate font-semibold text-ink">{asset.fileName}</span>
                     </button>
@@ -350,6 +362,7 @@ function AssetMenu({ asset, onDetails }: { asset: Asset; onDetails: () => void }
             <button type="button" role="menuitem" className={item} onClick={run(() => downloadAsset(asset))}>
               <Download aria-hidden className="size-5" /> ดาวน์โหลด
             </button>
+            {asset.mimeType.startsWith('image/') && (
             <button
               type="button"
               role="menuitem"
@@ -362,6 +375,7 @@ function AssetMenu({ asset, onDetails }: { asset: Asset; onDetails: () => void }
             >
               <SquarePen aria-hidden className="size-5" /> แก้ไขรูปภาพ
             </button>
+            )}
           </div>
           <div className="border-t border-line py-1">
             <button type="button" role="menuitem" className={item} onClick={run(() => update.mutate({ trashed: true }))}>
@@ -394,7 +408,7 @@ function AssetDetails({ asset, onClose }: { asset: Asset; onClose: () => void })
   }, [onClose]);
 
   const rows: [string, ReactNode][] = [
-    ['ชนิด', `รูปภาพ ${MIME_LABEL[asset.mimeType] ?? ''}`],
+    ['ชนิด', `${asset.mimeType.startsWith('video/') ? 'วิดีโอ' : asset.mimeType.startsWith('audio/') ? 'เสียง' : 'รูปภาพ'} ${MIME_LABEL[asset.mimeType] ?? ''}`],
     ['ขนาดไฟล์', formatBytes(asset.sizeBytes)],
     ['อัปโหลดเมื่อ', new Date(asset.createdAt).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' })],
     ['บันทึกใน', 'อัปโหลด'],
@@ -410,8 +424,13 @@ function AssetDetails({ asset, onClose }: { asset: Asset; onClose: () => void })
       </div>
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 pb-5">
         <span className="csmju-checker flex aspect-4/3 items-center justify-center overflow-hidden rounded-2xl">
-          {/* eslint-disable-next-line @next/next/no-img-element -- รูปผ่าน API ที่ต้องมี session */}
-          <img src={asset.contentUrl} alt={asset.fileName} className="max-h-full max-w-full object-contain" />
+          {asset.mimeType.startsWith('video/') ? (
+            <video src={asset.contentUrl} controls preload="metadata" aria-label={asset.fileName} className="max-h-full max-w-full bg-inverse object-contain" />
+          ) : asset.mimeType.startsWith('audio/') ? (
+            <audio src={asset.contentUrl} controls preload="metadata" aria-label={asset.fileName} className="w-full px-4" />
+          ) : (
+            <AssetPreview asset={asset} alt={asset.fileName} className="max-h-full max-w-full object-contain" />
+          )}
         </span>
         <dl className="grid grid-cols-2 gap-y-2 rounded-2xl border border-line p-4 text-csmju-caption">
           {rows.map(([label, value]) => (
@@ -425,6 +444,7 @@ function AssetDetails({ asset, onClose }: { asset: Asset; onClose: () => void })
           <button type="button" onClick={() => downloadAsset(asset)} className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-line-strong text-csmju-caption font-semibold text-ink hover:bg-surface-muted">
             <Download aria-hidden className="size-4" /> ดาวน์โหลด
           </button>
+          {asset.mimeType.startsWith('image/') && (
           <button
             type="button"
             onClick={() =>
@@ -436,6 +456,7 @@ function AssetDetails({ asset, onClose }: { asset: Asset; onClose: () => void })
           >
             <SquarePen aria-hidden className="size-4" /> แก้ไขรูปภาพ
           </button>
+          )}
         </div>
       </div>
     </aside>

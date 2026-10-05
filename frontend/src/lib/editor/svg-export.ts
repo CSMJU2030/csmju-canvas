@@ -3,7 +3,7 @@ import { cssFamily } from './fonts';
 import { isGradient, parseGradient } from './paint';
 import { HIGHLIGHTER_ALPHA, dashFor, drawElement, layoutLines, preloadPage, svgDataUrl } from './render';
 import { tableSvg } from './table-render';
-import { isLineShape, type CanvasElement, type FrameElement, type GridElement, type ImageElement, type Page, type PathElement, type ShapeElement, type TextElement } from './types';
+import { isLineShape, type CanvasElement, type FrameElement, type GridElement, type ImageElement, type Page, type PathElement, type ShapeElement, type TextElement, type VideoElement } from './types';
 
 /// ส่งออกหน้าเป็น SVG (เวกเตอร์) — ข้อความ รูปทรง เส้นวาด และไอคอนยังเป็นเวกเตอร์ แก้ต่อในโปรแกรมอื่นได้
 ///
@@ -91,6 +91,8 @@ async function elementSvg(
     case 'image':
     case 'frame':
     case 'grid':
+    case 'video':
+      // วิดีโอใน SVG เป็นภาพปก (SVG เล่นวิดีโอไม่ได้)
       return imageSvg(el);
     case 'table':
       return tableSvg(el);
@@ -209,8 +211,8 @@ function pathSvg(el: PathElement): string {
   return `<path d="${d}" fill="none" stroke="${esc(el.color)}" stroke-width="${n(el.strokeWidth)}" stroke-linecap="round" stroke-linejoin="round"${el.brush === 'highlighter' ? ` stroke-opacity="${HIGHLIGHTER_ALPHA}"` : ''}/>`;
 }
 
-/// รูปภาพ กรอบ และกริด: วาดด้วยตัววาดเดียวกับหน้าจอ (ครอป ปรับสี ขอบมน เส้นขอบ หน้ากากของกรอบ) แล้วฝังเป็น PNG
-function imageSvg(el: ImageElement | FrameElement | GridElement): string {
+/// รูปภาพ กรอบ กริด และวิดีโอ (ภาพปก): วาดด้วยตัววาดเดียวกับหน้าจอ (ครอป ปรับสี ขอบมน เส้นขอบ หน้ากากของกรอบ) แล้วฝังเป็น PNG
+function imageSvg(el: ImageElement | FrameElement | GridElement | VideoElement): string {
   const scale = Math.min(2, 4096 / Math.max(el.width, el.height));
   const canvas = document.createElement('canvas');
 

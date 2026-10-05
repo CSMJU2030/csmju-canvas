@@ -309,7 +309,44 @@ export interface GridElement extends BaseElement {
   cells: (FrameImage | null)[];
 }
 
-export type ElementType = 'text' | 'shape' | 'image' | 'svg' | 'path' | 'table' | 'chart' | 'frame' | 'grid';
+/// วิดีโอที่ผู้ใช้อัปโหลดเอง (แผงองค์ประกอบ → วิดีโอ หรือแผงอัปโหลด)
+///
+/// ตอนแก้ไขและส่งออกภาพนิ่งวาด "ภาพปก" = เฟรมที่วินาที `trimStart` · ตอนพรีเซนต์และส่งออกวิดีโอเล่นจริง
+/// ตั้งแต่ `trimStart` ถึง `trimEnd` (วินาทีของไฟล์ต้นฉบับ) · ภาพถูกครอปแบบ cover ให้เต็มกล่อง
+export interface VideoElement extends BaseElement {
+  type: 'video';
+  assetId: string | null;
+  src: string;
+  /// ความยาวไฟล์ต้นฉบับ (วินาที) — ใช้จำกัดช่วงตัดต่อ
+  duration: number;
+  /// ขนาดภาพต้นฉบับ (พิกเซล) — ใช้คงสัดส่วนตอนครอปแบบ cover
+  naturalWidth: number;
+  naturalHeight: number;
+  cornerRadius: number;
+  /// ปิดเสียงของคลิป
+  muted: boolean;
+  /// เล่นซ้ำเมื่อถึง `trimEnd`
+  loop: boolean;
+  trimStart: number;
+  /// null = เล่นถึงท้ายไฟล์
+  trimEnd: number | null;
+}
+
+/// เสียงประกอบของหน้า (เพลงหรือเสียงบรรยายที่ผู้ใช้อัปโหลดเอง) — เล่นตอนพรีเซนต์หน้านั้นและอยู่ในไฟล์วิดีโอที่ส่งออก
+export interface AudioTrack {
+  id: string;
+  assetId: string | null;
+  src: string;
+  name: string;
+  /// ความยาวไฟล์ (วินาที)
+  duration: number;
+  /// 0–1
+  volume: number;
+  /// เล่นวนจนกว่าจะออกจากหน้า
+  loop: boolean;
+}
+
+export type ElementType = 'text' | 'shape' | 'image' | 'svg' | 'path' | 'table' | 'chart' | 'frame' | 'grid' | 'video';
 export type CanvasElement =
   | TextElement
   | ShapeElement
@@ -319,7 +356,8 @@ export type CanvasElement =
   | TableElement
   | ChartElement
   | FrameElement
-  | GridElement;
+  | GridElement
+  | VideoElement;
 
 export interface Page {
   id: string;
@@ -339,6 +377,8 @@ export interface Page {
   /// ขนาดเฉพาะหน้านี้ (หน้าต่างขนาดในงานเดียวกัน) · ไม่มี = ใช้ขนาดของงาน
   width?: number;
   height?: number;
+  /// เสียงประกอบของหน้า (แถบเสียงใต้แถบภาพย่อหน้า) · ไม่มี = ไม่มีเสียง
+  audio?: AudioTrack[];
 }
 
 /// ขนาดจริงของหน้า — หน้าที่ไม่ได้กำหนดเองใช้ขนาดของงาน
@@ -382,6 +422,7 @@ export function normalizeDocument(input: unknown): DesignDocument {
       elements: Array.isArray(page.elements)
         ? page.elements.filter(isKnownElement).map(withDefaults)
         : [],
+      ...(page.audio === undefined ? {} : { audio: normalizeAudio(page.audio) }),
     })),
   };
 }
@@ -391,7 +432,24 @@ function isKnownElement(value: unknown): value is CanvasElement {
 
   if (type === 'table') return isTableShape(value);
 
-  return type === 'text' || type === 'shape' || type === 'image' || type === 'svg' || type === 'path' || type === 'chart' || type === 'frame' || type === 'grid';
+  return type === 'text' || type === 'shape' || type === 'image' || type === 'svg' || type === 'path' || type === 'chart' || type === 'frame' || type === 'grid' || type === 'video';
+}
+
+/// ตัดเสียงที่ไม่มีไฟล์ทิ้ง และเติมค่าที่ขาด (เอกสารที่ CMS เขียนเอง)
+function normalizeAudio(input: unknown): AudioTrack[] {
+  if (!Array.isArray(input)) return [];
+
+  return input
+    .filter((t): t is AudioTrack => typeof (t as AudioTrack | null)?.src === 'string')
+    .map((t) => ({
+      id: typeof t.id === 'string' ? t.id : newId('audio'),
+      assetId: t.assetId ?? null,
+      src: t.src,
+      name: t.name ?? '',
+      duration: Number.isFinite(t.duration) ? t.duration : 0,
+      volume: Number.isFinite(t.volume) ? Math.min(1, Math.max(0, t.volume)) : 1,
+      loop: t.loop ?? false,
+    }));
 }
 
 /// ตารางต้องมีช่องอย่างน้อยหนึ่งช่อง ไม่งั้นข้ามทิ้ง (ค่าอื่นเติมให้ใน normalizeTable)

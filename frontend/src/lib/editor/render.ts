@@ -5,6 +5,7 @@ import {
   roundRectPath, type Box,
 } from './frames';
 import { applyAdjust, applyColorEdits, effectiveAdjust, findFilter, isNeutral } from './image-filters';
+import { coverRect as videoCoverCrop, trimRange } from './media';
 import { canvasPaint } from './paint';
 import { drawTable, tableFonts } from './table-render';
 import {
@@ -22,6 +23,7 @@ import {
   type StrokeStyle,
   type SvgElement,
   type TextElement,
+  type VideoElement,
 } from './types';
 
 /// วาดหน้าลง canvas 2D — ใช้ทั้งบนจอ (editor) ภาพย่อ พรีเซนต์ และการส่งออก PNG/JPEG/PDF
@@ -99,10 +101,87 @@ export async function preloadPage(page: Page): Promise<void> {
         }
       }
     }
+    if (el.type === 'video') jobs.push(loadPoster(el.src, trimRange(el).start));
   }
 
   await Promise.all(jobs);
 }
+
+// ── ภาพปกวิดีโอ ─────────────────────────────────────────────────────
+
+/// ภาพปก = เฟรมของวิดีโอที่วินาทีเริ่มของช่วงตัดต่อ วาดเก็บลงผืนนอกจอครั้งเดียวต่อ (ไฟล์, วินาที)
+/// เพื่อไม่ต้องเปิดตัวเล่นวิดีโอค้างไว้ทุกครั้งที่วาดหน้า
+const posters = new Map<string, Promise<HTMLCanvasElement | null>>();
+const posterReady = new Map<string, HTMLCanvasElement | null>();
+const POSTER_MAX = 1280;
+
+function posterKey(src: string, time: number) {
+  return `${src}#t=${time.toFixed(2)}`;
+}
+
+function loadPoster(src: string, time: number): Promise<HTMLCanvasElement | null> {
+  const key = posterKey(src, time);
+  const existing = posters.get(key);
+
+  if (existing) return existing;
+  if (typeof document === 'undefined') return Promise.resolve(null);
+
+  const job = new Promise<HTMLCanvasElement | null>((resolve) => {
+    const video = document.createElement('video');
+    const finish = (canvas: HTMLCanvasElement | null) => {
+      video.removeAttribute('src');
+      video.load();
+      posterReady.set(key, canvas);
+      resolve(canvas);
+      onImageReady();
+    };
+
+    video.muted = true;
+    video.preload = 'auto';
+    video.playsInline = true;
+    video.onloadedmetadata = () => {
+      const target = Number.isFinite(video.duration) ? Math.min(time, Math.max(0, video.duration - 0.05)) : time;
+
+      // บางเบราว์เซอร์ไม่ยิง seeked ถ้าเวลาเท่าเดิม — ขยับเล็กน้อยให้มีเฟรมจริงเสมอ
+      video.currentTime = Math.max(0.001, target);
+    };
+    video.onseeked = () => {
+      const scale = Math.min(1, POSTER_MAX / Math.max(1, video.videoWidth, video.videoHeight));
+      const canvas = document.createElement('canvas');
+
+      canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+      canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+
+      try {
+        canvas.getContext('2d')!.drawImage(video, 0, 0, canvas.width, canvas.height);
+        finish(canvas);
+      } catch {
+        finish(null);
+      }
+    };
+    video.onerror = () => finish(null);
+    video.src = src;
+  });
+
+  posters.set(key, job);
+
+  return job;
+}
+
+/// ภาพปกที่พร้อมวาด · undefined = กำลังโหลด · null = เปิดไฟล์ไม่ได้
+export function getVideoPoster(el: Pick<VideoElement, 'src' | 'duration' | 'trimStart' | 'trimEnd'>): HTMLCanvasElement | null | undefined {
+  const time = trimRange(el).start;
+  const key = posterKey(el.src, time);
+
+  if (posterReady.has(key)) return posterReady.get(key);
+
+  void loadPoster(el.src, time);
+
+  return undefined;
+}
+
+/// แหล่งเฟรมสดของวิดีโอ (ตอนพรีเซนต์/ส่งออกวิดีโอ) · คืน null = ใช้ภาพปก
+export type VideoFrameSource = (el: VideoElement) => HTMLVideoElement | null;
 
 export function svgDataUrl(el: Pick<SvgElement, 'svg' | 'color'>): string {
   const colored = el.svg.replace(/currentColor/g, el.color);
@@ -1011,6 +1090,53 @@ export function drawFrameEditGhost(ctx: CanvasRenderingContext2D, el: FrameEleme
   drawElement(ctx, { ...el, opacity: 1, shadow: null });
 }
 
+function drawVideo(ctx: CanvasRenderingContext2D, el: VideoElement, live: HTMLVideoElement | null) {
+  const source: HTMLVideoElement | HTMLCanvasElement | null | undefined = live ?? getVideoPoster(el);
+
+  if (!source) {
+    // ระหว่างรอโหลด/เปิดไม่ได้: กล่องเข้มพร้อมสัญลักษณ์เล่น ให้รู้ว่าเป็นวิดีโอ
+    ctx.save();
+    roundedRect(ctx, el.x, el.y, el.width, el.height, el.cornerRadius);
+    ctx.fillStyle = source === null ? 'rgba(100, 116, 139, 0.35)' : 'rgba(15, 23, 42, 0.55)';
+    ctx.fill();
+    ctx.shadowColor = 'transparent';
+
+    const r = Math.min(el.width, el.height) * 0.12;
+    const cx = el.x + el.width / 2;
+    const cy = el.y + el.height / 2;
+
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.beginPath();
+    ctx.moveTo(cx - r * 0.6, cy - r);
+    ctx.lineTo(cx + r, cy);
+    ctx.lineTo(cx - r * 0.6, cy + r);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+    return;
+  }
+
+  const width = source instanceof HTMLCanvasElement ? source.width : source.videoWidth;
+  const height = source instanceof HTMLCanvasElement ? source.height : source.videoHeight;
+  const { sx, sy, sw, sh } = videoCoverCrop({ width, height }, el);
+
+  ctx.save();
+
+  if (el.cornerRadius > 0) {
+    // เงาต้องตามขอบมน: เติมรูปร่างก่อน (มีเงา) แล้วค่อยวาดภาพทับโดยไม่มีเงา
+    roundedRect(ctx, el.x, el.y, el.width, el.height, el.cornerRadius);
+    if (el.shadow) {
+      ctx.fillStyle = 'rgb(0 0 0)';
+      ctx.fill();
+      ctx.shadowColor = 'transparent';
+    }
+    ctx.clip();
+  }
+
+  ctx.drawImage(source, sx, sy, sw, sh, el.x, el.y, el.width, el.height);
+  ctx.restore();
+}
+
 function drawSvg(ctx: CanvasRenderingContext2D, el: SvgElement) {
   const img = getImage(svgDataUrl(el));
 
@@ -1034,7 +1160,7 @@ function watchFont(family: string, weight: 400 | 700) {
 
 // ── element และหน้า ─────────────────────────────────────────────────
 
-export function drawElement(ctx: CanvasRenderingContext2D, el: CanvasElement, progress?: number) {
+export function drawElement(ctx: CanvasRenderingContext2D, el: CanvasElement, progress?: number, videoFrame?: VideoFrameSource) {
   if (el.hidden || el.opacity <= 0) return;
 
   ctx.save();
@@ -1088,6 +1214,9 @@ export function drawElement(ctx: CanvasRenderingContext2D, el: CanvasElement, pr
       break;
     case 'grid':
       drawGrid(ctx, el);
+      break;
+    case 'video':
+      drawVideo(ctx, el, videoFrame?.(el) ?? null);
       break;
   }
 
@@ -1164,7 +1293,13 @@ export function drawPage(
   ctx: CanvasRenderingContext2D,
   page: Page,
   size: { width: number; height: number },
-  options: { transparent?: boolean; skipIds?: ReadonlySet<string>; progress?: (el: CanvasElement) => number | undefined } = {},
+  options: {
+    transparent?: boolean;
+    skipIds?: ReadonlySet<string>;
+    progress?: (el: CanvasElement) => number | undefined;
+    /// เฟรมสดของวิดีโอ (พรีเซนต์/ส่งออกวิดีโอ) — ไม่ใส่ = วาดภาพปก
+    videoFrame?: VideoFrameSource;
+  } = {},
 ) {
   if (page.background && !options.transparent) {
     ctx.fillStyle = canvasPaint(ctx, page.background, { x: 0, y: 0, ...size });
@@ -1174,7 +1309,7 @@ export function drawPage(
   for (const el of page.elements) {
     if (options.skipIds?.has(el.id)) continue;
 
-    drawElement(ctx, el, options.progress?.(el));
+    drawElement(ctx, el, options.progress?.(el), options.videoFrame);
   }
 }
 

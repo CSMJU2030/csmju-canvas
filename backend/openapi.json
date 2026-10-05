@@ -1580,7 +1580,27 @@
                 "image/jpeg",
                 "image/webp",
                 "image/gif",
-                "image/svg+xml"
+                "image/svg+xml",
+                "video/mp4",
+                "video/webm",
+                "audio/mpeg",
+                "audio/mp4",
+                "audio/ogg",
+                "audio/wav"
+              ]
+            }
+          },
+          {
+            "name": "kind",
+            "required": false,
+            "in": "query",
+            "description": "เฉพาะรูป วิดีโอ หรือเสียง (ไม่ใส่ = ทุกชนิด)",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "image",
+                "video",
+                "audio"
               ]
             }
           },
@@ -1641,7 +1661,7 @@
             }
           }
         },
-        "summary": "รูปที่ฉันอัปโหลด (หรือรูปในถังขยะ)",
+        "summary": "ไฟล์ที่ฉันอัปโหลด (หรือไฟล์ในถังขยะ) · กรองชนิดด้วย kind",
         "tags": [
           "assets"
         ]
@@ -1684,7 +1704,7 @@
             }
           }
         },
-        "summary": "อัปโหลดรูปไว้ใช้ในงาน",
+        "summary": "อัปโหลดรูป วิดีโอ หรือเสียงไว้ใช้ในงาน",
         "tags": [
           "assets"
         ]
@@ -1708,7 +1728,7 @@
             "description": ""
           }
         },
-        "summary": "ไฟล์รูป (เจ้าของ หรือผู้ได้ลิงก์ของงานที่ใช้รูปนี้ · ไม่ห่อ envelope เพราะเป็นไบต์)",
+        "summary": "ไฟล์รูป/วิดีโอ/เสียง (เจ้าของ หรือผู้ได้ลิงก์ของงานที่ใช้ไฟล์นี้ · ไม่ห่อ envelope เพราะเป็นไบต์ · รองรับหัว Range)",
         "tags": [
           "assets"
         ]
@@ -3464,7 +3484,7 @@
           "file": {
             "type": "string",
             "format": "binary",
-            "description": "PNG · JPEG · WebP · GIF · SVG ไม่เกิน 10 MB"
+            "description": "รูป PNG · JPEG · WebP · GIF · SVG ไม่เกิน 10 MB · วิดีโอ MP4 · WebM และเสียง MP3 · M4A · OGG · WAV ไม่เกิน 50 MB"
           }
         },
         "required": [

@@ -795,6 +795,7 @@ const STYLE_KEYS: Record<CanvasElement['type'], string[]> = {
   chart: ['colors', 'fontFamily', 'fontSize', 'color', 'showLegend', 'showLabels', 'showGrid'],
   frame: ['shape'],
   grid: ['gap', 'cornerRadius'],
+  video: ['cornerRadius', 'muted', 'loop'],
 };
 
 function pick(el: CanvasElement, keys: string[]): Partial<CanvasElement> {

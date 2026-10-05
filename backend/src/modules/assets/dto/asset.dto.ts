@@ -3,7 +3,20 @@ import { IsBoolean, IsIn, IsOptional, IsString, IsUUID, MaxLength, MinLength, Va
 import { PaginationQuery } from '../../../common/http/pagination.dto.js';
 import { BooleanQuery, TrimQuery } from '../../../common/http/query-transforms.js';
 
-export const ASSET_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/svg+xml'] as const;
+export const ASSET_TYPES = [
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'image/gif',
+  'image/svg+xml',
+  'video/mp4',
+  'video/webm',
+  'audio/mpeg',
+  'audio/mp4',
+  'audio/ogg',
+  'audio/wav',
+] as const;
+export const ASSET_KINDS = ['image', 'video', 'audio'] as const;
 export const ASSET_SORTS = ['created', 'name', 'size'] as const;
 
 export class ListAssetsQuery extends PaginationQuery {
@@ -24,6 +37,11 @@ export class ListAssetsQuery extends PaginationQuery {
   @IsOptional()
   @IsIn(ASSET_TYPES, { message: 'mimeType ไม่ถูกต้อง' })
   mimeType?: (typeof ASSET_TYPES)[number];
+
+  @ApiPropertyOptional({ enum: ASSET_KINDS, description: 'เฉพาะรูป วิดีโอ หรือเสียง (ไม่ใส่ = ทุกชนิด)' })
+  @IsOptional()
+  @IsIn(ASSET_KINDS, { message: 'kind ต้องเป็น image, video หรือ audio' })
+  kind?: (typeof ASSET_KINDS)[number];
 
   @ApiPropertyOptional({ format: 'uuid', description: 'เฉพาะรูปในโฟลเดอร์รูปนี้' })
   @IsOptional()
@@ -57,7 +75,7 @@ export class UpdateAssetDto {
 }
 
 export class UploadAssetDto {
-  @ApiProperty({ type: 'string', format: 'binary', description: 'PNG · JPEG · WebP · GIF · SVG ไม่เกิน 10 MB' })
+  @ApiProperty({ type: 'string', format: 'binary', description: 'รูป PNG · JPEG · WebP · GIF · SVG ไม่เกิน 10 MB · วิดีโอ MP4 · WebM และเสียง MP3 · M4A · OGG · WAV ไม่เกิน 50 MB' })
   file!: unknown;
 }
 

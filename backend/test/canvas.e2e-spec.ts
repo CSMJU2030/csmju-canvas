@@ -197,6 +197,33 @@ describe('CS Canvas API (e2e)', () => {
     expect(quota.body.data.usedBytes).toBeGreaterThanOrEqual(PNG.length);
   });
 
+  it('อัปโหลดวิดีโอ/เสียงตรวจจากไบต์ · กรองตามชนิด · ส่งเป็นช่วงไบต์ (Range) ได้', async () => {
+    const mp4 = Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from('ftypisom', 'ascii'), Buffer.alloc(24)]);
+    const uploaded = await http().post('/api/v1/assets').set('Authorization', bearer(student, 'student')).attach('file', mp4, 'clip.mp4').expect(201);
+
+    expect(uploaded.body.data.mimeType).toBe('video/mp4');
+
+    const part = await http()
+      .get(uploaded.body.data.contentUrl as string)
+      .set('Authorization', bearer(student, 'student'))
+      .set('Range', 'bytes=4-11')
+      .expect(206);
+
+    expect(part.headers['content-range']).toBe(`bytes 4-11/${mp4.length}`);
+    expect(part.headers['accept-ranges']).toBe('bytes');
+
+    await http()
+      .get(uploaded.body.data.contentUrl as string)
+      .set('Authorization', bearer(student, 'student'))
+      .set('Range', `bytes=${mp4.length}-`)
+      .expect(416);
+
+    const videos = await http().get('/api/v1/assets?kind=video').set('Authorization', bearer(student, 'student')).expect(200);
+
+    expect((videos.body.data as { mimeType: string }[]).every((a) => a.mimeType.startsWith('video/'))).toBe(true);
+    await http().get('/api/v1/assets?kind=document').set('Authorization', bearer(student, 'student')).expect(400);
+  });
+
   it('การตั้งค่าแก้ได้และอ่านกลับได้', async () => {
     await http().patch('/api/v1/preferences').set('Authorization', bearer(student, 'student')).send({ largeText: true }).expect(200);
 

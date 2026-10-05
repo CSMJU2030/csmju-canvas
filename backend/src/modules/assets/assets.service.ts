@@ -6,15 +6,20 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, rm, stat, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import type { Asset } from '../../generated/prisma/client.js';
 import { Paginated } from '../../common/http/envelope.js';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
 import type { ListAssetsQuery } from './dto/asset.dto.js';
 import { IMAGE_EXTENSIONS, sniffImage } from './image-type.js';
+import { MEDIA_EXTENSIONS, sniffMedia } from './media-type.js';
 
+/// รูปไม่เกิน 10 MB · วิดีโอและเสียงไม่เกิน 50 MB (คลิปสั้นสำหรับสไลด์/โพสต์)
 export const MAX_ASSET_BYTES = 10 * 1024 * 1024;
+export const MAX_MEDIA_BYTES = 50 * 1024 * 1024;
+/// ขนาดใหญ่สุดที่ตัวรับไฟล์ยอมอ่าน (แยกตามชนิดอีกทีหลังตรวจไบต์หัวไฟล์)
+export const MAX_UPLOAD_BYTES = Math.max(MAX_ASSET_BYTES, MAX_MEDIA_BYTES);
 /// พื้นที่ต่อคน — นับรวมรูปในถังขยะด้วย จนกว่าจะลบถาวร
 export const QUOTA_BYTES_PER_USER = 500 * 1024 * 1024;
 export const ASSET_TRASH_RETENTION_DAYS = 30;
@@ -35,7 +40,7 @@ export class AssetsService {
       coreUserId,
       trashedAt: query.trashed ? { not: null } : null,
       ...(query.q ? { fileName: { contains: query.q, mode: 'insensitive' as const } } : {}),
-      ...(query.mimeType ? { mimeType: query.mimeType } : {}),
+      ...(query.mimeType ? { mimeType: query.mimeType } : query.kind ? { mimeType: { startsWith: `${query.kind}/` } } : {}),
       ...(query.folderId ? { folderId: query.folderId } : {}),
     };
     const orderBy =
@@ -58,26 +63,32 @@ export class AssetsService {
   }
 
   async upload(coreUserId: string, file: Express.Multer.File | undefined) {
-    if (!file) throw new BadRequestException('กรุณาแนบไฟล์รูปในช่อง file');
+    if (!file) throw new BadRequestException('กรุณาแนบไฟล์ในช่อง file');
 
-    if (file.size > MAX_ASSET_BYTES) {
-      throw new BadRequestException('ไฟล์ใหญ่เกิน 10 MB');
-    }
-
-    const mimeType = sniffImage(file.buffer);
+    const image = sniffImage(file.buffer);
+    const media = image ? null : sniffMedia(file.buffer);
+    const mimeType = image ?? media;
 
     if (!mimeType) {
-      throw new BadRequestException('รองรับเฉพาะรูป PNG, JPEG, WebP, GIF และ SVG');
+      throw new BadRequestException('รองรับเฉพาะรูป PNG, JPEG, WebP, GIF, SVG · วิดีโอ MP4, WebM · เสียง MP3, M4A, OGG, WAV');
+    }
+
+    if (image && file.size > MAX_ASSET_BYTES) {
+      throw new BadRequestException('ไฟล์รูปใหญ่เกิน 10 MB');
+    }
+
+    if (media && file.size > MAX_MEDIA_BYTES) {
+      throw new BadRequestException('ไฟล์วิดีโอหรือเสียงใหญ่เกิน 50 MB');
     }
 
     const used = await this.usedBytes(coreUserId);
 
     if (used + file.size > QUOTA_BYTES_PER_USER) {
-      throw new ConflictException('พื้นที่เก็บไฟล์เต็มแล้ว ลบรูปที่ไม่ใช้ออกจากถังขยะก่อน');
+      throw new ConflictException('พื้นที่เก็บไฟล์เต็มแล้ว ลบไฟล์ที่ไม่ใช้ออกจากถังขยะก่อน');
     }
 
     const id = randomUUID();
-    const storagePath = `${id}.${IMAGE_EXTENSIONS[mimeType]}`;
+    const storagePath = `${id}.${image ? IMAGE_EXTENSIONS[image] : MEDIA_EXTENSIONS[media!]}`;
 
     await mkdir(this.root, { recursive: true });
     await writeFile(join(this.root, storagePath), file.buffer);
@@ -96,8 +107,8 @@ export class AssetsService {
     return toDto(row);
   }
 
-  /// เจ้าของเปิดรูปได้เสมอ · คนอื่นเปิดได้เมื่อรูปนั้นอยู่ในงานของเจ้าของที่เปิดแชร์ด้วยลิงก์
-  /// (ไม่งั้นคนที่ได้ลิงก์จะเห็นงานแต่รูปหายหมด)
+  /// เจ้าของเปิดไฟล์ได้เสมอ · คนอื่นเปิดได้เมื่อไฟล์นั้นอยู่ในงานของเจ้าของที่เปิดแชร์ด้วยลิงก์
+  /// (ไม่งั้นคนที่ได้ลิงก์จะเห็นงานแต่รูปหายหมด) · คืนที่อยู่ไฟล์ให้ controller ส่งเป็นช่วงไบต์ได้ (วิดีโอ/เสียง)
   async content(coreUserId: string, id: string) {
     const row = await this.prisma.asset.findUnique({ where: { id } });
 
@@ -107,10 +118,14 @@ export class AssetsService {
       throw new NotFoundException('ไม่พบรูปนี้ อาจถูกลบไปแล้ว');
     }
 
+    const path = join(this.root, row.storagePath);
+
     try {
-      return { row, bytes: await readFile(join(this.root, row.storagePath)) };
+      const info = await stat(path);
+
+      return { row, path, size: info.size };
     } catch {
-      throw new NotFoundException('ไม่พบไฟล์ของรูปนี้ในที่เก็บ');
+      throw new NotFoundException('ไม่พบไฟล์นี้ในที่เก็บ');
     }
   }
 

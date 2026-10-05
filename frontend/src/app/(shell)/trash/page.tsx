@@ -10,6 +10,7 @@ import { api, qs } from '@/lib/csmju/api';
 import { daysLeft, formatBytes } from '@/lib/format';
 import type { Asset, DesignSummary } from '@/lib/types';
 import { Pager } from '@/components/csmju/list-controls';
+import { AssetPreview } from '@/components/projects/asset-preview';
 
 type Tab = 'designs' | 'images';
 
@@ -151,8 +152,7 @@ function TrashedImages() {
         {query.data!.items.map((asset) => (
           <li key={asset.id} className="rounded-2xl p-2">
             <span className="csmju-checker flex aspect-square items-center justify-center overflow-hidden rounded-xl">
-              {/* eslint-disable-next-line @next/next/no-img-element -- รูปผ่าน API ที่ต้องมี session */}
-              <img src={asset.contentUrl} alt={asset.fileName} className="max-h-full max-w-full object-contain" />
+              <AssetPreview asset={asset} alt={asset.fileName} className="max-h-full max-w-full object-contain" />
             </span>
             <p className="mt-1 truncate text-csmju-caption text-ink">{asset.fileName}</p>
             <p className="text-csmju-caption text-muted">{formatBytes(asset.sizeBytes)} · เหลือ {daysLeft(asset.trashedAt!)} วัน</p>
