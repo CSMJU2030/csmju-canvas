@@ -22,9 +22,12 @@ import {
 import { createPath } from '@/lib/editor/factory';
 import { brushStyle, drawPage, strokeFreehand, subscribeImageReady } from '@/lib/editor/render';
 import { snapRect } from '@/lib/editor/snapping';
+import { tableCellAt, tableCellCorners } from '@/lib/editor/table-render';
+import { activeCell, useTableUi } from '@/lib/editor/table-ui';
 import { brushWidth, canEditDoc, currentPage, selectionBox, useEditor, type DrawBrush } from '@/lib/editor/store';
 import type { CanvasElement, ImageElement, PathElement, TextElement } from '@/lib/editor/types';
 import { PREVIEW_MS, useEditorUi } from '@/lib/editor/ui-store';
+import { TableCellEditor } from './table-editor';
 
 /// ผืนผ้าใบหลักของ editor — วาดด้วย Canvas 2D ทุกเฟรมที่มีการเปลี่ยน (requestAnimationFrame)
 ///
@@ -72,6 +75,7 @@ export function Stage() {
   const drawLoop = useRef<() => void>(() => undefined);
 
   const editingTextId = useEditor((s) => s.editingTextId);
+  const editingTable = useTableUi((s) => s.editing);
 
   // ── การแปลงพิกัด ────────────────────────────────────────────────
 
@@ -157,6 +161,26 @@ export function Stage() {
 
     for (const el of selected) {
       outline(ctx, corners(el).map(toScreen), primary, el.locked ? [4, 4] : []);
+    }
+
+    // ช่องที่เลือกของตาราง — พื้นจางและกรอบสีหลัก
+    const tableCell = selected.length === 1 && selected[0].type === 'table' ? activeCell(selected[0], useTableUi.getState().cell) : null;
+
+    if (tableCell && selected[0].type === 'table') {
+      const cellCorners = tableCellCorners(selected[0], tableCell);
+
+      if (cellCorners) {
+        const pts = cellCorners.map(toScreen);
+
+        ctx.save();
+        ctx.globalAlpha = 0.12;
+        ctx.fillStyle = primary;
+        ctx.beginPath();
+        pts.forEach((pt, i) => (i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y)));
+        ctx.fill();
+        ctx.restore();
+        outline(ctx, pts, primary, []);
+      }
     }
 
     if (selected.length === 1 && !selected[0].locked && state.editingTextId !== selected[0].id) {
@@ -270,6 +294,8 @@ export function Stage() {
     const unsubscribeUi = useEditorUi.subscribe((ui, prev) => {
       if (ui.preview !== prev.preview || ui.imageErase !== prev.imageErase) requestDraw();
     });
+    // เลือกช่อง/เริ่มหรือเลิกพิมพ์ในตาราง
+    const unsubscribeTable = useTableUi.subscribe(requestDraw);
     const unsubscribe = useEditor.subscribe((state, prev) => {
       const erasing = useEditorUi.getState().imageErase;
 
@@ -289,6 +315,7 @@ export function Stage() {
     return () => {
       unsubscribe();
       unsubscribeUi();
+      unsubscribeTable();
       unsubscribeImages();
     };
   }, [requestDraw]);
@@ -477,6 +504,13 @@ export function Stage() {
 
     if (hit) {
       let ids = state.selection;
+
+      // ตาราง: คลิกแรกเลือกทั้งตาราง · คลิกตารางที่เลือกอยู่แล้ว = เลือกช่อง (แบบ Canva)
+      if (hit.type === 'table' && !event.shiftKey) {
+        const picked = ids.length === 1 && ids[0] === hit.id ? tableCellAt(hit, p) : null;
+
+        useTableUi.getState().selectCell(picked && { id: hit.id, ...picked });
+      }
 
       if (event.shiftKey) {
         ids = ids.includes(hit.id) ? ids.filter((id) => id !== hit.id) : [...ids, hit.id];
@@ -758,6 +792,16 @@ export function Stage() {
       state.select([hit.id]);
       state.setEditingText(hit.id);
     }
+
+    // ตาราง: ดับเบิลคลิกช่อง = พิมพ์ในช่องนั้น
+    if (hit?.type === 'table' && !hit.locked && canEditDoc(useEditor.getState())) {
+      const cell = tableCellAt(hit, toPage(event.clientX, event.clientY));
+
+      if (cell) {
+        useEditor.getState().select([hit.id]);
+        useTableUi.getState().startEditing({ id: hit.id, ...cell });
+      }
+    }
   };
 
   // ซูมด้วย Ctrl+ล้อ (หรือถ่างบนทัชแพด) · เลื่อนมุมมองด้วยล้อ
@@ -833,6 +877,7 @@ export function Stage() {
         className="block outline-none"
       />
       {editingTextId && <TextEditor id={editingTextId} />}
+      {editingTable && <TableCellEditor />}
     </div>
   );
 }

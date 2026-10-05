@@ -1,5 +1,6 @@
 import { DEFAULT_FONT } from './fonts';
-import type { BrushKind, CanvasElement, ImageElement, PathElement, ShapeElement, ShapeKind, SvgElement, TextElement } from './types';
+import { findTablePreset, rowHeightFor, tableBody, type TablePresetKey } from './table';
+import type { BrushKind, CanvasElement, ImageElement, PathElement, ShapeElement, ShapeKind, SvgElement, TableElement, TextElement } from './types';
 import { isLineShape, newId } from './types';
 
 /// สร้าง element ใหม่วางกลางหน้า · ขนาดตั้งต้นคิดตามสัดส่วนของหน้า
@@ -246,6 +247,18 @@ export function createSvg(page: PageSize, svg: string, name: string): SvgElement
   };
 }
 
+/// ตารางว่างตามรูปแบบสำเร็จรูป · กว้าง 70% ของหน้า ตัวอักษรตามด้านสั้นของหน้า
+/// ความสูงเริ่มที่แถวละหนึ่งบรรทัด (store ขยายให้พอดีข้อความทุกครั้งที่แก้)
+export function createTable(page: PageSize, rows: number, cols: number, preset?: TablePresetKey): TableElement {
+  const spec = findTablePreset(preset);
+  const fontSize = Math.max(10, Math.round(Math.min(page.width, page.height) * 0.024));
+  const body = tableBody(rows, cols, fontSize, spec);
+  const width = Math.round(page.width * 0.7);
+  const height = Math.round(rowHeightFor({ fontSize }, 1) * body.cells.length);
+
+  return { ...base(page, width, height, 'ตาราง'), ...body };
+}
+
 // ── เซ็ตฟอนต์ (แผงข้อความ) ─────────────────────────────────────────
 
 export interface FontSetLine {
@@ -392,5 +405,5 @@ export function createFontSet(page: PageSize, set: FontSet, measure: (el: TextEl
 export function layerLabel(el: { type: string; name: string; text?: string }): string {
   if (el.type === 'text' && el.text) return el.text.split('\n')[0].slice(0, 40) || 'ข้อความ';
 
-  return el.name || (el.type === 'path' ? 'ภาพวาด' : 'ชิ้นงาน');
+  return el.name || (el.type === 'path' ? 'ภาพวาด' : el.type === 'table' ? 'ตาราง' : 'ชิ้นงาน');
 }

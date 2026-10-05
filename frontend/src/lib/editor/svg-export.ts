@@ -1,6 +1,7 @@
 import { cssFamily } from './fonts';
 import { isGradient, parseGradient } from './paint';
 import { HIGHLIGHTER_ALPHA, dashFor, drawElement, layoutLines, preloadPage, svgDataUrl } from './render';
+import { tableSvg } from './table-render';
 import { isLineShape, type CanvasElement, type ImageElement, type Page, type PathElement, type ShapeElement, type TextElement } from './types';
 
 /// ส่งออกหน้าเป็น SVG (เวกเตอร์) — ข้อความ รูปทรง เส้นวาด และไอคอนยังเป็นเวกเตอร์ แก้ต่อในโปรแกรมอื่นได้
@@ -64,7 +65,7 @@ export async function pageToSvg(page: Page, size: { width: number; height: numbe
     ]
       .filter(Boolean)
       .join(' ');
-    const shadow = el.shadow && el.type !== 'text' ? shadowFilter(el.shadow) : '';
+    const shadow = el.shadow && el.type !== 'text' && el.type !== 'table' ? shadowFilter(el.shadow) : '';
 
     body.push(`<g ${attrs}${shadow}>${await elementSvg(el, paint, shadowFilter)}</g>`);
   }
@@ -88,6 +89,8 @@ async function elementSvg(
       return `<image x="${n(el.x)}" y="${n(el.y)}" width="${n(el.width)}" height="${n(el.height)}" href="${esc(svgDataUrl(el))}"/>`;
     case 'image':
       return imageSvg(el);
+    case 'table':
+      return tableSvg(el);
   }
 }
 

@@ -9,9 +9,10 @@ import { cx } from '@/components/csmju/primitives';
 import { FONT_FAMILIES, cssFamily } from '@/lib/editor/fonts';
 import { isGradient } from '@/lib/editor/paint';
 import { currentPage, useEditor } from '@/lib/editor/store';
-import { isLineShape, type CanvasElement, type ImageElement, type PathElement, type ShapeElement, type StrokeStyle, type TextElement } from '@/lib/editor/types';
+import { isLineShape, type CanvasElement, type ImageElement, type PathElement, type ShapeElement, type StrokeStyle, type TableElement, type TextElement } from '@/lib/editor/types';
 import { useEditorUi, type ColorTarget } from '@/lib/editor/ui-store';
 import { PopoverButton, RangeField, ToolbarButton, ToolbarDivider } from './controls';
+import { TableTools } from './table-tools';
 
 /// แถบเครื่องมือลอยกลางด้านบนผืนผ้าใบ (ภาพบรีฟ "แถบบนของข้อความ/รูป/เส้นวาด")
 ///
@@ -35,6 +36,14 @@ export function ContextToolbar() {
   else if (only === 'image' && selected.length === 1) content = <ImageTools el={selected[0] as ImageElement} />;
   else if (only === 'svg') content = <ColorOnlyTools els={selected} target="icon" label="สีกราฟิก" />;
   else if (only === 'path') content = <PathTools els={selected as PathElement[]} />;
+  else if (only === 'table' && selected.length === 1) {
+    content = (
+      <TableTools
+        el={selected[0] as TableElement}
+        trailing={<><TransparencyButton els={selected} /><TrailingTools effects={false} /></>}
+      />
+    );
+  }
   else content = <MixedTools els={selected} />;
 
   return (

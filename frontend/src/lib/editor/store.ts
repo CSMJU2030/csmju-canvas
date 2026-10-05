@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { fitTemplate } from './fit-template';
 import { boundingBox, unionBox, type Rect } from './geometry';
 import { measureTextHeight } from './render';
+import { mapTableColors } from './table';
+import { fitTableBox } from './table-render';
 import type { Guide } from './snapping';
 import {
   blankPage,
@@ -182,6 +184,7 @@ function withPage(doc: DesignDocument, index: number, fn: (page: Page) => Page):
 
 /// ข้อความต้องสูงพอดีกับบรรทัดเสมอ — คำนวณใหม่ทุกครั้งที่เนื้อหา/ขนาดเปลี่ยน
 function fitText(el: CanvasElement): CanvasElement {
+  if (el.type === 'table') return fitTableBox(el);
   if (el.type !== 'text') return el;
 
   return { ...el, height: measureTextHeight(el) };
@@ -485,6 +488,7 @@ export const useEditor = create<EditorState>((set, get) => {
           if (el.locked) return el;
           if (el.type === 'shape') return { ...el, fill: swap(el.fill) ?? null, stroke: swap(el.stroke) ?? null };
           if (el.type === 'text' || el.type === 'svg' || el.type === 'path') return { ...el, color: swap(el.color)! };
+          if (el.type === 'table') return mapTableColors(el, swap);
 
           return el;
         }),
@@ -787,6 +791,7 @@ const STYLE_KEYS: Record<CanvasElement['type'], string[]> = {
   image: ['cornerRadius', 'adjust', 'filter', 'filterIntensity', 'border'],
   svg: ['color'],
   path: ['color', 'strokeWidth'],
+  table: ['fontFamily', 'fontSize', 'color', 'align', 'header', 'headerFill', 'headerColor', 'stripeFill', 'borderColor', 'borderWidth', 'lines'],
 };
 
 function pick(el: CanvasElement, keys: string[]): Partial<CanvasElement> {

@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { canEditDoc, currentPage, useEditor } from '@/lib/editor/store';
+import { activeCell, useTableUi } from '@/lib/editor/table-ui';
 import { useEditorUi } from '@/lib/editor/ui-store';
 import { promptLink } from './context-menu';
 import { printDesign } from './top-bar';
@@ -185,6 +186,14 @@ export function useShortcuts() {
         if (state.selection.length === 1 && only?.type === 'text' && !only.locked) {
           event.preventDefault();
           state.setEditingText(only.id);
+        }
+
+        // ตาราง: Enter = พิมพ์ในช่องที่เลือก (ยังไม่เลือก = ช่องแรก)
+        if (state.selection.length === 1 && only?.type === 'table' && !only.locked) {
+          const cell = activeCell(only, useTableUi.getState().cell) ?? { row: 0, col: 0 };
+
+          event.preventDefault();
+          useTableUi.getState().startEditing({ id: only.id, ...cell });
         }
 
         return;
