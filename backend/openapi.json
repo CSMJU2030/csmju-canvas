@@ -4567,12 +4567,6 @@
             "type": "string",
             "example": "user-002"
           },
-          "lastCoreRole": {
-            "type": "string",
-            "nullable": true,
-            "example": "student",
-            "description": "core role ตอนเข้าใช้ล่าสุด (แสดงผลเท่านั้น ไม่ใช้ตัดสินสิทธิ์) · null = ยังไม่เคยเปิดแอปหลังเริ่มบันทึก"
-          },
           "storageUsedBytes": {
             "type": "string",
             "example": "48120040",
@@ -4609,7 +4603,6 @@
         },
         "required": [
           "coreUserId",
-          "lastCoreRole",
           "storageUsedBytes",
           "storageQuotaBytes",
           "quotaOverridden",

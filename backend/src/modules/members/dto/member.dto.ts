@@ -60,14 +60,6 @@ export class UpdateMemberQuotaDto {
 export class MemberDto {
   @ApiProperty({ example: 'user-002' }) coreUserId!: string;
 
-  @ApiProperty({
-    nullable: true,
-    type: String,
-    example: 'student',
-    description: 'core role ตอนเข้าใช้ล่าสุด (แสดงผลเท่านั้น ไม่ใช้ตัดสินสิทธิ์) · null = ยังไม่เคยเปิดแอปหลังเริ่มบันทึก',
-  })
-  lastCoreRole!: string | null;
-
   @ApiProperty({ example: '48120040', description: 'ไบต์ที่ใช้ไป (รวมไฟล์ในถังขยะ) เป็น string' }) storageUsedBytes!: string;
   @ApiProperty({ example: '524288000', description: 'โควตาที่ใช้จริงเป็น string' }) storageQuotaBytes!: string;
   @ApiProperty({ description: 'true = ผู้ดูแลตั้งโควตาให้เอง · false = ค่าเริ่มต้น' }) quotaOverridden!: boolean;

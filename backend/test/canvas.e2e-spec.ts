@@ -50,6 +50,8 @@ describe('CS Canvas API (e2e)', () => {
     await prisma.preference.deleteMany({ where: { coreUserId: owners } });
     await prisma.feedback.deleteMany({ where: { coreUserId: owners } });
     await prisma.templateFavorite.deleteMany({ where: { coreUserId: owners } });
+    await prisma.subsystemMember.deleteMany({ where: { coreUserId: owners } });
+    await prisma.auditLog.deleteMany({ where: { actorCoreUserId: owners } });
     await app.close();
   });
 
@@ -515,5 +517,45 @@ describe('CS Canvas API (e2e)', () => {
     expect(stats.body.data).toMatchObject({ uniqueViewers: 1, totalViews: 2 });
     await http().get(`/api/v1/designs/${id}/stats`).set('Authorization', bearer(other, 'student')).expect(403);
     await http().patch(`/api/v1/designs/${id}`).set('Authorization', bearer(other, 'student')).send({ starred: true }).expect(403);
+  });
+
+  it('แผงผู้ดูแล: เฉพาะ staff/admin · สมาชิก โควตา ภาพรวม กิจกรรม และ audit log ทำงานกับฐานจริง', async () => {
+    const admin = bearer(staff, 'staff');
+
+    await http().get('/api/v1/subsystem-members/me').set('Authorization', bearer(student, 'student')).expect(200);
+    await http().get('/api/v1/subsystem-members').set('Authorization', bearer(student, 'student')).expect(403);
+    await http().get('/api/v1/subsystem-members').set('Authorization', bearer(`e2e-${run}-lecturer`, 'lecturer')).expect(403);
+
+    const list = await http().get('/api/v1/subsystem-members?sort=usage&limit=5').set('Authorization', admin).expect(200);
+
+    expect(list.body.meta).toMatchObject({ page: 1, limit: 5 });
+
+    const found = await http().get(`/api/v1/subsystem-members?q=${encodeURIComponent(student)}`).set('Authorization', admin).expect(200);
+
+    expect(found.body.data.map((m: { coreUserId: string }) => m.coreUserId)).toContain(student);
+
+    await http().patch(`/api/v1/subsystem-members/${student}/storage-quota`).set('Authorization', admin).send({ storageQuotaBytes: 10 * 1024 ** 3 }).expect(400);
+    await http().patch(`/api/v1/subsystem-members/${student}/storage-quota`).set('Authorization', admin).send({ storageQuotaBytes: 1024 ** 3, reason: 'e2e' }).expect(200);
+
+    const quota = await http().get('/api/v1/quotas').set('Authorization', bearer(student, 'student')).expect(200);
+
+    expect(Number(quota.body.data.quotaBytes)).toBe(1024 ** 3);
+
+    const overview = await http().get('/api/v1/admin-overview').set('Authorization', admin).expect(200);
+
+    expect(overview.body.data.memberCount).toBeGreaterThan(0);
+
+    for (const days of [7, 30, 90]) {
+      const activity = await http().get(`/api/v1/admin-activity?days=${days}`).set('Authorization', admin).expect(200);
+
+      expect(activity.body.data.days ?? activity.body.data.series).toBeTruthy();
+    }
+
+    await http().get('/api/v1/admin-activity?days=5').set('Authorization', admin).expect(400);
+
+    const logs = await http().get(`/api/v1/audit-logs?action=member.quota_change&actorCoreUserId=${staff}`).set('Authorization', admin).expect(200);
+
+    expect(logs.body.data[0]).toMatchObject({ action: 'member.quota_change', targetId: student });
+    await http().get('/api/v1/audit-logs?since=2026-10-10T00:00:00Z&until=2026-10-01T00:00:00Z').set('Authorization', admin).expect(400);
   });
 });

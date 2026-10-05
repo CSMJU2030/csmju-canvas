@@ -3,7 +3,6 @@
 export interface AdminMember {
   coreUserId: string;
   /// core role ตอนเข้าใช้ล่าสุด (แสดงผลเท่านั้น) · null = ยังไม่เคยเปิดแอปหลังเริ่มบันทึก
-  lastCoreRole: string | null;
   /// ไบต์เป็น string (BigInt)
   storageUsedBytes: string;
   storageQuotaBytes: string;

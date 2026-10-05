@@ -25,7 +25,6 @@ import {
   parseQuotaInput,
   percentLabel,
   QUOTA_PRESETS,
-  roleLabel,
 } from './admin-format';
 import type { AdminMember } from './admin-types';
 
@@ -128,7 +127,6 @@ export function MembersTab() {
                   <tr key={member.coreUserId} className={cx(member.usagePercent >= NEAR_QUOTA_PERCENT && 'bg-danger-bg')}>
                     <td className="px-4 py-3 align-top">
                       <p className="font-medium break-all text-ink">{member.coreUserId}</p>
-                      <p className="text-muted">{roleLabel(member.lastCoreRole)}</p>
                     </td>
                     <td className="w-72 px-4 py-3 align-top">
                       <UsageBar member={member} />
@@ -157,7 +155,7 @@ export function MembersTab() {
                 <div>
                   <p className="text-csmju-body font-medium break-all text-ink">{member.coreUserId}</p>
                   <p className="text-csmju-caption text-muted">
-                    {roleLabel(member.lastCoreRole)} · ดีไซน์ {member.designCount.toLocaleString('th-TH')} ·{' '}
+                    ดีไซน์ {member.designCount.toLocaleString('th-TH')} ·{' '}
                     {member.lastSeenAt ? `เข้าใช้ ${relativeTime(member.lastSeenAt)}` : 'ยังไม่เคยเปิดแอป'}
                   </p>
                 </div>

@@ -35,8 +35,8 @@ export class MembersService {
     const now = new Date();
     const member = await this.prisma.subsystemMember.upsert({
       where: { coreUserId: user.coreUserId },
-      update: { lastSeenAt: now, lastCoreRole: user.coreRole },
-      create: { coreUserId: user.coreUserId, lastSeenAt: now, lastCoreRole: user.coreRole },
+      update: { lastSeenAt: now },
+      create: { coreUserId: user.coreUserId, lastSeenAt: now },
     });
     const used = await this.assets.usedBytes(user.coreUserId);
     const quota = effectiveQuota(member.storageQuotaBytes);
@@ -166,7 +166,6 @@ export function toMemberDto(member: SubsystemMember, usedBytes: number, assetCou
 
   return {
     coreUserId: member.coreUserId,
-    lastCoreRole: member.lastCoreRole,
     storageUsedBytes: String(usedBytes),
     storageQuotaBytes: String(quota),
     quotaOverridden: member.storageQuotaBytes !== null,

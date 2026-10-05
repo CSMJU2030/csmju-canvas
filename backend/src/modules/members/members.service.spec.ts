@@ -10,7 +10,6 @@ function member(overrides: Record<string, unknown> = {}) {
     id: '11111111-1111-4111-8111-111111111111',
     coreUserId: 'user-002',
     storageQuotaBytes: null,
-    lastCoreRole: 'student',
     lastSeenAt: new Date('2026-10-05T03:00:00Z'),
     createdAt: new Date('2026-10-01T03:00:00Z'),
     updatedAt: new Date('2026-10-05T03:00:00Z'),
@@ -24,7 +23,7 @@ function setup(before: ReturnType<typeof member> | null, usedBytes: number) {
     subsystemMember: {
       findUnique: vi.fn().mockImplementation(() => Promise.resolve(before)),
       upsert: vi.fn().mockImplementation(({ update, create }: { update: object; create: object }) => {
-        stored = before ? { ...before, ...update } : member({ ...create, lastCoreRole: null, lastSeenAt: null });
+        stored = before ? { ...before, ...update } : member({ ...create, lastSeenAt: null });
         return Promise.resolve(stored);
       }),
       findMany: vi.fn().mockImplementation(() => Promise.resolve(stored ? [stored] : [])),

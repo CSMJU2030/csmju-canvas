@@ -3,7 +3,7 @@
 // กฎที่ schema นี้ยึด (csmju2030-standards 1.7.1):
 //   1. ไม่มีตาราง users — อ้างผู้ใช้ด้วย `coreUserId` (ค่า `sub` จาก token) เท่านั้น (DD-01)
 //   2. ไม่เก็บ core role อีเมล หรือชื่อจริง — อ่านจาก token ที่ตรวจแล้วทุก request
-//      (ยกเว้นภาพถ่ายไว้แสดงผลใน subsystem_members.last_core_role และ audit_logs ซึ่งไม่ใช้ตัดสินสิทธิ์)
+//      (audit_logs เก็บ role ของผู้กระทำ ณ เวลาที่เกิดเหตุ แบบเดียวกับ csmju-nexus — ไม่ใช้ตัดสินสิทธิ์)
 //   3. ตาราง/คอลัมน์เป็น snake_case ผ่าน @map/@@map · ฟิลด์ใน Prisma เป็น camelCase (DD-03)
 //   4. วันเวลาเป็น timestamptz ทั้งหมด
 
@@ -299,14 +299,12 @@ model AuditLog {
 ///
 /// แถวเกิดเมื่อผู้ใช้เปิดแอป (GET /api/v1/subsystem-members/me) หรือเมื่อผู้ดูแลตั้งโควตาให้ล่วงหน้า
 /// เก็บแค่ `core_user_id` — ไม่เก็บชื่อจริงหรืออีเมล (เป็นของ Core Hub)
-/// `lastCoreRole` เป็นภาพถ่ายของ core role ตอนเข้าใช้ล่าสุด ไว้แสดงในแผงผู้ดูแลเท่านั้น
-/// **ห้ามใช้ตัดสินสิทธิ์** — สิทธิ์อ่านสดจาก token ทุก request (RolesGuard)
+/// ไม่เก็บ core role (data-dictionary: อ่านจาก token เท่านั้น) — แผงผู้ดูแลจึงไม่แสดงบทบาทของแต่ละคน
 model SubsystemMember {
   id                String    @id @default(uuid()) @db.Uuid
   coreUserId        String    @unique @map("core_user_id")
   /// โควตาที่ผู้ดูแลตั้งให้ (ไบต์) · null = ค่าเริ่มต้น QUOTA_BYTES_PER_USER
   storageQuotaBytes BigInt?   @map("storage_quota_bytes")
-  lastCoreRole      String?   @map("last_core_role") @db.VarChar(20)
   /// null = ยังไม่เคยเปิดแอปหลังมีตารางนี้ (เช่นแถวที่ผู้ดูแลตั้งโควตาไว้ล่วงหน้า)
   lastSeenAt        DateTime? @map("last_seen_at") @db.Timestamptz(3)
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
