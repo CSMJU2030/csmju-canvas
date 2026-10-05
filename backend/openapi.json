@@ -1615,6 +1615,35 @@
             }
           },
           {
+            "name": "source",
+            "required": false,
+            "in": "query",
+            "description": "เฉพาะภาพที่นำเข้าจากแหล่งนี้ (unsplash, pexels, … , other)",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "unsplash",
+                "pexels",
+                "pixabay",
+                "openverse",
+                "wikimedia",
+                "nasa",
+                "pinterest",
+                "google",
+                "other"
+              ]
+            }
+          },
+          {
+            "name": "imported",
+            "required": false,
+            "in": "query",
+            "description": "true = เฉพาะภาพที่นำเข้าจากเว็บอื่น (มีแหล่งที่มา) · false = เฉพาะไฟล์จากเครื่อง",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
             "name": "sort",
             "required": false,
             "in": "query",
@@ -1661,7 +1690,7 @@
             }
           }
         },
-        "summary": "ไฟล์ที่ฉันอัปโหลด (หรือไฟล์ในถังขยะ) · กรองชนิดด้วย kind",
+        "summary": "ไฟล์ที่ฉันอัปโหลด (หรือไฟล์ในถังขยะ) · กรองชนิดด้วย kind · ภาพที่นำเข้าด้วย imported/source",
         "tags": [
           "assets"
         ]
@@ -1704,7 +1733,7 @@
             }
           }
         },
-        "summary": "อัปโหลดรูป วิดีโอ หรือเสียงไว้ใช้ในงาน",
+        "summary": "อัปโหลดรูป วิดีโอ หรือเสียงไว้ใช้ในงาน · แนบแหล่งที่มาได้ (sourceUrl, sourceSite) เมื่อนำเข้าจากเว็บอื่น",
         "tags": [
           "assets"
         ]
@@ -4186,6 +4215,27 @@
             "type": "object",
             "nullable": true
           },
+          "sourceUrl": {
+            "type": "object",
+            "nullable": true,
+            "description": "หน้าเว็บ/ลิงก์รูปต้นฉบับ (ภาพที่นำเข้าจากเว็บอื่น)"
+          },
+          "sourceSite": {
+            "type": "string",
+            "enum": [
+              "unsplash",
+              "pexels",
+              "pixabay",
+              "openverse",
+              "wikimedia",
+              "nasa",
+              "pinterest",
+              "google",
+              "other"
+            ],
+            "nullable": true,
+            "description": "แหล่งที่มา · null = ไฟล์จากเครื่อง"
+          },
           "createdAt": {
             "type": "string"
           }
@@ -4206,6 +4256,17 @@
             "type": "string",
             "format": "binary",
             "description": "รูป PNG · JPEG · WebP · GIF · SVG ไม่เกิน 10 MB · วิดีโอ MP4 · WebM และเสียง MP3 · M4A · OGG · WAV ไม่เกิน 50 MB"
+          },
+          "sourceUrl": {
+            "type": "string",
+            "maxLength": 500,
+            "description": "หน้าเว็บหรือลิงก์รูปต้นฉบับ (http/https) เมื่อคัดลอก/ลากรูปมาจากเว็บอื่น · ระบบเก็บเป็นข้อความเท่านั้น ไม่เปิดลิงก์นี้"
+          },
+          "sourceSite": {
+            "type": "string",
+            "maxLength": 60,
+            "example": "unsplash",
+            "description": "แหล่งที่ผู้ใช้เลือกในแผงแหล่งภาพ (unsplash, pexels, pixabay, openverse, wikimedia, nasa, pinterest, google, other) · ค่าอื่นเก็บเป็น other"
           }
         },
         "required": [

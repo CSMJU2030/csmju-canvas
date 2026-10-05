@@ -34,7 +34,7 @@ export class AssetsController {
   constructor(private readonly assets: AssetsService) {}
 
   @Get()
-  @ApiOperation({ summary: 'ไฟล์ที่ฉันอัปโหลด (หรือไฟล์ในถังขยะ) · กรองชนิดด้วย kind' })
+  @ApiOperation({ summary: 'ไฟล์ที่ฉันอัปโหลด (หรือไฟล์ในถังขยะ) · กรองชนิดด้วย kind · ภาพที่นำเข้าด้วย imported/source' })
   @ApiEnvelopeList(AssetDto)
   list(@CurrentUser() user: CoreHubUser, @Query() query: ListAssetsQuery) {
     return this.assets.list(user.coreUserId, query);
@@ -48,10 +48,14 @@ export class AssetsController {
   )
   @ApiConsumes('multipart/form-data')
   @ApiBody({ type: UploadAssetDto })
-  @ApiOperation({ summary: 'อัปโหลดรูป วิดีโอ หรือเสียงไว้ใช้ในงาน' })
+  @ApiOperation({ summary: 'อัปโหลดรูป วิดีโอ หรือเสียงไว้ใช้ในงาน · แนบแหล่งที่มาได้ (sourceUrl, sourceSite) เมื่อนำเข้าจากเว็บอื่น' })
   @ApiEnvelope(AssetDto, { status: 201 })
-  upload(@CurrentUser() user: CoreHubUser, @UploadedFile() file: Express.Multer.File | undefined) {
-    return this.assets.upload(user.coreUserId, file);
+  upload(
+    @CurrentUser() user: CoreHubUser,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @Body() fields: UploadAssetDto,
+  ) {
+    return this.assets.upload(user.coreUserId, file, { sourceUrl: fields.sourceUrl, sourceSite: fields.sourceSite });
   }
 
   @Get(':id/content')

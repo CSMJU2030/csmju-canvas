@@ -1,7 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsIn, IsOptional, IsString, IsUUID, MaxLength, MinLength, ValidateIf } from 'class-validator';
+import { IsBoolean, IsIn, IsOptional, IsString, IsUrl, IsUUID, MaxLength, MinLength, ValidateIf } from 'class-validator';
 import { PaginationQuery } from '../../../common/http/pagination.dto.js';
 import { BooleanQuery, TrimQuery } from '../../../common/http/query-transforms.js';
+import { MAX_SOURCE_URL_LENGTH, SOURCE_SITES, type SourceSite } from '../source-site.js';
 
 export const ASSET_TYPES = [
   'image/png',
@@ -48,6 +49,17 @@ export class ListAssetsQuery extends PaginationQuery {
   @IsUUID('4', { message: 'folderId ต้องเป็น UUID v4' })
   folderId?: string;
 
+  @ApiPropertyOptional({ enum: SOURCE_SITES, description: 'เฉพาะภาพที่นำเข้าจากแหล่งนี้ (unsplash, pexels, … , other)' })
+  @IsOptional()
+  @IsIn(SOURCE_SITES, { message: `source ต้องเป็นหนึ่งใน ${SOURCE_SITES.join(', ')}` })
+  source?: SourceSite;
+
+  @ApiPropertyOptional({ description: 'true = เฉพาะภาพที่นำเข้าจากเว็บอื่น (มีแหล่งที่มา) · false = เฉพาะไฟล์จากเครื่อง' })
+  @IsOptional()
+  @BooleanQuery()
+  @IsBoolean({ message: 'imported ต้องเป็น true หรือ false' })
+  imported?: boolean;
+
   @ApiPropertyOptional({ enum: ASSET_SORTS, default: 'created' })
   @IsOptional()
   @IsIn(ASSET_SORTS, { message: 'sort ต้องเป็น created, name หรือ size' })
@@ -76,7 +88,24 @@ export class UpdateAssetDto {
 
 export class UploadAssetDto {
   @ApiProperty({ type: 'string', format: 'binary', description: 'รูป PNG · JPEG · WebP · GIF · SVG ไม่เกิน 10 MB · วิดีโอ MP4 · WebM และเสียง MP3 · M4A · OGG · WAV ไม่เกิน 50 MB' })
+  @IsOptional()
   file!: unknown;
+
+  @ApiPropertyOptional({
+    maxLength: MAX_SOURCE_URL_LENGTH,
+    description: 'หน้าเว็บหรือลิงก์รูปต้นฉบับ (http/https) เมื่อคัดลอก/ลากรูปมาจากเว็บอื่น · ระบบเก็บเป็นข้อความเท่านั้น ไม่เปิดลิงก์นี้',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(MAX_SOURCE_URL_LENGTH, { message: `sourceUrl ยาวได้ไม่เกิน ${MAX_SOURCE_URL_LENGTH} ตัวอักษร` })
+  @IsUrl({ protocols: ['http', 'https'], require_protocol: true, require_tld: false }, { message: 'sourceUrl ต้องเป็นลิงก์ http หรือ https' })
+  sourceUrl?: string;
+
+  @ApiPropertyOptional({ maxLength: 60, example: 'unsplash', description: `แหล่งที่ผู้ใช้เลือกในแผงแหล่งภาพ (${SOURCE_SITES.join(', ')}) · ค่าอื่นเก็บเป็น other` })
+  @IsOptional()
+  @IsString()
+  @MaxLength(60, { message: 'sourceSite ยาวได้ไม่เกิน 60 ตัวอักษร' })
+  sourceSite?: string;
 }
 
 export class AssetDto {
@@ -87,5 +116,7 @@ export class AssetDto {
   @ApiProperty({ example: '/api/v1/assets/…/content' }) contentUrl!: string;
   @ApiPropertyOptional({ format: 'uuid', nullable: true }) folderId!: string | null;
   @ApiPropertyOptional({ nullable: true }) trashedAt!: string | null;
+  @ApiPropertyOptional({ nullable: true, description: 'หน้าเว็บ/ลิงก์รูปต้นฉบับ (ภาพที่นำเข้าจากเว็บอื่น)' }) sourceUrl!: string | null;
+  @ApiPropertyOptional({ enum: SOURCE_SITES, nullable: true, description: 'แหล่งที่มา · null = ไฟล์จากเครื่อง' }) sourceSite!: SourceSite | null;
   @ApiProperty() createdAt!: string;
 }

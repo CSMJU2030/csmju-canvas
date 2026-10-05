@@ -5,13 +5,15 @@ import { cx } from '@/components/csmju/primitives';
 /// สีทั้งหมดมาจาก token ของระบบ (type-* · pastel-* · on-inverse · ink) จึงตามธีมสว่าง/มืดได้
 
 export type TileKind =
-  | 'shapes' | 'graphics' | 'photos' | 'videos' | 'audio' | 'stickers' | 'tables' | 'charts' | 'frames' | 'grids' | 'lines' | 'icons' | 'sticky';
+  | 'shapes' | 'graphics' | 'photos' | 'sources' | 'imported' | 'videos' | 'audio' | 'stickers' | 'tables' | 'charts' | 'frames' | 'grids' | 'lines' | 'icons' | 'sticky';
 
 /// สีของการ์ดหน้า (ไล่เฉด) และการ์ดหลัง — เขียนเต็มชื่อคลาสเพื่อให้ Tailwind สร้างครบ
 const TONES: Record<TileKind, { front: string; back: string }> = {
   shapes: { front: 'from-type-teal to-type-blue', back: 'bg-type-teal/40' },
   graphics: { front: 'from-type-orange to-type-red', back: 'bg-type-orange/40' },
   photos: { front: 'from-type-blue to-type-indigo', back: 'bg-type-blue/40' },
+  sources: { front: 'from-type-indigo to-type-teal', back: 'bg-type-indigo/40' },
+  imported: { front: 'from-type-pink to-type-purple', back: 'bg-type-pink/40' },
   videos: { front: 'from-type-magenta to-type-pink', back: 'bg-type-pink/40' },
   audio: { front: 'from-type-red to-type-pink', back: 'bg-type-red/40' },
   stickers: { front: 'from-type-green to-type-teal', back: 'bg-type-green/40' },
@@ -78,6 +80,30 @@ function TileArt({ kind }: { kind: TileKind }) {
           <rect x={10} y={12} width={28} height={24} rx={1.5} className="fill-pastel-sky" />
           <circle cx={31} cy={18} r={3.2} className="fill-pastel-butter" />
           <path d="M10 36 19 24l6 7 4-4 9 9Z" className="fill-type-blue" />
+        </>
+      );
+    case 'sources':
+      // หน้าต่างสองบานวางข้างกัน (แบ่งซีกจอ) + ลูกศรนำภาพกลับมา
+      return (
+        <>
+          <rect x={5} y={10} width={18} height={28} rx={2.5} className="fill-on-inverse" />
+          <rect x={25} y={10} width={18} height={28} rx={2.5} className="fill-on-inverse/45" />
+          <rect x={28} y={15} width={12} height={10} rx={1} className="fill-pastel-sky" />
+          <path d="M28 25l4-4 3 3 2-2 3 3v1H28Z" className="fill-type-teal" />
+          <path d="M33 31H13m0 0 4-4m-4 4 4 4" fill="none" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" className="stroke-type-indigo" />
+        </>
+      );
+    case 'imported':
+      // ภาพซ้อนกันแบบก่ออิฐ
+      return (
+        <>
+          <rect x={6} y={7} width={16} height={22} rx={2} className="fill-on-inverse" />
+          <rect x={6} y={31} width={16} height={10} rx={2} className="fill-pastel-butter" />
+          <rect x={26} y={7} width={16} height={12} rx={2} className="fill-pastel-pink" />
+          <rect x={26} y={21} width={16} height={20} rx={2} className="fill-on-inverse" />
+          <circle cx={12} cy={14} r={2.5} className="fill-pastel-butter" />
+          <path d="M8 27l5-6 4 4 3-2v4Z" className="fill-type-purple" />
+          <path d="M28 39l5-7 4 4 3-3v6Z" className="fill-type-pink" />
         </>
       );
     case 'videos':

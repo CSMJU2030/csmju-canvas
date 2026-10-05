@@ -139,10 +139,15 @@ model Asset {
   folderId    String?   @map("folder_id") @db.Uuid
   trashedAt   DateTime? @map("trashed_at") @db.Timestamptz(3)
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  /// หน้าเว็บ/ลิงก์รูปต้นฉบับเมื่อคัดลอกหรือลากรูปมาจากเว็บอื่น (เก็บเป็นข้อความ ระบบไม่เปิดลิงก์นี้)
+  sourceUrl   String?   @map("source_url") @db.VarChar(500)
+  /// แหล่งที่มา: unsplash pexels pixabay openverse wikimedia nasa pinterest google other · null = ไฟล์จากเครื่อง
+  sourceSite  String?   @map("source_site") @db.VarChar(60)
 
   folder AssetFolder? @relation("AssetFolderAssets", fields: [folderId], references: [id], onDelete: SetNull)
 
   @@index([coreUserId, trashedAt])
+  @@index([coreUserId, sourceSite])
   @@index([folderId])
   @@map("assets")
 }

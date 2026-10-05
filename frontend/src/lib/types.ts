@@ -56,6 +56,9 @@ export interface Asset {
   /// โฟลเดอร์รูป (แผงอัปโหลด) · null = ไม่อยู่ในโฟลเดอร์
   folderId: string | null;
   trashedAt: string | null;
+  /// ภาพที่นำเข้าจากเว็บอื่น: หน้า/ลิงก์ต้นฉบับ และแหล่ง (unsplash pexels … other) · null = ไฟล์จากเครื่อง
+  sourceUrl?: string | null;
+  sourceSite?: string | null;
   createdAt: string;
 }
 

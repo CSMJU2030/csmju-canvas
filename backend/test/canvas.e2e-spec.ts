@@ -199,6 +199,71 @@ describe('CS Canvas API (e2e)', () => {
     expect(quota.body.data.usedBytes).toBeGreaterThanOrEqual(PNG.length);
   });
 
+  it('ภาพที่นำเข้าจากเว็บอื่นเก็บแหล่งที่มา · กรองตาม source/imported · ตีกลับลิงก์ที่ไม่ใช่ http(s)', async () => {
+    const fromUnsplash = await http()
+      .post('/api/v1/assets')
+      .set('Authorization', bearer(student, 'student'))
+      .field('sourceUrl', 'https://images.unsplash.com/photo-1?w=800')
+      .field('sourceSite', 'pexels')
+      .attach('file', PNG, 'unsplash.png')
+      .expect(201);
+
+    // โดเมนที่รู้จักชนะแหล่งที่ client ส่งมา
+    expect(fromUnsplash.body.data.sourceSite).toBe('unsplash');
+    expect(fromUnsplash.body.data.sourceUrl).toBe('https://images.unsplash.com/photo-1?w=800');
+
+    const viaGoogle = await http()
+      .post('/api/v1/assets')
+      .set('Authorization', bearer(student, 'student'))
+      .field('sourceUrl', 'https://blog.example.com/cat.png')
+      .field('sourceSite', 'google')
+      .attach('file', PNG, 'google.png')
+      .expect(201);
+
+    expect(viaGoogle.body.data.sourceSite).toBe('google');
+
+    const unknownSite = await http()
+      .post('/api/v1/assets')
+      .set('Authorization', bearer(student, 'student'))
+      .field('sourceSite', 'flickr')
+      .attach('file', PNG, 'flickr.png')
+      .expect(201);
+
+    expect(unknownSite.body.data.sourceSite).toBe('other');
+
+    const local = await http().post('/api/v1/assets').set('Authorization', bearer(student, 'student')).attach('file', PNG, 'local.png').expect(201);
+
+    expect(local.body.data.sourceSite).toBeNull();
+    expect(local.body.data.sourceUrl).toBeNull();
+
+    const bad = await http()
+      .post('/api/v1/assets')
+      .set('Authorization', bearer(student, 'student'))
+      .field('sourceUrl', 'javascript:alert(1)')
+      .attach('file', PNG, 'bad.png')
+      .expect(400);
+
+    expect(bad.body.error.code).toBe('VALIDATION_ERROR');
+
+    const unsplash = await http().get('/api/v1/assets?kind=image&source=unsplash').set('Authorization', bearer(student, 'student')).expect(200);
+
+    expect((unsplash.body.data as { id: string; sourceSite: string }[]).every((a) => a.sourceSite === 'unsplash')).toBe(true);
+    expect((unsplash.body.data as { id: string }[]).some((a) => a.id === fromUnsplash.body.data.id)).toBe(true);
+    expect(unsplash.body.meta.total).toBeGreaterThanOrEqual(1);
+
+    const imported = await http().get('/api/v1/assets?kind=image&imported=true&limit=100').set('Authorization', bearer(student, 'student')).expect(200);
+    const importedIds = (imported.body.data as { id: string }[]).map((a) => a.id);
+
+    expect(importedIds).toContain(viaGoogle.body.data.id);
+    expect(importedIds).not.toContain(local.body.data.id);
+
+    await http().get('/api/v1/assets?source=flickr').set('Authorization', bearer(student, 'student')).expect(400);
+    // ภาพที่นำเข้าของคนอื่นไม่ปนมา
+    const others = await http().get('/api/v1/assets?source=unsplash').set('Authorization', bearer(other, 'student')).expect(200);
+
+    expect((others.body.data as { id: string }[]).some((a) => a.id === fromUnsplash.body.data.id)).toBe(false);
+  });
+
   it('อัปโหลดวิดีโอ/เสียงตรวจจากไบต์ · กรองตามชนิด · ส่งเป็นช่วงไบต์ (Range) ได้', async () => {
     const mp4 = Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from('ftypisom', 'ascii'), Buffer.alloc(24)]);
     const uploaded = await http().post('/api/v1/assets').set('Authorization', bearer(student, 'student')).attach('file', mp4, 'clip.mp4').expect(201);

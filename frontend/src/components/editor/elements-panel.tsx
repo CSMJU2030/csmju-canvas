@@ -20,6 +20,7 @@ import { useEditor } from '@/lib/editor/store';
 import type { ShapeKind } from '@/lib/editor/types';
 import { CHART_PRESETS, FRAME_PRESETS, GRID_PRESETS, TABLE_PRESETS, type ElementPreset } from './element-presets';
 import { CategoryTile, type TileKind } from './element-tiles';
+import { ImageSourcesBrowser, ImportedImagesBrowser } from './image-sources-panel';
 import { AudioLibrary, VideoLibrary } from './media-panel';
 import { BackHeader, PanelFrame, PanelSearch, SectionHeading, useLibrary, usePageSize } from './panel-parts';
 import { LINES, SHAPES, ShapeGlyph } from './tools-palette';
@@ -61,6 +62,8 @@ const CATEGORIES: { key: Category; label: string }[] = [
   { key: 'shapes', label: 'รูปทรง' },
   { key: 'graphics', label: 'กราฟิก' },
   { key: 'photos', label: 'ภาพถ่าย' },
+  { key: 'sources', label: 'แหล่งภาพ' },
+  { key: 'imported', label: 'ภาพที่นำเข้า' },
   { key: 'videos', label: 'วิดีโอ' },
   { key: 'audio', label: 'เสียง' },
   { key: 'stickers', label: 'สติกเกอร์' },
@@ -277,6 +280,10 @@ export function ElementsPanel() {
           <StickersBrowser onPick={add} />
         ) : category === 'photos' ? (
           <PhotosBrowser onPick={add} />
+        ) : category === 'sources' ? (
+          <ImageSourcesBrowser onShowImported={() => setCategory('imported')} />
+        ) : category === 'imported' ? (
+          <ImportedImagesBrowser onOpenSources={() => setCategory('sources')} />
         ) : category === 'videos' ? (
           <VideoLibrary />
         ) : category === 'audio' ? (
@@ -328,7 +335,7 @@ export function ElementsPanel() {
           <PhotoPreviewRow onPick={add} onMore={() => setCategory('photos')} />
           <p className="text-csmju-caption text-muted">
             กราฟิก สติกเกอร์ และภาพถ่ายในคลังเป็นของที่สัญญาอนุญาตให้ใช้ได้ฟรี (Tabler Icons · Noto Emoji · Cleveland Museum of Art CC0) เก็บในระบบของคณะ ·
-            วิดีโอและเสียงใช้ไฟล์ที่คุณอัปโหลดเอง
+            วิดีโอและเสียงใช้ไฟล์ที่คุณอัปโหลดเอง · ภาพจากเว็บอื่นเปิดได้จาก “แหล่งภาพ” แล้วคัดลอกหรือลากกลับมา
           </p>
         </>
       )}

@@ -167,10 +167,11 @@ export const api = {
     return (await request<T>('PUT', path, body)).data;
   },
 
-  /// อัปโหลดไฟล์แบบ multipart (ช่องชื่อ file)
-  async upload<T>(path: string, file: File): Promise<T> {
+  /// อัปโหลดไฟล์แบบ multipart (ช่องชื่อ file) · fields = ช่องข้อความเพิ่มเติม เช่น sourceUrl/sourceSite
+  async upload<T>(path: string, file: File, fields?: Record<string, string>): Promise<T> {
     const form = new FormData();
 
+    for (const [key, value] of Object.entries(fields ?? {})) form.append(key, value);
     form.append('file', file);
 
     return (await request<T>('POST', path, form)).data;

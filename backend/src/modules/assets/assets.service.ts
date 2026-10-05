@@ -14,6 +14,7 @@ import { PrismaService } from '../../common/prisma/prisma.service.js';
 import type { ListAssetsQuery } from './dto/asset.dto.js';
 import { IMAGE_EXTENSIONS, sniffImage } from './image-type.js';
 import { MEDIA_EXTENSIONS, sniffMedia } from './media-type.js';
+import { resolveSource, type SourceSite } from './source-site.js';
 
 /// รูปไม่เกิน 10 MB · วิดีโอและเสียงไม่เกิน 50 MB (คลิปสั้นสำหรับสไลด์/โพสต์)
 export const MAX_ASSET_BYTES = 10 * 1024 * 1024;
@@ -49,6 +50,7 @@ export class AssetsService {
       ...(query.q ? { fileName: { contains: query.q, mode: 'insensitive' as const } } : {}),
       ...(query.mimeType ? { mimeType: query.mimeType } : query.kind ? { mimeType: { startsWith: `${query.kind}/` } } : {}),
       ...(query.folderId ? { folderId: query.folderId } : {}),
+      ...(query.source ? { sourceSite: query.source } : query.imported !== undefined ? { sourceSite: query.imported ? { not: null } : null } : {}),
     };
     const orderBy =
       query.sort === 'name'
@@ -69,7 +71,11 @@ export class AssetsService {
     return new Paginated(rows.map(toDto), query.meta(total));
   }
 
-  async upload(coreUserId: string, file: Express.Multer.File | undefined) {
+  async upload(
+    coreUserId: string,
+    file: Express.Multer.File | undefined,
+    origin: { sourceUrl?: string | null; sourceSite?: string | null } = {},
+  ) {
     if (!file) throw new BadRequestException('กรุณาแนบไฟล์ในช่อง file');
 
     const image = sniffImage(file.buffer);
@@ -94,6 +100,8 @@ export class AssetsService {
       throw new ConflictException('พื้นที่เก็บไฟล์เต็มแล้ว ลบไฟล์ที่ไม่ใช้ออกจากถังขยะก่อน หรือขอให้ผู้ดูแลระบบเพิ่มพื้นที่');
     }
 
+    // แหล่งที่มาเก็บเป็นข้อความเท่านั้น — ไม่ดึง URL ฝั่งเซิร์ฟเวอร์เด็ดขาด
+    const source = resolveSource(origin.sourceUrl, origin.sourceSite);
     const id = randomUUID();
     const storagePath = `${id}.${image ? IMAGE_EXTENSIONS[image] : MEDIA_EXTENSIONS[media!]}`;
 
@@ -108,6 +116,8 @@ export class AssetsService {
         mimeType,
         sizeBytes: file.size,
         storagePath,
+        sourceUrl: source.sourceUrl,
+        sourceSite: source.sourceSite,
       },
     });
 
@@ -245,6 +255,8 @@ export function toDto(row: Asset) {
     contentUrl: `/api/v1/assets/${row.id}/content`,
     folderId: row.folderId,
     trashedAt: row.trashedAt?.toISOString() ?? null,
+    sourceUrl: row.sourceUrl,
+    sourceSite: (row.sourceSite as SourceSite | null) ?? null,
     createdAt: row.createdAt.toISOString(),
   };
 }

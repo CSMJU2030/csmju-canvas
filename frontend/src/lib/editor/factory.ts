@@ -3,7 +3,7 @@ import { DEFAULT_FONT } from './fonts';
 import { frameShapeSpec, gridLayoutSpec } from './frames';
 import { findTablePreset, rowHeightFor, tableBody, type TablePresetKey } from './table';
 import type {
-  BrushKind, CanvasElement, ChartElement, ChartKind, FrameElement, FrameShape, GridElement, GridLayout, ImageElement, PathElement, ShapeElement,
+  BrushKind, CanvasElement, ChartElement, ChartKind, FrameElement, FrameShape, GridElement, GridLayout, ImageElement, ImageOrigin, PathElement, ShapeElement,
   ShapeKind, SvgElement, TableElement, TextElement,
 } from './types';
 import { isLineShape, newId } from './types';
@@ -223,7 +223,7 @@ export function placeCentered<T extends CanvasElement>(el: T, page: PageSize, ma
 /// รูปขนาดพอดีหน้า (ไม่เกิน 60% ของด้านสั้น) โดยคงสัดส่วนเดิม
 export function createImage(
   page: PageSize,
-  source: { src: string; assetId: string | null; naturalWidth: number; naturalHeight: number; name: string },
+  source: { src: string; assetId: string | null; naturalWidth: number; naturalHeight: number; name: string; origin?: ImageOrigin | null },
 ): ImageElement {
   const max = Math.min(page.width, page.height) * 0.6;
   const ratio = source.naturalWidth / Math.max(1, source.naturalHeight);
@@ -238,6 +238,7 @@ export function createImage(
     cornerRadius: 0,
     flipX: false,
     flipY: false,
+    ...(source.origin ? { origin: source.origin } : {}),
   };
 }
 

@@ -179,6 +179,14 @@ export interface ImageElement extends BaseElement {
   erase?: EraseStroke[] | null;
   /// ลบพื้นหลังแล้ว: `src` เป็นรูป PNG โปร่งใสที่สร้างใหม่ · เก็บรูปเดิมและค่าที่ใช้ไว้ให้คืนหรือลบใหม่ได้
   bgRemoved?: BgRemoved | null;
+  /// ภาพที่นำเข้าจากเว็บอื่น (แผง "แหล่งภาพ"): แหล่งและหน้าต้นฉบับ — ใช้ใส่เครดิตและให้ CMS แสดงที่มา
+  origin?: ImageOrigin | null;
+}
+
+/// แหล่งที่มาของภาพ · site: unsplash pexels pixabay openverse wikimedia nasa pinterest google other
+export interface ImageOrigin {
+  site: 'unsplash' | 'pexels' | 'pixabay' | 'openverse' | 'wikimedia' | 'nasa' | 'pinterest' | 'google' | 'other';
+  url: string | null;
 }
 
 export interface BgRemoved {
