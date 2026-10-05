@@ -1,3 +1,4 @@
+import { tableColors } from './table';
 import type { DesignDocument } from './types';
 
 /// แปลงสี CSS ใด ๆ เป็นรูปที่ <input type="color"> รับได้ (#rrggbb)
@@ -119,6 +120,7 @@ export function documentColors(doc: DesignDocument, limit = 10): string[] {
 
     for (const el of page.elements) {
       if (el.type === 'text' || el.type === 'svg' || el.type === 'path') add(el.color);
+      if (el.type === 'table') tableColors(el).forEach(add);
       if (el.type === 'shape') {
         add(el.fill);
         add(el.stroke);

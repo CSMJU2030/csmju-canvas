@@ -1,6 +1,7 @@
 import { cssFamily, ensureFont, isFontReady } from './fonts';
 import { applyAdjust, applyColorEdits, effectiveAdjust, findFilter, isNeutral } from './image-filters';
 import { canvasPaint } from './paint';
+import { drawTable, tableFonts } from './table-render';
 import {
   isLineShape,
   pageSizeOf,
@@ -72,6 +73,7 @@ export async function preloadPage(page: Page): Promise<void> {
     }
 
     if (el.type === 'text') jobs.push(ensureFont(el.fontFamily, el.fontWeight));
+    if (el.type === 'table') for (const weight of tableFonts(el)) jobs.push(ensureFont(el.fontFamily, weight));
   }
 
   await Promise.all(jobs);
@@ -240,17 +242,21 @@ export function withAlpha(color: string, alpha: number): string {
   return `rgb(${m[1]} ${m[2]} ${m[3]} / ${Math.max(0, Math.min(1, alpha))})`;
 }
 
-function drawText(ctx: CanvasRenderingContext2D, el: TextElement) {
-  // ฟอนต์ยังไม่พร้อม — สั่งโหลดครั้งเดียว แล้ววาดใหม่ทั้งหน้าเมื่อโหลดเสร็จ
-  const key = `${el.fontFamily}:${el.fontWeight}`;
+/// ฟอนต์ยังไม่พร้อม — สั่งโหลดครั้งเดียว แล้ววาดใหม่ทั้งหน้าเมื่อโหลดเสร็จ
+export function requestFont(family: string, weight: 400 | 700) {
+  const key = `${family}:${weight}`;
 
-  if (!pendingFonts.has(key) && !isFontReady(el.fontFamily, el.fontWeight)) {
+  if (!pendingFonts.has(key) && !isFontReady(family, weight)) {
     pendingFonts.add(key);
-    void ensureFont(el.fontFamily, el.fontWeight).then(() => {
+    void ensureFont(family, weight).then(() => {
       pendingFonts.delete(key);
       onImageReady();
     });
   }
+}
+
+function drawText(ctx: CanvasRenderingContext2D, el: TextElement) {
+  requestFont(el.fontFamily, el.fontWeight);
 
   ctx.font = fontString(el);
   setLetterSpacing(ctx, el.letterSpacing);
@@ -858,7 +864,7 @@ export function drawElement(ctx: CanvasRenderingContext2D, el: CanvasElement, pr
     ctx.translate(-cx, -cy);
   }
 
-  if (el.shadow && el.type !== 'text') {
+  if (el.shadow && el.type !== 'text' && el.type !== 'table') {
     ctx.shadowOffsetX = el.shadow.x;
     ctx.shadowOffsetY = el.shadow.y;
     ctx.shadowBlur = el.shadow.blur;
@@ -880,6 +886,9 @@ export function drawElement(ctx: CanvasRenderingContext2D, el: CanvasElement, pr
       break;
     case 'path':
       drawPath(ctx, el);
+      break;
+    case 'table':
+      drawTable(ctx, el);
       break;
   }
 

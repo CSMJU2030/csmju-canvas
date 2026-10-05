@@ -1,3 +1,5 @@
+import { normalizeTable } from './table';
+
 /// JSON state ของผืนผ้าใบ เวอร์ชัน 1 — สัญญาที่ CMS ใช้ render สด (docs/design-document.md)
 ///
 /// พิกัดทุกตัวเป็นพิกเซลของหน้า (ไม่ขึ้นกับการซูม) · จุดอ้างอิงคือมุมซ้ายบนของกล่อง
@@ -195,8 +197,44 @@ export interface PathElement extends BaseElement {
   brush: BrushKind;
 }
 
-export type ElementType = 'text' | 'shape' | 'image' | 'svg' | 'path';
-export type CanvasElement = TextElement | ShapeElement | ImageElement | SvgElement | PathElement;
+/// ช่องหนึ่งของตาราง · ไม่มี/null = ใช้ค่าของทั้งตาราง
+export interface TableCell {
+  text: string;
+  /// สีพื้นเฉพาะช่อง (ทับสีหัวตารางและแถวสลับ)
+  fill?: string | null;
+  /// สีตัวอักษรเฉพาะช่อง
+  color?: string | null;
+}
+
+/// เส้นของตาราง: ทุกเส้น · เฉพาะเส้นแนวนอน · ไม่มีเส้น
+export type TableLines = 'all' | 'horizontal' | 'none';
+
+/// ตาราง (แบบ Canva) — ดูสูตรการจัดวางใน lib/editor/table.ts และ docs/design-document.md
+///
+/// `cells[แถว][คอลัมน์]` · `columns`/`rows` เป็นสัดส่วนของความกว้าง/สูงกล่อง (รวมกันได้ 1)
+/// ความสูงแถวเป็นค่าต่ำสุด — แถวที่ข้อความยาวสูงขึ้นให้พอดีข้อความ แล้วกล่องสูงตาม
+export interface TableElement extends BaseElement {
+  type: 'table';
+  cells: TableCell[][];
+  columns: number[];
+  rows: number[];
+  fontFamily: string;
+  fontSize: number;
+  color: string;
+  align: 'left' | 'center' | 'right';
+  /// แถวแรกเป็นหัวตาราง (ตัวหนา + สีหัวตาราง)
+  header: boolean;
+  headerFill: string | null;
+  headerColor: string;
+  /// สีพื้นของแถวเนื้อหาแถวเว้นแถว (แถวที่ 2, 4, … นับจากแถวแรกของเนื้อหา) · null = ไม่สลับสี
+  stripeFill: string | null;
+  borderColor: string;
+  borderWidth: number;
+  lines: TableLines;
+}
+
+export type ElementType = 'text' | 'shape' | 'image' | 'svg' | 'path' | 'table';
+export type CanvasElement = TextElement | ShapeElement | ImageElement | SvgElement | PathElement | TableElement;
 
 export interface Page {
   id: string;
@@ -266,10 +304,21 @@ export function normalizeDocument(input: unknown): DesignDocument {
 function isKnownElement(value: unknown): value is CanvasElement {
   const type = (value as { type?: unknown } | null)?.type;
 
+  if (type === 'table') return isTableShape(value);
+
   return type === 'text' || type === 'shape' || type === 'image' || type === 'svg' || type === 'path';
 }
 
+/// ตารางต้องมีช่องอย่างน้อยหนึ่งช่อง ไม่งั้นข้ามทิ้ง (ค่าอื่นเติมให้ใน normalizeTable)
+function isTableShape(value: unknown): boolean {
+  const cells = (value as { cells?: unknown }).cells;
+
+  return Array.isArray(cells) && cells.length > 0 && cells.every((row) => Array.isArray(row)) && cells.some((row) => (row as unknown[]).length > 0);
+}
+
 function withDefaults(element: CanvasElement): CanvasElement {
+  if (element.type === 'table') element = normalizeTable(element);
+
   return {
     ...element,
     id: element.id || newId(),
