@@ -13,8 +13,8 @@ import { api } from '@/lib/csmju/api';
 import { useMe, useSignOut } from '@/lib/csmju/session';
 import { formatBytes } from '@/lib/format';
 import type { Preference, Quota } from '@/lib/types';
+import { CORE_HUB_WEB_URL } from '@/lib/csmju/core-hub';
 
-const CORE_HUB_WEB_URL = (process.env.NEXT_PUBLIC_CORE_HUB_WEB_URL ?? 'https://csmju2030.jowave.com').replace(/\/+$/, '');
 
 const SECTIONS = ACCOUNT_SECTIONS;
 

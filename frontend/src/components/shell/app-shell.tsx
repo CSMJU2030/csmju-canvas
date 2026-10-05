@@ -2,13 +2,14 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Bell, BookOpen, ChevronRight, Clock, CloudUpload, Ellipsis, FolderOpen, House, LayoutTemplate, PanelLeft, Plus, Sparkles,
+  ArrowLeft, Bell, BookOpen, ChevronRight, Clock, CloudUpload, Ellipsis, FolderOpen, House, LayoutTemplate, PanelLeft, Plus, Sparkles,
   Star, Trash2, UserRound, MessageCircle,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { Suspense, createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { api } from '@/lib/csmju/api';
+import { CORE_HUB_WEB_URL } from '@/lib/csmju/core-hub';
 import { useMe } from '@/lib/csmju/session';
 import { relativeTime } from '@/lib/format';
 import type { Asset, DesignSummary, Folder, NotificationItem } from '@/lib/types';
@@ -168,6 +169,13 @@ function Rail({ open, onToggleSecondary }: { open: boolean; onToggleSecondary: (
         );
       })}
       <div className="mt-auto flex flex-col items-center gap-3">
+        {/* ปุ่มกลับพอร์ทัลกลาง (ui-design-system.md ข้อ 5.1) — ไปอีก origin จึงใช้ <a> ไม่ใช่ Link */}
+        <a href={CORE_HUB_WEB_URL} aria-label="กลับ CSMJU Portal" title="กลับ CSMJU Portal" className="group flex w-16 flex-col items-center gap-1 text-csmju-caption text-ink">
+          <span className="flex size-10 items-center justify-center rounded-xl text-body group-hover:bg-surface/70">
+            <ArrowLeft aria-hidden className="size-5" />
+          </span>
+          Portal
+        </a>
         <NotificationsPopover />
         <AccountPopover />
       </div>
