@@ -13,6 +13,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { FloatingPanel, useAnchoredMenu } from '@/components/csmju/floating';
 import { cx, errorMessage, useToast } from '@/components/csmju/primitives';
 import { Avatar } from '@/components/shell/avatar';
+import { ReportDialog } from '@/components/reports/report-dialog';
 import { FeedbackDialog } from '@/components/shell/account-popover';
 import { useOpenCreate } from '@/components/shell/create-dialog';
 import { api } from '@/lib/csmju/api';
@@ -361,7 +362,8 @@ function FileMenu({ onPublish }: { onPublish: () => void }) {
         { label: 'คู่มือการใช้งาน', icon: <BookOpen aria-hidden className="size-4" />, onSelect: () => window.open('/help', '_blank') },
         { label: 'คีย์ลัด', icon: <Keyboard aria-hidden className="size-4" />, onSelect: () => window.open('/help/shortcuts', '_blank') },
         { label: 'แนะนำการปรับปรุง', icon: <Lightbulb aria-hidden className="size-4" />, onSelect: () => setFeedback('SUGGESTION') },
-        { label: 'รายงานดีไซน์', icon: <Flag aria-hidden className="size-4" />, onSelect: () => setFeedback('REPORT') },
+        // รายงานได้เฉพาะงานที่คนอื่นแชร์มา (งานของตัวเองไม่ต้องรายงาน)
+        ...(!owner && designId ? [{ label: 'รายงานดีไซน์', icon: <Flag aria-hidden className="size-4" />, onSelect: () => setFeedback('REPORT') }] : []),
       ],
     },
   ];
@@ -426,7 +428,8 @@ function FileMenu({ onPublish }: { onPublish: () => void }) {
           )}
         </div>
       </FloatingPanel>
-      {feedback && <FeedbackDialog kind={feedback} onClose={() => setFeedback(null)} />}
+      {feedback === 'SUGGESTION' && <FeedbackDialog kind="SUGGESTION" onClose={() => setFeedback(null)} />}
+      {feedback === 'REPORT' && designId && <ReportDialog target={{ kind: 'DESIGN', id: designId, label: title }} onClose={() => setFeedback(null)} />}
     </>
   );
 }

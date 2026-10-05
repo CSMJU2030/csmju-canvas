@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Copy, LayoutTemplate, Star } from 'lucide-react';
+import { Copy, Flag, LayoutTemplate, Star } from 'lucide-react';
 import Link from 'next/link';
 import { useState, type ReactNode } from 'react';
 import { api } from '@/lib/csmju/api';
@@ -11,6 +11,7 @@ import { normalizeDocument } from '@/lib/editor/types';
 import { relativeTime } from '@/lib/format';
 import type { DesignSummary, Template, TemplateSummary } from '@/lib/types';
 import { cx, useToast } from '../csmju/primitives';
+import { ReportDialog } from '../reports/report-dialog';
 import { TypeArt } from './type-art';
 
 /// ภาพย่อบนพื้นเทาอ่อนขอบมน (การ์ด "ดีไซน์ต่อ" ของ Canva)
@@ -117,6 +118,7 @@ export function TemplateCard({
   return (
     <div className="group relative">
       <StarButton template={template} />
+      {!template.isMine && <ReportTemplateButton template={template} />}
       <button type="button" onClick={onUse} className="block w-full text-left" aria-label={`ใช้เทมเพลต ${template.title}`}>
         {size === 'lg' ? (
           <span className="relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-xl border border-line bg-surface-muted transition-shadow group-hover:shadow-csmju-lg">
@@ -188,6 +190,29 @@ function StarButton({ template }: { template: TemplateSummary }) {
     >
       <Star aria-hidden className={cx('csmju-wiggle size-5', starred && 'fill-current')} />
     </button>
+  );
+}
+
+/// ปุ่มธงข้างปุ่มดาว — รายงานเทมเพลตของคนอื่นให้ผู้ดูแลตรวจ (เห็นตอนชี้เมาส์ · บนจอสัมผัสเห็นตลอด)
+function ReportTemplateButton({ template }: { template: TemplateSummary }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <button
+        type="button"
+        aria-label={`รายงานเทมเพลต ${template.title}`}
+        title="รายงานเทมเพลต"
+        onClick={(event) => {
+          event.stopPropagation();
+          setOpen(true);
+        }}
+        className="absolute top-2 right-12 z-10 inline-flex size-9 items-center justify-center rounded-lg bg-surface/90 text-ink opacity-100 shadow-csmju-sm transition-opacity hover:bg-surface md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100"
+      >
+        <Flag aria-hidden className="size-4" />
+      </button>
+      {open && <ReportDialog target={{ kind: 'TEMPLATE', id: template.id, label: template.title }} onClose={() => setOpen(false)} />}
+    </>
   );
 }
 

@@ -2,11 +2,12 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Bold, Check, ChevronDown, Ellipsis, Italic, List, MessageCirclePlus, Quote, RotateCcw, SendHorizontal, Smile, Strikethrough, Trash2, X,
+  Bold, Check, ChevronDown, Ellipsis, Flag, Italic, List, MessageCirclePlus, Quote, RotateCcw, SendHorizontal, Smile, Strikethrough, Trash2, X,
 } from 'lucide-react';
 import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { FloatingPanel, useAnchoredMenu } from '@/components/csmju/floating';
 import { ErrorState, Spinner, cx, errorMessage, useToast } from '@/components/csmju/primitives';
+import { ReportDialog } from '@/components/reports/report-dialog';
 import { api } from '@/lib/csmju/api';
 import { layerLabel } from '@/lib/editor/factory';
 import { boundingBox } from '@/lib/editor/geometry';
@@ -430,6 +431,7 @@ function CommentBody({
   resolvable?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
+  const [reporting, setReporting] = useState(false);
   const { open, setOpen, anchorRef, menuRef } = useAnchoredMenu('end');
   const { open: reactOpen, setOpen: setReactOpen, anchorRef: reactAnchor, menuRef: reactMenu } = useAnchoredMenu('start');
 
@@ -457,12 +459,17 @@ function CommentBody({
             {comment.resolvedAt ? <RotateCcw aria-hidden className="size-4" /> : <Check aria-hidden className="size-4" />}
           </button>
         )}
-        {(comment.canEdit || comment.canDelete) && (
+        {(comment.canEdit || comment.canDelete || comment.author !== 'me') && (
           <>
             <button ref={anchorRef} type="button" aria-label="ตัวเลือกความคิดเห็น" aria-expanded={open} onClick={() => setOpen((v) => !v)} className="inline-flex size-8 items-center justify-center rounded-lg text-ink hover:bg-surface-muted">
               <Ellipsis aria-hidden className="size-4" />
             </button>
             <FloatingPanel open={open} menuRef={menuRef} label="ตัวเลือกความคิดเห็น" className="w-44 rounded-xl border border-line bg-surface py-1 shadow-csmju-lg">
+              {comment.author !== 'me' && (
+                <button type="button" role="menuitem" onClick={() => { setOpen(false); setReporting(true); }} className="flex min-h-10 w-full items-center gap-2 px-3 text-left text-csmju-caption text-ink hover:bg-surface-muted">
+                  <Flag aria-hidden className="size-4" /> รายงาน
+                </button>
+              )}
               {comment.canEdit && (
                 <button type="button" role="menuitem" onClick={() => { setOpen(false); setEditing(true); }} className="flex min-h-10 w-full items-center px-3 text-left text-csmju-caption text-ink hover:bg-surface-muted">
                   แก้ไขข้อความ
@@ -477,6 +484,9 @@ function CommentBody({
           </>
         )}
       </div>
+      {reporting && (
+        <ReportDialog target={{ kind: 'COMMENT', id: comment.id, label: comment.body.slice(0, 80) }} onClose={() => setReporting(false)} />
+      )}
       <div className="mt-1.5 pl-9">
         {editing ? (
           <EditBox

@@ -25,8 +25,8 @@ export class QuotasService {
     const [usedBytes, assetCount, designCount, trashedDesignCount] = await Promise.all([
       this.assets.usedBytes(coreUserId),
       this.prisma.asset.count({ where: { coreUserId } }),
-      this.prisma.design.count({ where: { coreUserId, trashedAt: null } }),
-      this.prisma.design.count({ where: { coreUserId, trashedAt: { not: null } } }),
+      this.prisma.design.count({ where: { coreUserId, trashedAt: null, purgedAt: null } }),
+      this.prisma.design.count({ where: { coreUserId, trashedAt: { not: null }, purgedAt: null } }),
     ]);
 
     return { usedBytes, quotaBytes: QUOTA_BYTES_PER_USER, assetCount, designCount, trashedDesignCount };

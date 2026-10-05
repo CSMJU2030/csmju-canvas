@@ -1,6 +1,7 @@
 import { ForbiddenException, Injectable, NotFoundException, type OnModuleInit } from '@nestjs/common';
 import type { Prisma, Template } from '../../generated/prisma/client.js';
 import { subsystemRoleFor } from '../../auth/role-mapping.js';
+import { ADMIN_CORE_ROLES } from '../../common/auth/core-roles.decorator.js';
 import type { CoreHubUser } from '../../common/auth/core-user.js';
 import { Paginated } from '../../common/http/envelope.js';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
@@ -33,7 +34,8 @@ export class TemplatesService implements OnModuleInit {
   }
 
   async list(user: CoreHubUser, query: ListTemplatesQuery) {
-    const and: Prisma.TemplateWhereInput[] = [];
+    // เทมเพลตที่ผู้ดูแลซ่อนจากเรื่องร้องเรียนไม่ขึ้นในรายการของใคร
+    const and: Prisma.TemplateWhereInput[] = [{ hiddenAt: null }];
 
     if (query.q) {
       and.push({
@@ -98,7 +100,10 @@ export class TemplatesService implements OnModuleInit {
       include: { favorites: { where: { coreUserId: user.coreUserId }, select: { id: true } } },
     });
 
-    if (!row) throw new NotFoundException('ไม่พบเทมเพลตนี้ อาจถูกลบไปแล้ว');
+    // ซ่อนแล้ว = ผู้เผยแพร่และผู้ดูแลยังเปิดดูได้ (ตรวจเรื่องร้องเรียน) คนอื่นได้ 404
+    const canSeeHidden = row?.createdByCoreUserId === user.coreUserId || ADMIN_CORE_ROLES.includes(user.coreRole);
+
+    if (!row || (row.hiddenAt && !canSeeHidden)) throw new NotFoundException('ไม่พบเทมเพลตนี้ อาจถูกลบไปแล้ว');
 
     return { ...toSummary(row, user.coreUserId), pageCount: pageCountOf(row.document), document: row.document as Record<string, unknown> };
   }
