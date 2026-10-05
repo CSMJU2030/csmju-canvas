@@ -581,6 +581,15 @@
   padding-bottom: env(safe-area-inset-bottom);
 }
 
+/* เวทีพรีเซนต์ (เต็มจอ + หน้าต่างผู้พรีเซนต์) มืดเสมอแบบ Canva ไม่ว่าผู้ใช้เลือกธีมไหน —
+   ธีมมืดกลับสี surface-inverse เป็นสีอ่อน ถ้าไม่ล็อกไว้ตัวอักษรขาวจะอยู่บนพื้นอ่อนจนอ่านไม่ออก */
+.csmju-stage {
+  --csmju-color-surface: rgb(255 255 255);
+  --csmju-color-surface-inverse: rgb(15 23 42);
+  --csmju-color-text-inverse: rgb(248 250 252);
+  color-scheme: dark;
+}
+
 /* แถบเลื่อนไล่สีของแผงปรับรูป (อุณหภูมิ · เฉดสี) แบบ Canva */
 .csmju-track-temperature,
 .csmju-track-tint,

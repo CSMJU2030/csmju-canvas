@@ -128,7 +128,8 @@ function setupPopup(win: Window): HTMLElement {
 
   doc.title = 'หน้าต่างผู้พรีเซนต์ · CS Canvas';
   doc.documentElement.lang = 'th';
-  doc.documentElement.setAttribute('data-theme', 'dark');
+  // ใช้ธีมเดียวกับหน้าแก้ไข · สีของเวทีพรีเซนต์ล็อกด้วย .csmju-stage อยู่แล้ว
+  doc.documentElement.setAttribute('data-theme', document.documentElement.getAttribute('data-theme') ?? 'light');
   doc.head.querySelectorAll('[data-csc-clone]').forEach((node) => node.remove());
 
   for (const node of document.querySelectorAll('link[rel="stylesheet"], style')) {
@@ -287,7 +288,7 @@ function PresenterInner({ mode }: { mode: PresentMode }) {
 
   return (
     <>
-      <div ref={rootRef} className="fixed inset-0 z-50 flex flex-col bg-inverse">
+      <div ref={rootRef} className="csmju-stage fixed inset-0 z-50 flex flex-col bg-inverse">
         <SlideView page={page} interactive className="min-h-0 flex-1" />
         <PresentControls total={pages.length} isFull={isFull} />
         {toastVisible && mode !== 'presenter' && (
@@ -659,7 +660,7 @@ function PresenterWindow({ pages }: { pages: Page[] }) {
   }, []);
 
   return (
-    <div className="flex h-dvh flex-col bg-inverse text-on-inverse">
+    <div className="csmju-stage relative flex h-dvh flex-col bg-inverse text-on-inverse">
       <header className="flex shrink-0 items-center gap-4 px-5 py-3">
         <span className="text-csmju-h2 font-bold tabular-nums">{new Date(now).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</span>
         <span className="text-csmju-h3 tabular-nums">{formatClock(now - startedAt)}</span>
