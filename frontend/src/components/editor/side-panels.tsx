@@ -3,7 +3,7 @@
 import {
   AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignHorizontalDistributeCenter,
   AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ChevronsDown, ChevronsUp, ChevronDown, ChevronUp,
-  Eye, EyeOff, GripVertical, Image as ImageIcon, Lock, LockOpen, Pipette, Play, Search, Shapes, Type,
+  Eye, EyeOff, Film, GripVertical, Image as ImageIcon, Lock, LockOpen, Pipette, Play, Search, Shapes, Type,
 } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 import { cx } from '@/components/csmju/primitives';
@@ -130,7 +130,7 @@ function Arrange({ selected }: { selected: CanvasElement[] }) {
 }
 
 function Advanced({ el }: { el: CanvasElement }) {
-  const [keepRatio, setKeepRatio] = useState(el.type === 'image' || el.type === 'svg');
+  const [keepRatio, setKeepRatio] = useState(el.type === 'image' || el.type === 'svg' || el.type === 'video');
   const ids = [el.id];
   const ratio = el.width / Math.max(1, el.height);
   const textLike = el.type === 'text';
@@ -191,6 +191,7 @@ const TYPE_ICON: Record<CanvasElement['type'], ReactNode> = {
   image: <ImageIcon aria-hidden className="size-4" />,
   svg: <Shapes aria-hidden className="size-4" />,
   path: <Shapes aria-hidden className="size-4" />,
+  video: <Film aria-hidden className="size-4" />,
 };
 
 /// แท็บเลเยอร์: ลากเรียงลำดับ · คลิกเพื่อเลือก · ทั้งหมด/ทับซ้อน
@@ -692,7 +693,7 @@ export function ColorPanel({ target: forced, embedded = false }: { target?: Colo
         if (el.type === 'shape') {
           add(el.fill);
           add(el.stroke);
-        } else if (el.type !== 'image') add(el.color);
+        } else if (el.type !== 'image' && el.type !== 'video') add(el.color);
       }
     }
 
@@ -731,7 +732,7 @@ export function ColorPanel({ target: forced, embedded = false }: { target?: Colo
     ? doc.pages.reduce(
         (n, page) =>
           n +
-          page.elements.filter((el) => (el.type === 'shape' ? el.fill === changed.from || el.stroke === changed.from : el.type !== 'image' && el.color === changed.from)).length +
+          page.elements.filter((el) => (el.type === 'shape' ? el.fill === changed.from || el.stroke === changed.from : el.type !== 'image' && el.type !== 'video' && el.color === changed.from)).length +
           (page.background === changed.from ? 1 : 0),
         0,
       )

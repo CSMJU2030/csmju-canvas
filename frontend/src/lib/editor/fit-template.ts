@@ -40,6 +40,8 @@ export function fitTemplate(
         return { ...base, type: 'shape', strokeWidth: el.strokeWidth * scale, cornerRadius: el.cornerRadius * scale } as CanvasElement;
       case 'image':
         return { ...base, type: 'image', cornerRadius: el.cornerRadius * scale } as CanvasElement;
+      case 'video':
+        return { ...base, type: 'video', cornerRadius: el.cornerRadius * scale } as CanvasElement;
       case 'path':
         return { ...base, type: 'path', strokeWidth: el.strokeWidth * scale } as CanvasElement;
       default:
@@ -49,6 +51,11 @@ export function fitTemplate(
 
   return {
     version: 1,
-    pages: doc.pages.map((page): Page => ({ id: newId('page'), background: page.background, elements: page.elements.map(fitElement) })),
+    pages: doc.pages.map((page): Page => ({
+      id: newId('page'),
+      background: page.background,
+      elements: page.elements.map(fitElement),
+      ...(page.audio?.length ? { audio: page.audio.map((track) => ({ ...track, id: newId('audio') })) } : {}),
+    })),
   };
 }

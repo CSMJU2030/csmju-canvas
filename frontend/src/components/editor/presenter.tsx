@@ -11,6 +11,7 @@ import { FloatingPanel, useAnchoredMenu } from '@/components/csmju/floating';
 import { cx } from '@/components/csmju/primitives';
 import { mirrorFonts } from '@/lib/editor/fonts';
 import { entryLength, entryProgress } from '@/lib/editor/motion-export';
+import { PagePlayback, pageHasMedia } from '@/lib/editor/playback';
 import { drawPage, preloadPage, strokeFreehand, subscribeImageReady } from '@/lib/editor/render';
 import { useEditor } from '@/lib/editor/store';
 import { pageSizeOf, type Page } from '@/lib/editor/types';
@@ -323,6 +324,8 @@ function SlideView({ page, interactive = false, className }: { page: Page; inter
   // ถ้าใช้ของหน้าหลัก เมื่อหน้าหลักถูกบังหรือย่อ เบราว์เซอร์จะหยุดส่งเฟรม สไลด์ในหน้าต่างผู้พรีเซนต์จะว่างหรือค้าง
   const winRef = useRef<(Window & typeof globalThis) | null>(null);
   const fontTick = usePresent((s) => s.fontTick);
+  // วิดีโอและเสียงของหน้าเล่นเฉพาะสไลด์หลัก (ภาพย่อในหน้าต่างผู้พรีเซนต์แสดงภาพปก ไม่ให้เสียงซ้อนกัน)
+  const playbackRef = useRef<PagePlayback | null>(null);
 
   useEffect(() => {
     const wrap = wrapRef.current!;
@@ -358,7 +361,7 @@ function SlideView({ page, interactive = false, className }: { page: Page; inter
     ctx.setTransform(dpr * scale, 0, 0, dpr * scale, 0, 0);
     ctx.fillStyle = 'rgb(255 255 255)';
     if (!page.background) ctx.fillRect(0, 0, size.width, size.height);
-    drawPage(ctx, page, size, { progress: progressOf });
+    drawPage(ctx, page, size, { progress: progressOf, videoFrame: playbackRef.current?.frame });
 
     for (const stroke of [...(ink ?? []), ...(drawing.current ? [drawing.current] : [])]) {
       ctx.save();
@@ -372,8 +375,23 @@ function SlideView({ page, interactive = false, className }: { page: Page; inter
 
     const effectRunning = effect && drawMagic(ctx, effect.kind, now - effect.at, size);
 
-    if (elapsed < entryLength(page) + 100 || effectRunning) raf.current = win.requestAnimationFrame(() => paintRef.current());
+    if (elapsed < entryLength(page) + 100 || effectRunning || playbackRef.current?.animating) raf.current = win.requestAnimationFrame(() => paintRef.current());
   }, [page, size, scale, enteredAt, ink, effect]);
+
+  // เข้าหน้า: เริ่มคลิปวิดีโอและเสียงประกอบจากต้น · ออกจากหน้า/จบการพรีเซนต์: หยุดและคืนตัวเล่น
+  useEffect(() => {
+    if (!interactive || !pageHasMedia(page)) return;
+
+    const playback = new PagePlayback(page, { ownerDocument: wrapRef.current?.ownerDocument });
+
+    playbackRef.current = playback;
+    void playback.start().then(() => paintRef.current());
+
+    return () => {
+      playback.stop();
+      if (playbackRef.current === playback) playbackRef.current = null;
+    };
+  }, [interactive, page, enteredAt]);
 
   // ฟอนต์ในหน้าต่างนี้โหลดเสร็จ → วาดใหม่
   useEffect(() => {

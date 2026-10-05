@@ -316,7 +316,7 @@ export function ImageGrid({ q, limit = 60 }: { q: string; limit?: number }) {
   const toast = useToast();
   const assets = useQuery({
     queryKey: ['assets', 'editor', q, limit],
-    queryFn: () => api.list<Asset>(`/assets${qs({ q: q || undefined, limit })}`),
+    queryFn: () => api.list<Asset>(`/assets${qs({ q: q || undefined, kind: 'image', limit })}`),
   });
 
   const insert = (asset: Asset) => {

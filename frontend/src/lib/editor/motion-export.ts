@@ -1,7 +1,8 @@
 /// ส่งออกงานแบบเคลื่อนไหว: GIF (เข้ารหัสเอง) และวิดีโอ (MediaRecorder ของเบราว์เซอร์) — ทำในเครื่องผู้ใช้ทั้งหมด
 
 import { encodeGif, type GifFrame } from './gif';
-import { drawPage, preloadPage } from './render';
+import { PagePlayback, pageHasMedia } from './playback';
+import { drawPage, preloadPage, type VideoFrameSource } from './render';
 import { pageSizeOf, type CanvasElement, type Page } from './types';
 
 /// เวลาแสดงหน้าเริ่มต้น (วินาที) ตรงกับปุ่ม ⏱ บนแถบเครื่องมือหน้า
@@ -39,12 +40,19 @@ function frameCanvas(width: number, height: number) {
   return { canvas, ctx: canvas.getContext('2d', { willReadFrequently: true })! };
 }
 
-function paint(ctx: CanvasRenderingContext2D, page: Page, size: { width: number; height: number }, scale: number, elapsed: number) {
+function paint(
+  ctx: CanvasRenderingContext2D,
+  page: Page,
+  size: { width: number; height: number },
+  scale: number,
+  elapsed: number,
+  videoFrame?: VideoFrameSource,
+) {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = 'rgb(255 255 255)';
   ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
   ctx.setTransform(scale, 0, 0, scale, 0, 0);
-  drawPage(ctx, page, size, { progress: entryProgress(page, elapsed) });
+  drawPage(ctx, page, size, { progress: entryProgress(page, elapsed), videoFrame });
 }
 
 /// GIF: เฟรมละ 1/10 วินาทีระหว่างแอนิเมชัน แล้วค้างภาพสุดท้ายตามเวลาของหน้า
@@ -84,11 +92,13 @@ export async function renderGif(pages: Page[], base: { width: number; height: nu
   return new Blob([bytes as BlobPart], { type: 'image/gif' });
 }
 
-/// ชนิดไฟล์วิดีโอที่เบราว์เซอร์นี้อัดได้ (MP4 ถ้าได้ ไม่งั้น WebM)
-export function videoMimeType(): { mime: string; ext: 'mp4' | 'webm' } | null {
+/// ชนิดไฟล์วิดีโอที่เบราว์เซอร์นี้อัดได้ (MP4 ถ้าได้ ไม่งั้น WebM) · `withAudio` = ลองชนิดที่มีเสียงก่อน
+export function videoMimeType(withAudio = false): { mime: string; ext: 'mp4' | 'webm' } | null {
   if (typeof MediaRecorder === 'undefined') return null;
 
-  for (const mime of ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']) {
+  const audioFirst = withAudio ? ['video/mp4;codecs=avc1,mp4a.40.2', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus'] : [];
+
+  for (const mime of [...audioFirst, 'video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']) {
     if (MediaRecorder.isTypeSupported(mime)) return { mime, ext: mime.startsWith('video/mp4') ? 'mp4' : 'webm' };
   }
 
@@ -96,6 +106,9 @@ export function videoMimeType(): { mime: string; ext: 'mp4' | 'webm' } | null {
 }
 
 /// วิดีโอ: เล่นทุกหน้าตามเวลาจริงบนผืนผ้าใบนอกจอแล้วอัดด้วย MediaRecorder (ใช้เวลาเท่าความยาววิดีโอ)
+///
+/// คลิปวิดีโอในหน้าเล่นจริง (เฟรมสด) และเสียงของคลิปที่ไม่ปิดเสียง + เสียงประกอบของหน้าถูกผสมลงไฟล์
+/// ผ่าน Web Audio — ถ้าเบราว์เซอร์อัดเสียงไม่ได้ ไฟล์ยังได้ภาพครบแต่ไม่มีเสียง
 export async function renderVideo(
   pages: Page[],
   base: { width: number; height: number },
@@ -103,11 +116,24 @@ export async function renderVideo(
   onProgress?: (ratio: number) => void,
   signal?: AbortSignal,
 ): Promise<{ blob: Blob; ext: 'mp4' | 'webm' }> {
-  const type = videoMimeType();
+  const wantsAudio = pages.some((p) => Boolean(p.audio?.length) || p.elements.some((el) => el.type === 'video' && !el.muted && !el.hidden));
+  const audioContext = wantsAudio && typeof AudioContext !== 'undefined' ? new AudioContext() : null;
+  const audioOut = audioContext?.createMediaStreamDestination() ?? null;
+  const type = videoMimeType(Boolean(audioOut));
 
-  if (!type) throw new Error('เบราว์เซอร์นี้อัดวิดีโอไม่ได้ ลองใช้ Chrome หรือ Edge รุ่นล่าสุด');
+  if (!type) {
+    void audioContext?.close();
+    throw new Error('เบราว์เซอร์นี้อัดวิดีโอไม่ได้ ลองใช้ Chrome หรือ Edge รุ่นล่าสุด');
+  }
 
   for (const page of pages) await preloadPage(page);
+
+  const playbacks = pages.map((p) =>
+    pageHasMedia(p) ? new PagePlayback(p, audioContext && audioOut ? { audio: { context: audioContext, destination: audioOut } } : {}) : null,
+  );
+
+  await Promise.all(playbacks.map((p) => p?.ready()));
+  await audioContext?.resume().catch(() => undefined);
 
   const first = pageSizeOf(pages[0], base);
   const scale = height / first.height;
@@ -116,6 +142,8 @@ export async function renderVideo(
   const h = Math.round(height / 2) * 2;
   const { canvas, ctx } = frameCanvas(width, h);
   const stream = canvas.captureStream(30);
+
+  if (audioOut) for (const track of audioOut.stream.getAudioTracks()) stream.addTrack(track);
   const recorder = new MediaRecorder(stream, { mimeType: type.mime, videoBitsPerSecond: Math.round(width * h * 4) });
   const chunks: Blob[] = [];
   const total = pages.reduce((sum, p) => sum + pageSeconds(p) * 1000, 0);
@@ -128,16 +156,25 @@ export async function renderVideo(
     recorder.onstop = () => resolve();
   });
 
+  let playing = -1;
+
   const frameAt = (time: number) => {
     let start = 0;
 
-    for (const page of pages) {
+    for (const [index, page] of pages.entries()) {
       const length = pageSeconds(page) * 1000;
 
       if (time < start + length || page === pages[pages.length - 1]) {
         const size = pageSizeOf(page, base);
 
-        paint(ctx, page, size, Math.min(width / size.width, h / size.height), time - start);
+        // เข้าหน้าใหม่: หยุดคลิปของหน้าก่อน แล้วเริ่มคลิปของหน้านี้จากต้นช่วงตัดต่อ
+        if (index !== playing) {
+          playbacks[playing]?.stop();
+          playing = index;
+          void playbacks[index]?.start();
+        }
+
+        paint(ctx, page, size, Math.min(width / size.width, h / size.height), time - start, playbacks[index]?.frame);
 
         return;
       }
@@ -173,6 +210,8 @@ export async function renderVideo(
   }).finally(() => {
     if (recorder.state !== 'inactive') recorder.stop();
     stream.getTracks().forEach((track) => track.stop());
+    playbacks.forEach((p) => p?.stop());
+    void audioContext?.close();
   });
 
   await done;

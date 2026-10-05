@@ -15,6 +15,7 @@ import { canEditDoc, useEditor } from '@/lib/editor/store';
 import { pageSizeOf, type Page } from '@/lib/editor/types';
 import { useEditorUi } from '@/lib/editor/ui-store';
 import { clampZoom, fitToScreen } from './stage';
+import { AudioTrackBar } from './media-panel';
 import { useTimer } from './timer';
 
 /// ภาพย่อหน้า (วาดใหม่เมื่อเนื้อหาของหน้านั้นเปลี่ยน)
@@ -603,6 +604,8 @@ export function BottomBar({ onPresent, readOnly = false }: { onPresent: () => vo
   return (
     <>
       {stripOpen && pagesView === 'strip' && <PageStrip />}
+      {/* เสียงประกอบของหน้าปัจจุบัน แสดงเป็นแถบใต้แถบภาพย่อหน้า (แบบ Canva) */}
+      {pagesView === 'strip' && <AudioTrackBar />}
       <div className="mb-16 flex min-h-11 shrink-0 items-center justify-between gap-2 bg-stage px-2 md:mb-0">
         <div className="flex items-center gap-1">
           {!readOnly && (

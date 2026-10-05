@@ -708,7 +708,7 @@ export function ReplacePanel() {
   const input = useRef<HTMLInputElement>(null);
   const toast = useToast();
   const queryClient = useQueryClient();
-  const assets = useQuery({ queryKey: ['assets', 'replace'], queryFn: () => api.list<Asset>(`/assets${qs({ limit: 60 })}`) });
+  const assets = useQuery({ queryKey: ['assets', 'replace'], queryFn: () => api.list<Asset>(`/assets${qs({ kind: 'image', limit: 60 })}`) });
 
   const replace = (asset: Asset) => {
     if (!el) return;

@@ -2,33 +2,30 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  ArrowDown, ArrowLeft, ArrowUp, ChevronDown, Copy, Ellipsis, Eye, EyeOff, Folder as FolderIcon, FolderInput, FolderMinus,
-  FolderOpen, FolderPlus, Globe, ImageIcon, LayoutPanelLeft, Lock, LockOpen, PenLine, Pencil, Plus, Search, Shapes,
-  SlidersHorizontal, Smile, Spline, Star, Sticker, StickyNote, Trash2, Type, CloudUpload, Download, X,
+  ArrowDown, ArrowUp, ChevronDown, Copy, Ellipsis, Eye, EyeOff, Folder as FolderIcon, FolderInput, FolderMinus,
+  FolderOpen, FolderPlus, Globe, LayoutPanelLeft, Lock, LockOpen, PenLine, Pencil, Plus, Shapes,
+  SlidersHorizontal, Star, Trash2, Type, CloudUpload, Download, X,
 } from 'lucide-react';
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { FloatingPanel, useAnchoredMenu } from '@/components/csmju/floating';
 import { Button, EmptyState, ErrorState, IconButton, Menu, Spinner, cx, errorMessage, useToast } from '@/components/csmju/primitives';
 import { Thumbnail } from '@/components/designs/cards';
 import { api, qs } from '@/lib/csmju/api';
 import {
-  FONT_SETS, STICKY_COLORS, createFontSet, createImage, createShape, createSticky, createSvg, createText, layerLabel,
+  FONT_SETS, createFontSet, createImage, createText, layerLabel,
   textPresetText, type FontSet, type TextPreset,
 } from '@/lib/editor/factory';
 import { COLOR_FILTERS, colorFilterOf } from '@/lib/editor/color';
 import { fitTemplate } from '@/lib/editor/fit-template';
 import { cssFamily, ensureFont } from '@/lib/editor/fonts';
-import { ICONS, iconSvg } from '@/lib/editor/icons';
-import {
-  ICON_CATEGORY_TH, iconMarkup, loadIcons, loadPhotos, loadStickers, matchIcon, matchPhoto, matchSticker, photoSrc, photoThumb,
-  searchTerms, stickerSrc, type LibraryPhoto,
-} from '@/lib/editor/library';
+import { loadPhotos, matchPhoto, photoSrc, photoThumb, searchTerms, type LibraryPhoto } from '@/lib/editor/library';
 import { pushRecent, useRecent } from '@/lib/editor/recent';
 import { measureTextHeight, renderPageToCanvas } from '@/lib/editor/render';
 import { currentPage, useEditor } from '@/lib/editor/store';
-import { normalizeDocument, type ShapeKind } from '@/lib/editor/types';
+import { normalizeDocument } from '@/lib/editor/types';
 import { useEditorUi, type PanelKey } from '@/lib/editor/ui-store';
 import { download, safeFileName } from '@/lib/editor/export';
+import { ACCEPT, mediaKindOf, uploadProblem, type MediaKind } from '@/lib/editor/media';
 import type { Asset, AssetFolder, Template, TemplateSummary } from '@/lib/types';
 import { ColorPicker, RainbowSwatch, Swatch } from './color-picker';
 import { matchFonts, usePreloadFonts } from './font-picker';
@@ -37,7 +34,9 @@ import { AnimatePanel, ColorPanel, EffectsPanel, PositionPanel } from './side-pa
 import { PanelHeader, UnderlineTabs } from './controls';
 import { CropPanel, FontPanel, ImageEditPanel, ReplacePanel } from './side-panels-media';
 import { SignaturePanel } from './signature-panel';
-import { LINES, SHAPES, ShapeGlyph } from './tools-palette';
+import { ElementsPanel } from './elements-panel';
+import { AudioLibrary, VideoLibrary, useInsertMedia } from './media-panel';
+import { BackHeader, PanelFrame, PanelSearch, PanelTitle, SectionHeading, useLibrary, usePageSize } from './panel-parts';
 
 /// แผงด้านซ้ายของหน้าแก้ไข — เรียงตาม Canva (ภาพบรีฟชุด "พรีเซนเทชั่น" ใช้กับดีไซน์ทุกประเภท)
 ///
@@ -84,7 +83,6 @@ export const PANEL_LABELS: Record<PanelKey, string> = {
 
 export function PanelContent({
   panel,
-  onNavigate,
   onBackToTools,
   onClose,
 }: {
@@ -97,7 +95,7 @@ export function PanelContent({
     case 'templates':
       return <TemplatesPanel />;
     case 'elements':
-      return <ElementsPanel onNavigate={onNavigate} />;
+      return <ElementsPanel />;
     case 'text':
       return <TextPanel />;
     case 'uploads':
@@ -208,94 +206,6 @@ function NotesPanel({ onClose }: { onClose: () => void }) {
         style={{ fontSize: `${size}px`, lineHeight: 1.6 }}
       />
       <p className="shrink-0 px-4 py-2 text-right text-csmju-caption text-muted tabular-nums">{notes.length}/5000</p>
-    </div>
-  );
-}
-
-/// ส่วนหัวของแผงอยู่กับที่ เนื้อหาเลื่อนได้ (แบบ Canva ที่ช่องค้นหาไม่เลื่อนหายไป)
-function PanelFrame({ header, children }: { header: ReactNode; children: ReactNode }) {
-  return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex shrink-0 flex-col gap-3 px-4 pt-4 pb-3">{header}</div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6">{children}</div>
-    </div>
-  );
-}
-
-function PanelTitle({ children }: { children: ReactNode }) {
-  return <h2 className="text-csmju-body font-bold text-ink">{children}</h2>;
-}
-
-function BackHeader({ title, onBack }: { title: string; onBack: () => void }) {
-  return (
-    <div className="flex items-center gap-2">
-      <button type="button" onClick={onBack} aria-label="ย้อนกลับ" className="-ml-2 inline-flex size-11 items-center justify-center rounded-xl text-ink hover:bg-surface-muted">
-        <ArrowLeft aria-hidden className="size-5" />
-      </button>
-      <h2 className="text-csmju-body font-bold text-ink">{title}</h2>
-    </div>
-  );
-}
-
-function usePageSize() {
-  const width = useEditor((s) => s.width);
-  const height = useEditor((s) => s.height);
-
-  return { width, height };
-}
-
-/// ช่องค้นหาบนสุดของแผง (กรอบขาวมุมมน แบบ Canva)
-function PanelSearch({
-  id,
-  label,
-  value,
-  onChange,
-  onSubmit,
-  trailing,
-}: {
-  id: string;
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  onSubmit?: () => void;
-  trailing?: ReactNode;
-}) {
-  return (
-    <form
-      role="search"
-      onSubmit={(event) => {
-        event.preventDefault();
-        onSubmit?.();
-      }}
-      className="relative"
-    >
-      <Search aria-hidden className="pointer-events-none absolute top-1/2 left-4 size-5 -translate-y-1/2 text-ink" />
-      <label htmlFor={id} className="sr-only">{label}</label>
-      <input
-        id={id}
-        type="search"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={label}
-        className={cx(
-          'min-h-14 w-full rounded-2xl border border-line-strong bg-surface pl-12 text-csmju-body text-ink placeholder:text-muted focus:border-primary focus:outline-none',
-          trailing ? 'pr-16' : 'pr-4',
-        )}
-      />
-      {trailing && <div className="absolute top-1/2 right-2 -translate-y-1/2">{trailing}</div>}
-    </form>
-  );
-}
-
-function SectionHeading({ children, onSeeAll, seeAllLabel = 'ดูทั้งหมด' }: { children: ReactNode; onSeeAll?: () => void; seeAllLabel?: string }) {
-  return (
-    <div className="mb-3 flex items-center justify-between">
-      <h3 className="text-csmju-body font-bold text-ink">{children}</h3>
-      {onSeeAll && (
-        <button type="button" onClick={onSeeAll} className="min-h-11 px-2 text-csmju-caption font-semibold text-ink hover:underline">
-          {seeAllLabel}
-        </button>
-      )}
     </div>
   );
 }
@@ -548,481 +458,6 @@ function TemplateFilterButton({ value, onApply }: { value: TemplateFilters; onAp
   );
 }
 
-// ── องค์ประกอบ ─────────────────────────────────────────────────────
-
-type Category = 'shapes' | 'lines' | 'graphics' | 'stickers' | 'photos' | 'icons' | 'sticky';
-
-/// สิ่งที่กดใช้ ("shape:rect" "icon:heart" "tabler:star" "sticker:1f600" "photo:cma-123") — เก็บข้อมูลพอสร้างซ้ำได้ใน "ใช้งานล่าสุด"
-interface RecentElement {
-  id: string;
-  /// เนื้อ SVG ของกราฟิก Tabler
-  d?: string;
-  /// ขนาดภาพของภาพถ่าย
-  w?: number;
-  h?: number;
-}
-
-function insertImage(page: { width: number; height: number }, src: string, naturalWidth: number, naturalHeight: number, name: string) {
-  useEditor.getState().addElements([createImage(page, { src, assetId: null, naturalWidth, naturalHeight, name })]);
-}
-
-function addElement(item: RecentElement, page: { width: number; height: number }) {
-  const [kind, key] = item.id.split(':');
-  const add = useEditor.getState().addElements;
-
-  if (kind === 'shape') {
-    const rounded = key === 'rect-rounded';
-
-    add([createShape(page, (rounded ? 'rect' : key) as ShapeKind, { rounded })]);
-  } else if (kind === 'icon') {
-    const entry = ICONS.find((icon) => icon.name === key);
-
-    if (!entry) return;
-    add([createSvg(page, iconSvg(entry), entry.label)]);
-  } else if (kind === 'tabler' && item.d) {
-    add([{ ...createSvg(page, iconMarkup({ d: item.d }), key.replace(/-/g, ' ')), color: 'rgb(15 23 42)' }]);
-  } else if (kind === 'sticker') {
-    insertImage(page, stickerSrc(key), 128, 128, 'สติกเกอร์');
-  } else if (kind === 'photo' && item.w && item.h) {
-    insertImage(page, photoSrc(key), item.w, item.h, 'ภาพถ่าย');
-  } else if (kind === 'sticky') {
-    add(createSticky(page, key));
-  } else {
-    return;
-  }
-
-  pushRecent<RecentElement>('elements', item);
-}
-
-function elementLabel(id: string): string {
-  const [kind, key] = id.split(':');
-
-  if (kind === 'shape') return key === 'rect-rounded' ? 'สี่เหลี่ยมมุมโค้ง' : SHAPES.find((s) => s.kind === key && !s.rounded)?.label ?? LINES.find((l) => l.kind === key)?.label ?? key;
-  if (kind === 'icon') return ICONS.find((icon) => icon.name === key)?.label ?? key;
-  if (kind === 'sticky') return `โน้ตสี${STICKY_COLORS.find((c) => c.key === key)?.label ?? ''}`;
-  if (kind === 'tabler') return `กราฟิก ${key.replace(/-/g, ' ')}`;
-  if (kind === 'sticker') return 'สติกเกอร์';
-  if (kind === 'photo') return 'ภาพถ่าย';
-
-  return id;
-}
-
-function ElementGlyph({ item, className = 'size-10' }: { item: RecentElement; className?: string }) {
-  const [kind, key] = item.id.split(':');
-
-  if (kind === 'shape') {
-    const line = LINES.find((l) => l.kind === key);
-
-    if (line) {
-      return (
-        <svg aria-hidden viewBox="0 0 24 24" className={cx(className, 'text-ink')} fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round">
-          <path d={line.path} />
-        </svg>
-      );
-    }
-
-    return <ShapeGlyph kind={(key === 'rect-rounded' ? 'rect' : key) as ShapeKind} rounded={key === 'rect-rounded'} className={cx(className, 'text-type-teal')} />;
-  }
-
-  if (kind === 'icon') {
-    const entry = ICONS.find((icon) => icon.name === key);
-
-    return entry ? <entry.icon aria-hidden className={cx(className, 'text-ink')} /> : null;
-  }
-
-  if (kind === 'tabler' && item.d) {
-    // SVG จากคลังกราฟิกในระบบ (Tabler Icons) ไม่ใช่ข้อมูลจากผู้ใช้
-    return <span aria-hidden className={cx(className, 'block text-ink [&>svg]:size-full')} dangerouslySetInnerHTML={{ __html: iconMarkup({ d: item.d }, 1.6) }} />;
-  }
-
-  if (kind === 'sticker') {
-    // eslint-disable-next-line @next/next/no-img-element -- ไฟล์ SVG ในคลังของระบบ
-    return <img src={stickerSrc(key)} alt="" className={className} loading="lazy" />;
-  }
-
-  if (kind === 'photo') {
-    // eslint-disable-next-line @next/next/no-img-element -- ภาพย่อในคลังของระบบ
-    return <img src={photoThumb(key)} alt="" className="size-full object-cover" loading="lazy" />;
-  }
-
-  const sticky = STICKY_COLORS.find((c) => c.key === key);
-
-  return (
-    <svg aria-hidden viewBox="0 0 24 24" className={className}>
-      <path d="M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v9l-7 7H5a2 2 0 0 1-2-2z" style={{ fill: sticky?.fill }} />
-      <path d="M14 21v-5a2 2 0 0 1 2-2h5z" style={{ fill: sticky?.swatch }} />
-    </svg>
-  );
-}
-
-const CATEGORIES: { key: Category | 'uploads'; label: string; icon: IconType; tone: string; soft: string }[] = [
-  { key: 'shapes', label: 'รูปทรง', icon: Shapes, tone: 'bg-type-teal', soft: 'bg-type-teal/35' },
-  { key: 'graphics', label: 'กราฟิก', icon: Smile, tone: 'bg-type-orange', soft: 'bg-type-orange/35' },
-  { key: 'stickers', label: 'สติกเกอร์', icon: Sticker, tone: 'bg-type-pink', soft: 'bg-type-pink/35' },
-  { key: 'photos', label: 'ภาพถ่าย', icon: ImageIcon, tone: 'bg-type-blue', soft: 'bg-type-blue/35' },
-  { key: 'icons', label: 'ไอคอน', icon: Star, tone: 'bg-type-purple', soft: 'bg-type-purple/35' },
-  { key: 'lines', label: 'เส้น', icon: Spline, tone: 'bg-type-indigo', soft: 'bg-type-indigo/35' },
-  { key: 'sticky', label: 'โน้ตแปะ', icon: StickyNote, tone: 'bg-type-magenta', soft: 'bg-type-magenta/35' },
-  { key: 'uploads', label: 'รูปของฉัน', icon: CloudUpload, tone: 'bg-type-green', soft: 'bg-type-green/35' },
-];
-
-function basicItems(category: 'shapes' | 'lines' | 'icons' | 'sticky'): RecentElement[] {
-  switch (category) {
-    case 'shapes':
-      return SHAPES.map((s) => ({ id: s.rounded ? 'shape:rect-rounded' : `shape:${s.kind}` })).concat({ id: 'shape:arrow' });
-    case 'lines':
-      return LINES.map((l) => ({ id: `shape:${l.kind}` })).concat({ id: 'shape:arrow' });
-    case 'icons':
-      return ICONS.map((icon) => ({ id: `icon:${icon.name}` }));
-    case 'sticky':
-      return STICKY_COLORS.map((c) => ({ id: `sticky:${c.key}` }));
-  }
-}
-
-function useLibrary<T>(key: string, loader: () => Promise<T>, enabled = true) {
-  return useQuery({ queryKey: ['library', key], queryFn: loader, staleTime: Infinity, gcTime: Infinity, enabled });
-}
-
-function ElementsPanel({ onNavigate }: { onNavigate: (panel: PanelKey) => void }) {
-  const page = usePageSize();
-  const [q, setQ] = useState('');
-  const [category, setCategory] = useState<Category | null>(null);
-  const recent = useRecent<RecentElement>('elements');
-  const term = q.trim();
-  const add = (item: RecentElement) => addElement(item, page);
-
-  if (category) {
-    const meta = CATEGORIES.find((c) => c.key === category)!;
-
-    return (
-      <PanelFrame header={<BackHeader title={meta.label} onBack={() => setCategory(null)} />}>
-        {category === 'graphics' ? (
-          <GraphicsBrowser onPick={add} />
-        ) : category === 'stickers' ? (
-          <StickersBrowser onPick={add} />
-        ) : category === 'photos' ? (
-          <PhotosBrowser onPick={add} />
-        ) : (
-          <ElementGrid items={basicItems(category)} onPick={add} columns={category === 'icons' ? 4 : 3} />
-        )}
-        {category === 'icons' && <p className="mt-3 text-csmju-caption text-muted">ไอคอนจาก Lucide (สัญญาอนุญาต ISC) ใช้ได้ฟรี</p>}
-      </PanelFrame>
-    );
-  }
-
-  return (
-    <PanelFrame header={<PanelSearch id="elements-search" label="ค้นหาองค์ประกอบ เช่น หัวใจ ดอกไม้ ทะเล" value={q} onChange={setQ} />}>
-      {term ? (
-        <ElementSearch query={term} onPick={add} onMore={setCategory} />
-      ) : (
-        <>
-          {recent.length > 0 && (
-            <section className="mb-6">
-              <SectionHeading>ใช้งานล่าสุด</SectionHeading>
-              <ul className="csmju-scroll-x -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
-                {recent.map((item) => (
-                  <li key={item.id} className="shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => add(item)}
-                      aria-label={`เพิ่ม ${elementLabel(item.id)}`}
-                      title={elementLabel(item.id)}
-                      className="flex size-22 items-center justify-center overflow-hidden rounded-xl bg-surface-muted hover:bg-primary-soft"
-                    >
-                      <ElementGlyph item={item} />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-          <section className="mb-6">
-            <SectionHeading>เลือกดูหมวดหมู่</SectionHeading>
-            <ul className="grid grid-cols-4 gap-x-1 gap-y-4">
-              {CATEGORIES.map((c) => (
-                <li key={c.key}>
-                  <button
-                    type="button"
-                    onClick={() => (c.key === 'uploads' ? onNavigate('uploads') : setCategory(c.key))}
-                    className="group flex w-full flex-col items-center gap-2 text-csmju-caption text-ink"
-                  >
-                    <span className="relative flex size-16 items-center justify-center">
-                      <span aria-hidden className={cx('absolute inset-1 translate-x-1 rotate-6 rounded-2xl', c.soft)} />
-                      <span className={cx('relative flex size-14 items-center justify-center rounded-2xl text-on-inverse shadow-csmju-md transition-transform group-hover:-translate-y-0.5', c.tone)}>
-                        <c.icon aria-hidden className="csmju-wiggle size-7" strokeWidth={2.2} />
-                      </span>
-                    </span>
-                    {c.label}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
-          <StickerPreviewRow onPick={add} onMore={() => setCategory('stickers')} />
-          <PhotoPreviewRow onPick={add} onMore={() => setCategory('photos')} />
-          <p className="text-csmju-caption text-muted">กราฟิก สติกเกอร์ และภาพถ่ายในคลังเป็นของที่สัญญาอนุญาตให้ใช้ได้ฟรี (Tabler Icons · Noto Emoji · Cleveland Museum of Art CC0) เก็บในระบบของคณะ</p>
-        </>
-      )}
-    </PanelFrame>
-  );
-}
-
-function StickerPreviewRow({ onPick, onMore }: { onPick: (item: RecentElement) => void; onMore: () => void }) {
-  const stickers = useLibrary('stickers', loadStickers);
-
-  if (!stickers.data?.length) return null;
-
-  return (
-    <section className="mb-6">
-      <SectionHeading onSeeAll={onMore}>สติกเกอร์</SectionHeading>
-      <div className="grid grid-cols-4 gap-2">
-        {stickers.data.slice(0, 8).map((s) => (
-          <LibraryTile key={s.id} label={`สติกเกอร์ ${s.ch}`} onClick={() => onPick({ id: `sticker:${s.id}` })}>
-            {/* eslint-disable-next-line @next/next/no-img-element -- ไฟล์ SVG ในคลังของระบบ */}
-            <img src={stickerSrc(s.id)} alt="" className="size-12" loading="lazy" />
-          </LibraryTile>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function PhotoPreviewRow({ onPick, onMore }: { onPick: (item: RecentElement) => void; onMore: () => void }) {
-  const photos = useLibrary('photos', loadPhotos);
-
-  if (!photos.data?.length) return null;
-
-  return (
-    <section className="mb-6">
-      <SectionHeading onSeeAll={onMore}>ภาพถ่าย</SectionHeading>
-      <PhotoGrid photos={photos.data.slice(0, 6)} onPick={onPick} />
-    </section>
-  );
-}
-
-function LibraryTile({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) {
-  return (
-    <button type="button" onClick={onClick} aria-label={`เพิ่ม${label}`} title={label} className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-xl bg-surface-muted p-2 hover:bg-primary-soft">
-      {children}
-    </button>
-  );
-}
-
-const PAGE_STEP = 96;
-
-/// กราฟิกเส้น (Tabler) — เลือกหมวดด้วยชิป · แสดงทีละ 96 ชิ้น
-function GraphicsBrowser({ onPick, initialQuery = '' }: { onPick: (item: RecentElement) => void; initialQuery?: string }) {
-  const icons = useLibrary('icons', loadIcons);
-  const [cat, setCat] = useState<string>('all');
-  const [limit, setLimit] = useState(PAGE_STEP);
-  const terms = searchTerms(initialQuery);
-  const categories = useMemo(() => {
-    const counts = new Map<string, number>();
-
-    for (const i of icons.data ?? []) counts.set(i.c, (counts.get(i.c) ?? 0) + 1);
-
-    return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([c]) => c);
-  }, [icons.data]);
-  const list = (icons.data ?? []).filter((i) => (cat === 'all' || i.c === cat) && (terms.length === 0 || matchIcon(i, terms)));
-
-  if (icons.isLoading) return <Spinner label="กำลังโหลดกราฟิก…" />;
-  if (icons.isError) return <ErrorState message={errorMessage(icons.error)} onRetry={() => void icons.refetch()} />;
-
-  return (
-    <div>
-      {!initialQuery && (
-        <div className="csmju-scroll-x -mx-1 mb-3 flex gap-2 overflow-x-auto px-1 pb-1">
-          {['all', ...categories].map((c) => (
-            <button
-              key={c}
-              type="button"
-              aria-pressed={cat === c}
-              onClick={() => {
-                setCat(c);
-                setLimit(PAGE_STEP);
-              }}
-              className={cx('min-h-9 shrink-0 rounded-lg border px-3 text-csmju-caption', cat === c ? 'border-primary bg-primary-soft font-semibold text-primary' : 'border-line-strong text-ink hover:bg-surface-muted')}
-            >
-              {c === 'all' ? 'ทั้งหมด' : (ICON_CATEGORY_TH[c] ?? c)}
-            </button>
-          ))}
-        </div>
-      )}
-      {list.length === 0 ? (
-        <p className="text-csmju-caption text-muted">ไม่พบกราฟิก</p>
-      ) : (
-        <>
-          <ul className="grid grid-cols-5 gap-1">
-            {list.slice(0, limit).map((icon) => (
-              <li key={icon.n}>
-                <LibraryTile label={`กราฟิก ${icon.n.replace(/-/g, ' ')}`} onClick={() => onPick({ id: `tabler:${icon.n}`, d: icon.d })}>
-                  <span aria-hidden className="block size-7 text-ink [&>svg]:size-full" dangerouslySetInnerHTML={{ __html: iconMarkup(icon, 1.6) }} />
-                </LibraryTile>
-              </li>
-            ))}
-          </ul>
-          {list.length > limit && (
-            <button type="button" onClick={() => setLimit(limit + PAGE_STEP)} className="mt-3 min-h-11 w-full rounded-xl border border-line-strong text-csmju-caption font-semibold text-ink hover:bg-surface-muted">
-              แสดงเพิ่ม ({list.length - limit} ชิ้น)
-            </button>
-          )}
-        </>
-      )}
-      <p className="mt-3 text-csmju-caption text-muted">กราฟิกจาก Tabler Icons (MIT) เปลี่ยนสีได้จากแถบเครื่องมือด้านบน</p>
-    </div>
-  );
-}
-
-function StickersBrowser({ onPick }: { onPick: (item: RecentElement) => void }) {
-  const stickers = useLibrary('stickers', loadStickers);
-
-  if (stickers.isLoading) return <Spinner label="กำลังโหลดสติกเกอร์…" />;
-  if (stickers.isError) return <ErrorState message={errorMessage(stickers.error)} onRetry={() => void stickers.refetch()} />;
-
-  const groups = [...new Set(stickers.data!.map((s) => s.g))];
-
-  return (
-    <div>
-      {groups.map((g) => (
-        <section key={g} className="mb-5">
-          <h3 className="mb-2 text-csmju-caption font-bold text-ink">{g}</h3>
-          <ul className="grid grid-cols-5 gap-1">
-            {stickers.data!.filter((s) => s.g === g).map((s) => (
-              <li key={s.id}>
-                <LibraryTile label={`สติกเกอร์ ${s.ch}`} onClick={() => onPick({ id: `sticker:${s.id}` })}>
-                  {/* eslint-disable-next-line @next/next/no-img-element -- ไฟล์ SVG ในคลังของระบบ */}
-                  <img src={stickerSrc(s.id)} alt="" className="size-10" loading="lazy" />
-                </LibraryTile>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ))}
-      <p className="text-csmju-caption text-muted">สติกเกอร์จาก Noto Emoji ของ Google (Apache 2.0)</p>
-    </div>
-  );
-}
-
-function PhotoGrid({ photos, onPick }: { photos: LibraryPhoto[]; onPick: (item: RecentElement) => void }) {
-  return (
-    <ul className="columns-2 gap-2">
-      {photos.map((p) => (
-        <li key={p.id} className="mb-2 break-inside-avoid">
-          <button
-            type="button"
-            onClick={() => onPick({ id: `photo:${p.id}`, w: p.w, h: p.h })}
-            aria-label={`เพิ่มภาพ ${p.title}`}
-            title={`${p.title} — ${p.credit} (Cleveland Museum of Art, CC0)`}
-            className="block w-full overflow-hidden rounded-xl bg-surface-muted hover:shadow-csmju-md"
-            style={{ aspectRatio: `${p.w} / ${p.h}` }}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element -- ภาพย่อในคลังของระบบ */}
-            <img src={photoThumb(p.id)} alt="" className="size-full object-cover" loading="lazy" />
-          </button>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function PhotosBrowser({ onPick }: { onPick: (item: RecentElement) => void }) {
-  const photos = useLibrary('photos', loadPhotos);
-
-  if (photos.isLoading) return <Spinner label="กำลังโหลดภาพ…" />;
-  if (photos.isError) return <ErrorState message={errorMessage(photos.error)} onRetry={() => void photos.refetch()} />;
-
-  const groups = [...new Set(photos.data!.map((p) => p.g))];
-
-  return (
-    <div>
-      {groups.map((g) => (
-        <section key={g} className="mb-5">
-          <h3 className="mb-2 text-csmju-caption font-bold text-ink">{g}</h3>
-          <PhotoGrid photos={photos.data!.filter((p) => p.g === g)} onPick={onPick} />
-        </section>
-      ))}
-      <p className="text-csmju-caption text-muted">ภาพผลงานสาธารณสมบัติจาก Cleveland Museum of Art Open Access (CC0) · ชี้ที่ภาพเพื่อดูชื่อผลงานและผู้สร้าง</p>
-    </div>
-  );
-}
-
-/// ผลค้นหาข้ามคลัง: กราฟิก · สติกเกอร์ · ภาพถ่าย · รูปทรงและไอคอน
-function ElementSearch({ query, onPick, onMore }: { query: string; onPick: (item: RecentElement) => void; onMore: (c: Category) => void }) {
-  const icons = useLibrary('icons', loadIcons);
-  const stickers = useLibrary('stickers', loadStickers);
-  const photos = useLibrary('photos', loadPhotos);
-  const terms = searchTerms(query);
-  const lower = query.toLowerCase();
-  const graphicHits = (icons.data ?? []).filter((i) => matchIcon(i, terms));
-  const stickerHits = (stickers.data ?? []).filter((s) => matchSticker(s, terms));
-  const photoHits = (photos.data ?? []).filter((p) => matchPhoto(p, terms));
-  const basicHits = [...basicItems('shapes'), ...basicItems('lines'), ...basicItems('sticky'), ...basicItems('icons')]
-    .filter((item, i, all) => all.findIndex((x) => x.id === item.id) === i)
-    .filter((item) => elementLabel(item.id).toLowerCase().includes(lower) || item.id.includes(lower));
-  const nothing = graphicHits.length + stickerHits.length + photoHits.length + basicHits.length === 0;
-
-  if (icons.isLoading || stickers.isLoading || photos.isLoading) return <Spinner label="กำลังค้นหา…" />;
-
-  return (
-    <div>
-      {nothing && <p className="text-csmju-caption text-muted">ไม่พบองค์ประกอบที่ตรงกับ “{query}” ลองคำอื่น เช่น หัวใจ ดาว ต้นไม้ ทะเล</p>}
-      {basicHits.length > 0 && (
-        <section className="mb-5">
-          <SectionHeading>รูปทรงและไอคอน</SectionHeading>
-          <ElementGrid items={basicHits.slice(0, 12)} onPick={onPick} columns={4} />
-        </section>
-      )}
-      {graphicHits.length > 0 && (
-        <section className="mb-5">
-          <SectionHeading>กราฟิก ({graphicHits.length})</SectionHeading>
-          <GraphicsBrowser onPick={onPick} initialQuery={query} />
-        </section>
-      )}
-      {stickerHits.length > 0 && (
-        <section className="mb-5">
-          <SectionHeading onSeeAll={() => onMore('stickers')}>สติกเกอร์</SectionHeading>
-          <ul className="grid grid-cols-5 gap-1">
-            {stickerHits.slice(0, 20).map((s) => (
-              <li key={s.id}>
-                <LibraryTile label={`สติกเกอร์ ${s.ch}`} onClick={() => onPick({ id: `sticker:${s.id}` })}>
-                  {/* eslint-disable-next-line @next/next/no-img-element -- ไฟล์ SVG ในคลังของระบบ */}
-                  <img src={stickerSrc(s.id)} alt="" className="size-10" loading="lazy" />
-                </LibraryTile>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-      {photoHits.length > 0 && (
-        <section className="mb-5">
-          <SectionHeading onSeeAll={() => onMore('photos')}>ภาพถ่าย</SectionHeading>
-          <PhotoGrid photos={photoHits.slice(0, 10)} onPick={onPick} />
-        </section>
-      )}
-    </div>
-  );
-}
-
-function ElementGrid({ items, onPick, columns }: { items: RecentElement[]; onPick: (item: RecentElement) => void; columns: 3 | 4 }) {
-  return (
-    <ul className={cx('grid gap-2', columns === 4 ? 'grid-cols-4' : 'grid-cols-3')}>
-      {items.map((item) => (
-        <li key={item.id}>
-          <button
-            type="button"
-            onClick={() => onPick(item)}
-            aria-label={`เพิ่ม ${elementLabel(item.id)}`}
-            title={elementLabel(item.id)}
-            className="flex aspect-square w-full items-center justify-center rounded-xl bg-surface-muted hover:bg-primary-soft"
-          >
-            <ElementGlyph item={item} className={columns === 4 ? 'size-8' : 'size-12'} />
-          </button>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
 /// แผงแบ็กกราวด์: แท็บสี (สีพื้น/ไล่สี) กับแท็บภาพ (ภาพสาธารณสมบัติจากคลัง)
 function BackgroundPanel() {
   const [tab, setTab] = useState<'color' | 'photo'>('color');
@@ -1257,7 +692,7 @@ function FontSetGrid({ sets, onPick }: { sets: FontSet[]; onPick: (set: FontSet)
 
 // ── อัปโหลด ────────────────────────────────────────────────────────
 
-const ACCEPTED = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/svg+xml'];
+const ACCEPTED = [ACCEPT.image, ACCEPT.video, ACCEPT.audio].join(',');
 
 type UploadView = { kind: 'library' } | { kind: 'options' } | { kind: 'folder'; folder: AssetFolder };
 
@@ -1265,7 +700,7 @@ type UploadView = { kind: 'library' } | { kind: 'options' } | { kind: 'folder'; 
 function UploadsPanel() {
   const page = usePageSize();
   const [q, setQ] = useState('');
-  const [tab, setTab] = useState<'images' | 'folders'>('images');
+  const [tab, setTab] = useState<'images' | 'videos' | 'audio' | 'folders'>('images');
   const [view, setView] = useState<UploadView>({ kind: 'library' });
   const [creating, setCreating] = useState(false);
   const input = useRef<HTMLInputElement>(null);
@@ -1280,7 +715,14 @@ function UploadsPanel() {
     folderInput.current?.setAttribute('webkitdirectory', '');
   }, [view]);
 
+  const insertMedia = useInsertMedia();
+
   const insert = (asset: Asset) => {
+    if (mediaKindOf(asset.mimeType) !== 'image') {
+      void insertMedia(asset);
+      return;
+    }
+
     const img = new Image();
 
     img.onload = () =>
@@ -1319,7 +761,7 @@ function UploadsPanel() {
       refresh();
       void queryClient.invalidateQueries({ queryKey: ['quotas'] });
       if (insertFirst && done.length === 1) insert(done[0]);
-      else toast(`อัปโหลดแล้ว ${done.length} รูป`);
+      else toast(`อัปโหลดแล้ว ${done.length} ไฟล์`);
     },
     onError: (error) => {
       refresh();
@@ -1329,14 +771,18 @@ function UploadsPanel() {
 
   const pickFiles = (list: FileList | null, fromFolder: boolean) => {
     const files = Array.from(list ?? []);
-    const images = files.filter((file) => ACCEPTED.includes(file.type));
+    // จากโฟลเดอร์รับเฉพาะรูป (โฟลเดอร์รูป) · ปุ่มอัปโหลดไฟล์รับรูป วิดีโอ และเสียง
+    const kinds: MediaKind[] = fromFolder || targetFolder ? ['image'] : ['image', 'video', 'audio'];
+    const problems = files.map((file) => uploadProblem(file, kinds)).filter((p): p is string => Boolean(p));
+    const images = files.filter((file) => !uploadProblem(file, kinds));
 
     if (images.length === 0) {
-      if (files.length > 0) toast('ไม่พบไฟล์รูปที่รองรับ (PNG, JPEG, WebP, GIF, SVG)', 'error');
+      if (files.length > 0) toast(problems[0] ?? 'ไม่พบไฟล์ที่รองรับ', 'error');
       return;
     }
 
     if (fromFolder && images.length < files.length) toast(`ข้าม ${files.length - images.length} ไฟล์ที่ไม่ใช่รูป`);
+    else if (problems.length) toast(problems[0], 'error');
     upload.mutate({ files: images, insertFirst: !fromFolder, folderId: targetFolder });
     if (view.kind === 'options') setView({ kind: 'library' });
   };
@@ -1347,9 +793,9 @@ function UploadsPanel() {
         ref={input}
         type="file"
         multiple
-        accept={ACCEPTED.join(',')}
+        accept={ACCEPTED}
         className="sr-only"
-        aria-label="เลือกรูปที่จะอัปโหลด"
+        aria-label="เลือกรูป วิดีโอ หรือเสียงที่จะอัปโหลด"
         onChange={(event) => {
           pickFiles(event.target.files, false);
           event.target.value = '';
@@ -1435,6 +881,8 @@ function UploadsPanel() {
             {(
               [
                 ['images', 'รูป'],
+                ['videos', 'วิดีโอ'],
+                ['audio', 'เสียง'],
                 ['folders', 'โฟลเดอร์'],
               ] as const
             ).map(([key, label]) => (
@@ -1458,9 +906,13 @@ function UploadsPanel() {
     >
       {tab === 'images' ? (
         <>
-          <p className="mb-3 text-csmju-caption text-muted">PNG, JPEG, WebP, GIF, SVG ไม่เกิน 10 MB · รูปของคุณเห็นได้เฉพาะคุณ</p>
+          <p className="mb-3 text-csmju-caption text-muted">รูป PNG, JPEG, WebP, GIF, SVG ไม่เกิน 10 MB · วิดีโอและเสียงไม่เกิน 50 MB · ไฟล์ของคุณเห็นได้เฉพาะคุณ</p>
           <AssetGrid q={q.trim()} folders={folders.data?.items ?? []} onInsert={insert} emptyText={q.trim() ? 'ไม่พบรูปที่ค้นหา' : null} />
         </>
+      ) : tab === 'videos' ? (
+        <VideoLibrary q={q.trim()} showUpload={false} />
+      ) : tab === 'audio' ? (
+        <AudioLibrary q={q.trim()} showUpload={false} />
       ) : folders.isLoading ? (
         <Spinner />
       ) : folders.isError ? (
@@ -1573,7 +1025,7 @@ function AssetGrid({
   const toast = useToast();
   const assets = useQuery({
     queryKey: ['assets', 'library', q, folderId ?? ''],
-    queryFn: () => api.list<Asset>(`/assets${qs({ q: q || undefined, folderId, limit: 60 })}`),
+    queryFn: () => api.list<Asset>(`/assets${qs({ q: q || undefined, folderId, kind: 'image', limit: 60 })}`),
   });
   const patch = useMutation({
     mutationFn: ({ id, body }: { id: string; body: { trashed?: boolean; folderId?: string | null } }) => api.patch<Asset>(`/assets/${id}`, body),

@@ -2,14 +2,16 @@
 
 import {
   AlignCenter, AlignJustify, AlignLeft, AlignRight, Bold, CaseSensitive, Clock, Eraser, FlipHorizontal2, FlipVertical2,
-  Group, Italic, List, ListOrdered, Minus, PaintRoller, Plus, RotateCcw, Trash2, Underline, Undo2, Ungroup, Strikethrough,
+  Group, Italic, List, ListOrdered, Minus, PaintRoller, Plus, Repeat, RotateCcw, Scissors, Trash2, Underline, Undo2, Ungroup,
+  Strikethrough, Volume2, VolumeX,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cx } from '@/components/csmju/primitives';
 import { FONT_FAMILIES, cssFamily } from '@/lib/editor/fonts';
+import { formatDuration, trimRange } from '@/lib/editor/media';
 import { isGradient } from '@/lib/editor/paint';
 import { currentPage, useEditor } from '@/lib/editor/store';
-import { isLineShape, type CanvasElement, type ImageElement, type PathElement, type ShapeElement, type StrokeStyle, type TextElement } from '@/lib/editor/types';
+import { isLineShape, type CanvasElement, type ImageElement, type PathElement, type ShapeElement, type StrokeStyle, type TextElement, type VideoElement } from '@/lib/editor/types';
 import { useEditorUi, type ColorTarget } from '@/lib/editor/ui-store';
 import { PopoverButton, RangeField, ToolbarButton, ToolbarDivider } from './controls';
 
@@ -35,6 +37,7 @@ export function ContextToolbar() {
   else if (only === 'image' && selected.length === 1) content = <ImageTools el={selected[0] as ImageElement} />;
   else if (only === 'svg') content = <ColorOnlyTools els={selected} target="icon" label="สีกราฟิก" />;
   else if (only === 'path') content = <PathTools els={selected as PathElement[]} />;
+  else if (only === 'video' && selected.length === 1) content = <VideoTools el={selected[0] as VideoElement} />;
   else content = <MixedTools els={selected} />;
 
   return (
@@ -545,6 +548,77 @@ function ImageTools({ el }: { el: ImageElement }) {
       </PopoverButton>
       <TransparencyButton els={[el]} />
       <TrailingTools effects={false} />
+    </>
+  );
+}
+
+/// วิดีโอ: เปิด/ปิดเสียง · เล่นวนซ้ำ · ตัดต่อช่วงที่เล่น (พร้อมตัวอย่าง) · ขอบมน · ความโปร่งใส
+function VideoTools({ el }: { el: VideoElement }) {
+  const ids = [el.id];
+  const { start, end } = trimRange(el);
+  const length = Number.isFinite(end) ? end - start : 0;
+  const duration = el.duration > 0 ? el.duration : 0;
+
+  return (
+    <>
+      <span className="px-2 text-csmju-caption text-ink tabular-nums" aria-label={`ความยาวที่เล่น ${formatDuration(length)}`}>
+        {formatDuration(length)}
+      </span>
+      <ToolbarButton label={el.muted ? 'เปิดเสียงของคลิป' : 'ปิดเสียงของคลิป'} active={el.muted} disabled={el.locked} onClick={() => patch(ids, { muted: !el.muted })}>
+        {el.muted ? <VolumeX aria-hidden className="size-5" /> : <Volume2 aria-hidden className="size-5" />}
+      </ToolbarButton>
+      <ToolbarButton label={el.loop ? 'เลิกเล่นวนซ้ำ' : 'เล่นวนซ้ำ'} active={el.loop} disabled={el.locked} onClick={() => patch(ids, { loop: !el.loop })}>
+        <Repeat aria-hidden className="size-5" />
+      </ToolbarButton>
+      {duration > 0 && (
+        <PopoverButton label="ตัดต่อช่วงที่เล่น" wide trigger={<><Scissors aria-hidden className="size-5" /> ตัดต่อ</>} panelClassName="w-80 p-4">
+          <div className="flex flex-col gap-3">
+            {/* ตัวอย่างเล่นเฉพาะช่วงที่ตัด (media fragment #t=เริ่ม,จบ) จากไฟล์ของผู้ใช้ในระบบ */}
+            <video
+              key={`${start}-${end}`}
+              src={`${el.src}#t=${start.toFixed(2)},${end.toFixed(2)}`}
+              controls
+              muted={el.muted}
+              playsInline
+              preload="metadata"
+              aria-label={`ตัวอย่างคลิป ${el.name}`}
+              className="aspect-video w-full rounded-lg bg-inverse object-contain"
+            />
+            <RangeField
+              label="เริ่มที่ (วินาที)"
+              value={start}
+              min={0}
+              max={Math.max(0, duration - 0.1)}
+              step={0.1}
+              onChange={(v) => patch(ids, { trimStart: v, trimEnd: el.trimEnd !== null && el.trimEnd <= v ? Math.min(duration, v + 0.1) : el.trimEnd })}
+            />
+            <RangeField
+              label="จบที่ (วินาที)"
+              value={end}
+              min={0.1}
+              max={duration}
+              step={0.1}
+              onChange={(v) => patch(ids, { trimEnd: v >= duration ? null : Math.max(start + 0.1, v) })}
+            />
+            <p className="text-csmju-caption text-muted">
+              เล่น {formatDuration(start)}–{formatDuration(end)} จากทั้งคลิป {formatDuration(duration)} · ภาพบนผืนผ้าใบและไฟล์ภาพนิ่งใช้เฟรมที่จุดเริ่ม
+            </p>
+            {(el.trimStart > 0 || el.trimEnd !== null) && (
+              <button
+                type="button"
+                onClick={() => patch(ids, { trimStart: 0, trimEnd: null })}
+                className="min-h-11 rounded-lg border border-line-strong text-csmju-caption font-semibold text-ink hover:bg-surface-muted"
+              >
+                เล่นทั้งคลิป
+              </button>
+            )}
+          </div>
+        </PopoverButton>
+      )}
+      <ToolbarDivider />
+      <CornerPopover value={el.cornerRadius} max={Math.min(el.width, el.height) / 2} onChange={(v) => patch(ids, { cornerRadius: v })} />
+      <TransparencyButton els={[el]} />
+      <TrailingTools />
     </>
   );
 }
