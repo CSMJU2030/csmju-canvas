@@ -80,7 +80,7 @@ export interface Folder {
 
 export interface NotificationItem {
   id: string;
-  kind: 'DESIGN_TRASHED' | 'TEMPLATE_USED' | 'COMMENT_ADDED';
+  kind: 'DESIGN_TRASHED' | 'TEMPLATE_USED' | 'COMMENT_ADDED' | 'REPORT_UPDATED' | 'CONTENT_MODERATED' | 'DESIGN_RESTORED';
   title: string;
   link: string | null;
   readAt: string | null;

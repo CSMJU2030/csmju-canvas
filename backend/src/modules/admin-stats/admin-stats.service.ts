@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
 import { QUOTA_BYTES_PER_USER } from '../assets/assets.service.js';
-import { TRASH_RETENTION_DAYS } from '../designs/designs.service.js';
 import { NEAR_QUOTA_RATIO, usagePercent } from '../members/dto/member.dto.js';
 import { assembleActivity, rangeStart, type ActivityRange, type ActivityRow } from './activity-series.js';
 import type { AdminActivityDto, AdminOverviewDto } from './dto/admin-stats.dto.js';
@@ -22,13 +21,12 @@ export class AdminStatsService {
 
   async overview(now: Date = new Date()): Promise<AdminOverviewDto> {
     const weekAgo = new Date(now.getTime() - 7 * DAY_MS);
-    const trashCutoff = new Date(now.getTime() - TRASH_RETENTION_DAYS * DAY_MS);
     const [
       memberCount,
       activeMemberCount7d,
       designCount,
       trashedDesignCount,
-      trashExpiredDesignCount,
+      deletedDesignCount,
       templateCount,
       userTemplateCount,
       assetCount,
@@ -39,15 +37,16 @@ export class AdminStatsService {
     ] = await Promise.all([
       this.prisma.subsystemMember.count(),
       this.prisma.subsystemMember.count({ where: { lastSeenAt: { gte: weekAgo } } }),
-      this.prisma.design.count({ where: { trashedAt: null } }),
-      this.prisma.design.count({ where: { trashedAt: { not: null } } }),
-      this.prisma.design.count({ where: { trashedAt: { lt: trashCutoff } } }),
+      this.prisma.design.count({ where: { trashedAt: null, purgedAt: null } }),
+      this.prisma.design.count({ where: { trashedAt: { not: null }, purgedAt: null } }),
+      // ผู้ใช้ลบถาวรแล้ว อยู่ในแท็บ "งานที่ถูกลบ" ของผู้ดูแลไม่เกิน 30 วัน
+      this.prisma.design.count({ where: { purgedAt: { not: null } } }),
       this.prisma.template.count(),
       this.prisma.template.count({ where: { createdByCoreUserId: { not: null } } }),
       this.prisma.asset.count(),
       this.prisma.asset.aggregate({ _sum: { sizeBytes: true } }),
       this.prisma.designComment.count(),
-      this.prisma.feedback.count({ where: { kind: 'REPORT' } }),
+      this.prisma.report.count({ where: { status: 'OPEN' } }),
       this.nearQuota(5),
     ]);
 
@@ -57,7 +56,7 @@ export class AdminStatsService {
       activeMemberCount7d,
       designCount,
       trashedDesignCount,
-      trashExpiredDesignCount,
+      deletedDesignCount,
       templateCount,
       userTemplateCount,
       assetCount,

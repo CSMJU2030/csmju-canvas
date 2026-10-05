@@ -51,6 +51,7 @@ describe('CS Canvas API (e2e)', () => {
     await prisma.feedback.deleteMany({ where: { coreUserId: owners } });
     await prisma.templateFavorite.deleteMany({ where: { coreUserId: owners } });
     await prisma.subsystemMember.deleteMany({ where: { coreUserId: owners } });
+    await prisma.report.deleteMany({ where: { reporterCoreUserId: owners } });
     await prisma.auditLog.deleteMany({ where: { actorCoreUserId: owners } });
     await app.close();
   });
@@ -622,5 +623,180 @@ describe('CS Canvas API (e2e)', () => {
 
     expect(logs.body.data[0]).toMatchObject({ action: 'member.quota_change', targetId: student });
     await http().get('/api/v1/audit-logs?since=2026-10-10T00:00:00Z&until=2026-10-01T00:00:00Z').set('Authorization', admin).expect(400);
+  });
+
+  const reporter = `e2e-${run}-reporter`;
+  const admin = `e2e-${run}-admin`;
+
+  it('รายงานเทมเพลต → ผู้ดูแลเห็นในคิว ซ่อนเทมเพลต และผู้รายงานได้รับแจ้ง', async () => {
+    const body = { title: 'เทมเพลตถูกรายงาน', designType: 'poster', category: 'event', width: 1123, height: 1587, document: doc };
+    const templateId = (await http().post('/api/v1/templates').set('Authorization', bearer(staff, 'staff')).send(body).expect(201)).body.data.id as string;
+
+    // ของตัวเองรายงานไม่ได้ · id ไม่ใช่ UUID = 400 · OTHER ต้องมีรายละเอียดเมื่อเลือก "อื่น ๆ"
+    await http().post('/api/v1/reports').set('Authorization', bearer(staff, 'staff')).send({ targetKind: 'TEMPLATE', targetId: templateId, reason: 'SPAM' }).expect(400);
+    await http().post('/api/v1/reports').set('Authorization', bearer(reporter, 'student')).send({ targetKind: 'TEMPLATE', targetId: 'abc', reason: 'SPAM' }).expect(400);
+    await http().post('/api/v1/reports').set('Authorization', bearer(reporter, 'student')).send({ targetKind: 'OTHER', reason: 'OTHER' }).expect(400);
+
+    const created = await http()
+      .post('/api/v1/reports')
+      .set('Authorization', bearer(reporter, 'student'))
+      .send({ targetKind: 'TEMPLATE', targetId: templateId, reason: 'COPYRIGHT', details: 'ภาพในเทมเพลตมาจากเพจอื่น' })
+      .expect(201);
+    const reportId = created.body.data.id as string;
+
+    expect(created.body.data).toMatchObject({ status: 'OPEN', targetKind: 'TEMPLATE', reason: 'COPYRIGHT' });
+
+    // รายงานซ้ำระหว่างยังเปิดอยู่ = 409
+    await http().post('/api/v1/reports').set('Authorization', bearer(reporter, 'student')).send({ targetKind: 'TEMPLATE', targetId: templateId, reason: 'SPAM' }).expect(409);
+
+    // คิวเป็นของผู้ดูแล (staff/admin) เท่านั้น
+    await http().get('/api/v1/reports').set('Authorization', bearer(reporter, 'student')).expect(403);
+    await http().get('/api/v1/reports').set('Authorization', bearer(reporter, 'lecturer')).expect(403);
+
+    const queue = await http().get('/api/v1/reports?status=OPEN&targetKind=TEMPLATE&limit=100').set('Authorization', bearer(admin, 'admin')).expect(200);
+    const row = queue.body.data.find((r: { id: string }) => r.id === reportId);
+
+    expect(queue.body.meta).toMatchObject({ page: 1, limit: 100 });
+    expect(row).toMatchObject({ targetExcerpt: 'เทมเพลตถูกรายงาน', reporterCoreUserId: reporter, target: { exists: true, hidden: false, title: 'เทมเพลตถูกรายงาน' } });
+
+    await http().patch(`/api/v1/reports/${reportId}`).set('Authorization', bearer(admin, 'admin')).send({ status: 'REJECTED', action: 'HIDE_TARGET' }).expect(400);
+    await http().patch(`/api/v1/reports/${randomUUID()}`).set('Authorization', bearer(admin, 'admin')).send({ status: 'RESOLVED' }).expect(404);
+    await http().patch('/api/v1/reports/not-a-uuid').set('Authorization', bearer(admin, 'admin')).send({ status: 'RESOLVED' }).expect(400);
+
+    const resolved = await http()
+      .patch(`/api/v1/reports/${reportId}`)
+      .set('Authorization', bearer(admin, 'admin'))
+      .send({ status: 'RESOLVED', note: 'ซ่อนระหว่างตรวจสอบลิขสิทธิ์', action: 'HIDE_TARGET' })
+      .expect(200);
+
+    expect(resolved.body.data).toMatchObject({ status: 'RESOLVED', actionTaken: 'HIDE_TARGET', resolvedByCoreUserId: admin, target: { hidden: true } });
+    await http().patch(`/api/v1/reports/${reportId}`).set('Authorization', bearer(admin, 'admin')).send({ status: 'REJECTED' }).expect(409);
+
+    // เทมเพลตที่ถูกซ่อน: ไม่ขึ้นในรายการ · คนอื่นเปิดไม่ได้ · ใช้สร้างงานไม่ได้ · ผู้เผยแพร่ยังเปิดได้
+    const list = await http().get('/api/v1/templates?limit=100&sort=recent').set('Authorization', bearer(reporter, 'student')).expect(200);
+
+    expect(list.body.data.some((t: { id: string }) => t.id === templateId)).toBe(false);
+    await http().get(`/api/v1/templates/${templateId}`).set('Authorization', bearer(reporter, 'student')).expect(404);
+    await http().post('/api/v1/designs').set('Authorization', bearer(reporter, 'student')).send({ title: 'จากเทมเพลตที่ถูกซ่อน', templateId }).expect(404);
+    await http().get(`/api/v1/templates/${templateId}`).set('Authorization', bearer(staff, 'staff')).expect(200);
+
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const notes = await http().get('/api/v1/notifications?limit=50').set('Authorization', bearer(reporter, 'student')).expect(200);
+
+    expect(notes.body.data.some((n: { kind: string }) => n.kind === 'REPORT_UPDATED')).toBe(true);
+
+    const audit = await prisma.auditLog.findMany({ where: { actorCoreUserId: admin } });
+
+    expect(audit.map((a) => a.action).sort()).toEqual(['report.resolved', 'template.unpublish']);
+  });
+
+  it('รายงานงานที่แชร์และความคิดเห็น · ปิดลิงก์แชร์จากเรื่องร้องเรียน', async () => {
+    const id = await newDesign('งานแชร์ที่ถูกรายงาน');
+
+    // ยังไม่แชร์ = คนอื่นรายงานไม่ได้ (404 ไม่บอกว่ามีงานนี้)
+    await http().post('/api/v1/reports').set('Authorization', bearer(reporter, 'student')).send({ targetKind: 'DESIGN', targetId: id, reason: 'INAPPROPRIATE' }).expect(404);
+    await http().patch(`/api/v1/designs/${id}`).set('Authorization', bearer(student, 'student')).send({ linkAccess: 'COMMENT' }).expect(200);
+
+    const comment = await http()
+      .post(`/api/v1/designs/${id}/comments`)
+      .set('Authorization', bearer(student, 'student'))
+      .send({ body: 'ข้อความที่ถูกรายงาน', pageId: 'p1' })
+      .expect(201);
+
+    const designReport = await http()
+      .post('/api/v1/reports')
+      .set('Authorization', bearer(reporter, 'student'))
+      .send({ targetKind: 'DESIGN', targetId: id, reason: 'PERSONAL_DATA' })
+      .expect(201);
+    const commentReport = await http()
+      .post('/api/v1/reports')
+      .set('Authorization', bearer(reporter, 'student'))
+      .send({ targetKind: 'COMMENT', targetId: comment.body.data.id, reason: 'SPAM' })
+      .expect(201);
+
+    await http().patch(`/api/v1/reports/${designReport.body.data.id}`).set('Authorization', bearer(admin, 'staff')).send({ status: 'RESOLVED', action: 'HIDE_TARGET' }).expect(200);
+    await http().get(`/api/v1/designs/${id}`).set('Authorization', bearer(reporter, 'student')).expect(404);
+
+    const owner = await http().get(`/api/v1/designs/${id}`).set('Authorization', bearer(student, 'student')).expect(200);
+
+    expect(owner.body.data.linkAccess).toBe('NONE');
+
+    const closedComment = await http()
+      .patch(`/api/v1/reports/${commentReport.body.data.id}`)
+      .set('Authorization', bearer(admin, 'staff'))
+      .send({ status: 'RESOLVED', action: 'HIDE_TARGET' })
+      .expect(200);
+
+    expect(closedComment.body.data.target.exists).toBe(false);
+    expect(closedComment.body.data.targetExcerpt).toBe('ข้อความที่ถูกรายงาน');
+
+    const comments = await http().get(`/api/v1/designs/${id}/comments`).set('Authorization', bearer(student, 'student')).expect(200);
+
+    expect(comments.body.meta.total).toBe(0);
+  });
+
+  it('ลบถาวร = หายจากผู้ใช้ทุกที่ แต่ผู้ดูแลเห็น 30 วัน · กู้คืนกลับถังขยะ · ลบทันที', async () => {
+    const id = await newDesign('งานลบถาวรเก็บ 30 วัน');
+
+    await http().patch(`/api/v1/designs/${id}`).set('Authorization', bearer(student, 'student')).send({ trashed: true, linkAccess: 'VIEW' }).expect(200);
+    await http().delete(`/api/v1/designs/${id}`).set('Authorization', bearer(student, 'student')).expect(200);
+
+    // ผู้ใช้: ไม่อยู่ในถังขยะ เปิดไม่ได้ ลบซ้ำไม่ได้ ลิงก์แชร์ใช้ไม่ได้
+    const trash = await http().get('/api/v1/designs?trashed=true&limit=100').set('Authorization', bearer(student, 'student')).expect(200);
+
+    expect(trash.body.data.some((d: { id: string }) => d.id === id)).toBe(false);
+    await http().get(`/api/v1/designs/${id}`).set('Authorization', bearer(student, 'student')).expect(404);
+    await http().get(`/api/v1/designs/${id}`).set('Authorization', bearer(other, 'student')).expect(404);
+    await http().delete(`/api/v1/designs/${id}`).set('Authorization', bearer(student, 'student')).expect(404);
+    await http().patch(`/api/v1/designs/${id}`).set('Authorization', bearer(student, 'student')).send({ trashed: false }).expect(404);
+
+    // ผู้ดูแลเท่านั้น
+    await http().get('/api/v1/deleted-designs').set('Authorization', bearer(student, 'student')).expect(403);
+    await http().get(`/api/v1/deleted-designs/${id}`).set('Authorization', bearer(other, 'lecturer')).expect(403);
+
+    const listed = await http().get(`/api/v1/deleted-designs?q=${encodeURIComponent('งานลบถาวรเก็บ 30 วัน')}&limit=100`).set('Authorization', bearer(admin, 'admin')).expect(200);
+    const row = listed.body.data.find((d: { id: string }) => d.id === id);
+
+    expect(row).toMatchObject({ ownerCoreUserId: student, daysLeft: 30, pageCount: 1 });
+    expect(listed.body.meta.total).toBeGreaterThanOrEqual(1);
+
+    const byOwner = await http().get(`/api/v1/deleted-designs?q=${student}&limit=100`).set('Authorization', bearer(admin, 'admin')).expect(200);
+
+    expect(byOwner.body.data.some((d: { id: string }) => d.id === id)).toBe(true);
+
+    const detail = await http().get(`/api/v1/deleted-designs/${id}`).set('Authorization', bearer(admin, 'staff')).expect(200);
+
+    expect(detail.body.data.document.version).toBe(1);
+    await http().get(`/api/v1/deleted-designs/${randomUUID()}`).set('Authorization', bearer(admin, 'staff')).expect(404);
+    await http().get('/api/v1/deleted-designs/not-a-uuid').set('Authorization', bearer(admin, 'staff')).expect(400);
+    await http().patch(`/api/v1/deleted-designs/${id}`).set('Authorization', bearer(admin, 'staff')).send({ restore: false }).expect(400);
+
+    const restored = await http().patch(`/api/v1/deleted-designs/${id}`).set('Authorization', bearer(admin, 'staff')).send({ restore: true }).expect(200);
+
+    expect(restored.body.data).toMatchObject({ id, ownerCoreUserId: student });
+
+    const back = await http().get('/api/v1/designs?trashed=true&limit=100').set('Authorization', bearer(student, 'student')).expect(200);
+    const inTrash = back.body.data.find((d: { id: string }) => d.id === id);
+
+    expect(inTrash?.linkAccess).toBe('NONE');
+
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const notes = await http().get('/api/v1/notifications?limit=50').set('Authorization', bearer(student, 'student')).expect(200);
+
+    expect(notes.body.data.some((n: { kind: string }) => n.kind === 'DESIGN_RESTORED')).toBe(true);
+
+    // ลบถาวรอีกครั้ง แล้วผู้ดูแลลบจริงทันที
+    await http().delete(`/api/v1/designs/${id}`).set('Authorization', bearer(student, 'student')).expect(200);
+
+    const purged = await http().delete(`/api/v1/deleted-designs/${id}`).set('Authorization', bearer(admin, 'staff')).expect(200);
+
+    expect(purged.body.data).toEqual({ id, deleted: true });
+    expect(await prisma.design.findUnique({ where: { id } })).toBeNull();
+
+    const actions = (await prisma.auditLog.findMany({ where: { targetId: id } })).map((a) => a.action);
+
+    expect(actions).toEqual(expect.arrayContaining(['design.delete', 'design.restore_by_admin', 'design.purge']));
   });
 });

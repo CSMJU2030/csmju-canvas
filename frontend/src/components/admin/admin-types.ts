@@ -27,7 +27,7 @@ export interface AdminOverview {
   activeMemberCount7d: number;
   designCount: number;
   trashedDesignCount: number;
-  trashExpiredDesignCount: number;
+  deletedDesignCount: number;
   templateCount: number;
   userTemplateCount: number;
   assetCount: number;

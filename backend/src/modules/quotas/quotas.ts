@@ -26,8 +26,8 @@ export class QuotasService {
       this.assets.usedBytes(coreUserId),
       this.assets.quotaBytes(coreUserId),
       this.prisma.asset.count({ where: { coreUserId } }),
-      this.prisma.design.count({ where: { coreUserId, trashedAt: null } }),
-      this.prisma.design.count({ where: { coreUserId, trashedAt: { not: null } } }),
+      this.prisma.design.count({ where: { coreUserId, trashedAt: null, purgedAt: null } }),
+      this.prisma.design.count({ where: { coreUserId, trashedAt: { not: null }, purgedAt: null } }),
     ]);
 
     return { usedBytes, quotaBytes, assetCount, designCount, trashedDesignCount };

@@ -49,6 +49,40 @@ enum NotificationKind {
   DESIGN_TRASHED
   TEMPLATE_USED
   COMMENT_ADDED
+  /// ผู้ดูแลจัดการเรื่องที่คุณรายงานแล้ว (จัดการแล้ว หรือปัดตก)
+  REPORT_UPDATED
+  /// ผู้ดูแลซ่อนเทมเพลต ปิดลิงก์แชร์ หรือลบความคิดเห็นของคุณจากเรื่องร้องเรียน
+  CONTENT_MODERATED
+  /// ผู้ดูแลกู้งานที่คุณลบถาวรกลับไปไว้ในถังขยะ
+  DESIGN_RESTORED
+}
+
+/// สิ่งที่ถูกรายงาน (แผงผู้ดูแล → เรื่องร้องเรียน)
+enum ReportTargetKind {
+  DESIGN
+  TEMPLATE
+  COMMENT
+  OTHER
+}
+
+/// เหตุผลที่รายงาน: ละเมิดลิขสิทธิ์ · ไม่เหมาะสม · สแปม · ข้อมูลส่วนบุคคล · อื่น ๆ
+enum ReportReason {
+  COPYRIGHT
+  INAPPROPRIATE
+  SPAM
+  PERSONAL_DATA
+  OTHER
+}
+
+enum ReportStatus {
+  OPEN
+  RESOLVED
+  REJECTED
+}
+
+/// สิ่งที่ผู้ดูแลทำกับเป้าหมายตอนปิดเรื่อง — HIDE_TARGET = ซ่อนเทมเพลต · ปิดลิงก์แชร์ของงาน · ลบความคิดเห็น
+enum ReportAction {
+  HIDE_TARGET
 }
 
 /// โฟลเดอร์ในหน้า "โปรเจกต์" ของผู้ใช้แต่ละคน
@@ -86,6 +120,8 @@ model Design {
   /// เจ้าของติดดาวไว้ (เมนูไฟล์ → ติดดาว)
   starredAt        DateTime?  @map("starred_at") @db.Timestamptz(3)
   trashedAt        DateTime?  @map("trashed_at") @db.Timestamptz(3)
+  /// เจ้าของลบถาวรแล้ว — หายจากทุกหน้าของผู้ใช้ แต่ผู้ดูแลยังเห็นอีก 30 วันก่อนระบบลบจริง (มีค่าเมื่อ trashedAt มีค่าเสมอ)
+  purgedAt         DateTime?  @map("purged_at") @db.Timestamptz(3)
   createdAt        DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt        DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -96,6 +132,7 @@ model Design {
   comments       DesignComment[] @relation("DesignComments")
 
   @@index([coreUserId, trashedAt, updatedAt])
+  @@index([purgedAt])
   @@map("designs")
 }
 
@@ -117,7 +154,9 @@ model Template {
   colorTags           String[] @default([]) @map("color_tags")
   /// ภาษาของข้อความในเทมเพลต (th · en) — ตัวกรอง "ภาษา"
   languageTags        String[] @default([]) @map("language_tags")
-  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  /// ผู้ดูแลซ่อนจากเรื่องร้องเรียน — ไม่ขึ้นในรายการและใช้สร้างงานไม่ได้ (ผู้เผยแพร่และผู้ดูแลยังเปิดดูได้)
+  hiddenAt            DateTime? @map("hidden_at") @db.Timestamptz(3)
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   designs   Design[]           @relation("TemplateDesigns")
@@ -265,6 +304,33 @@ model Feedback {
 
   @@index([createdAt])
   @@map("feedbacks")
+}
+
+/// เรื่องร้องเรียนเนื้อหา (ปุ่ม "รายงาน" ในหน้าแก้ไข การ์ดเทมเพลต และความคิดเห็น) — ผู้ดูแลจัดการในแผงผู้ดูแล
+///
+/// `targetExcerpt` คัดชื่อหรือข้อความของสิ่งที่ถูกรายงานไว้ตอนแจ้ง ผู้ดูแลจึงยังเห็นหลักฐานแม้เจ้าของลบไปแล้ว
+model Report {
+  id                   String           @id @default(uuid()) @db.Uuid
+  reporterCoreUserId   String           @map("reporter_core_user_id")
+  targetKind           ReportTargetKind @map("target_kind")
+  /// id ของงาน เทมเพลต หรือความคิดเห็น · null เมื่อ targetKind = OTHER
+  targetId             String?          @map("target_id") @db.Uuid
+  targetExcerpt        String?          @map("target_excerpt") @db.VarChar(300)
+  /// หน้าที่เกี่ยวข้อง (path ภายในระบบ)
+  link                 String?          @db.VarChar(300)
+  reason               ReportReason
+  details              String           @default("") @db.VarChar(2000)
+  status               ReportStatus     @default(OPEN)
+  resolvedByCoreUserId String?          @map("resolved_by_core_user_id")
+  resolutionNote       String?          @map("resolution_note") @db.VarChar(1000)
+  actionTaken          ReportAction?    @map("action_taken")
+  resolvedAt           DateTime?        @map("resolved_at") @db.Timestamptz(3)
+  createdAt            DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([status, createdAt])
+  @@index([targetKind, targetId])
+  @@index([reporterCoreUserId])
+  @@map("reports")
 }
 
 /// เทมเพลตที่ผู้ใช้ติดดาวไว้ (แถบรองของเทมเพลต → คอนเทนต์ติดดาว)

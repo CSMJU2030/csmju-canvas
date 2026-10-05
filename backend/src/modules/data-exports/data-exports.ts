@@ -21,7 +21,7 @@ export class DataExportsService {
 
   async build(coreUserId: string) {
     const [designs, folders, assets, templates, preferences] = await Promise.all([
-      this.prisma.design.findMany({ where: { coreUserId }, omit: { thumbnail: true } }),
+      this.prisma.design.findMany({ where: { coreUserId, purgedAt: null }, omit: { thumbnail: true } }),
       this.prisma.folder.findMany({ where: { coreUserId } }),
       this.prisma.asset.findMany({ where: { coreUserId } }),
       this.prisma.template.findMany({

@@ -4,7 +4,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArchiveRestore, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
-import { Button, ErrorState, Spinner, cx, errorMessage, useToast } from '@/components/csmju/primitives';
+import { Button, Dialog, ErrorState, Spinner, cx, errorMessage, useToast } from '@/components/csmju/primitives';
+import { PERMANENT_DELETE_NOTICE } from '@/lib/moderation';
 import { Thumbnail } from '@/components/designs/cards';
 import { api, qs } from '@/lib/csmju/api';
 import { daysLeft, formatBytes } from '@/lib/format';
@@ -49,6 +50,7 @@ export default function TrashPage() {
 
 function TrashedDesigns() {
   const [page, setPage] = useState(1);
+  const [confirming, setConfirming] = useState<DesignSummary | null>(null);
   const queryClient = useQueryClient();
   const toast = useToast();
   const query = useQuery({
@@ -71,7 +73,7 @@ function TrashedDesigns() {
     mutationFn: (id: string) => api.del(`/designs/${id}`),
     onSuccess: () => {
       refresh();
-      toast('ลบงานถาวรแล้ว');
+      toast('ลบงานถาวรแล้ว · ผู้ดูแลยังเห็นได้อีก 30 วันก่อนระบบลบจริง');
     },
     onError: (error) => toast(errorMessage(error), 'error'),
   });
@@ -97,9 +99,7 @@ function TrashedDesigns() {
                 className="text-danger"
                 aria-label={`ลบ ${design.title} ถาวร`}
                 loading={purge.isPending && purge.variables === design.id}
-                onClick={() => {
-                  if (window.confirm(`ลบ “${design.title}” ถาวร? กู้คืนไม่ได้อีก`)) purge.mutate(design.id);
-                }}
+                onClick={() => setConfirming(design)}
               >
                 <Trash2 aria-hidden className="size-4" />
               </Button>
@@ -108,6 +108,31 @@ function TrashedDesigns() {
         ))}
       </ul>
       <Pager page={page} totalPages={query.data!.meta.totalPages} onPage={setPage} />
+      <Dialog
+        open={confirming !== null}
+        onClose={() => setConfirming(null)}
+        title="ลบงานถาวร?"
+        footer={
+          <>
+            <Button onClick={() => setConfirming(null)}>ยกเลิก</Button>
+            <Button
+              variant="danger"
+              loading={purge.isPending}
+              onClick={() => {
+                if (!confirming) return;
+                purge.mutate(confirming.id, { onSettled: () => setConfirming(null) });
+              }}
+            >
+              <Trash2 aria-hidden className="size-4" /> ลบถาวร
+            </Button>
+          </>
+        }
+      >
+        <p className="text-csmju-body text-ink">
+          “{confirming?.title}”
+        </p>
+        <p className="mt-2 text-csmju-body text-body">{PERMANENT_DELETE_NOTICE}</p>
+      </Dialog>
     </>
   );
 }

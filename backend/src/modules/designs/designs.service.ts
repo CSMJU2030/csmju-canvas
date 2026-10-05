@@ -1,7 +1,9 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '../../generated/prisma/client.js';
 import { Paginated } from '../../common/http/envelope.js';
+import type { CoreHubUser } from '../../common/auth/core-user.js';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
+import { AuditService } from '../audit/audit.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { assertDocument, emptyDocument } from './design-document.js';
 import type {
@@ -10,8 +12,12 @@ import type {
   UpdateDesignDto,
 } from './dto/design.dto.js';
 
-/// งานในถังขยะถูกลบถาวรเมื่อครบกำหนดนี้ (ล้างตอนผู้ใช้เปิดดูถังขยะ ไม่ต้องมี cron)
+/// งานในถังขยะถูกลบถาวรเมื่อครบกำหนดนี้ (ล้างตอนผู้ใช้เปิดดูถังขยะ และงานรายวันของ RetentionService)
+///
+/// "ลบถาวร" ของผู้ใช้ไม่ลบแถวทันที — ตั้ง purgedAt ให้หายจากทุกหน้าของผู้ใช้
+/// แล้วผู้ดูแลยังตรวจสอบได้อีก PURGE_RETENTION_DAYS วันก่อนระบบลบจริง (การตัดสินใจของ PL)
 export const TRASH_RETENTION_DAYS = 30;
+export const PURGE_RETENTION_DAYS = 30;
 /// เก็บเวอร์ชันอัตโนมัติไม่บ่อยกว่านี้ และเก็บไว้สูงสุดงานละกี่เวอร์ชัน
 export const VERSION_INTERVAL_MS = 10 * 60_000;
 export const MAX_VERSIONS = 50;
@@ -37,6 +43,7 @@ const SUMMARY_SELECT = {
   starredAt: true,
   coreUserId: true,
   trashedAt: true,
+  purgedAt: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.DesignSelect;
@@ -48,6 +55,7 @@ export class DesignsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    private readonly audit: AuditService,
   ) {}
 
   async list(coreUserId: string, query: ListDesignsQuery) {
@@ -58,9 +66,11 @@ export class DesignsService {
       coreUserId: { not: coreUserId },
       linkAccess: { not: 'NONE' },
       trashedAt: null,
+      purgedAt: null,
       visits: { some: { coreUserId } },
     };
-    const mine: Prisma.DesignWhereInput = { coreUserId, trashedAt: query.trashed ? { not: null } : null };
+    // งานที่ลบถาวรแล้ว (purgedAt) ไม่ขึ้นแม้ในถังขยะ — เหลือให้ผู้ดูแลเห็นเท่านั้น
+    const mine: Prisma.DesignWhereInput = { coreUserId, trashedAt: query.trashed ? { not: null } : null, purgedAt: null };
     const scope = query.trashed ? 'mine' : (query.scope ?? 'mine');
     const where: Prisma.DesignWhereInput = {
       AND: [
@@ -164,7 +174,8 @@ export class DesignsService {
   private async createFromTemplate(coreUserId: string, dto: CreateDesignDto) {
     const template = await this.prisma.template.findUnique({ where: { id: dto.templateId } });
 
-    if (!template) throw new NotFoundException('ไม่พบเทมเพลตนี้ อาจถูกลบไปแล้ว');
+    // เทมเพลตที่ผู้ดูแลซ่อนจากเรื่องร้องเรียนใช้สร้างงานใหม่ไม่ได้
+    if (!template || template.hiddenAt) throw new NotFoundException('ไม่พบเทมเพลตนี้ อาจถูกลบไปแล้ว');
 
     const [row] = await this.prisma.$transaction([
       this.prisma.design.create({
@@ -316,8 +327,9 @@ export class DesignsService {
     };
   }
 
-  async remove(coreUserId: string, id: string) {
-    const existing = await this.prisma.design.findFirst({ where: { id, coreUserId } });
+  /// ลบถาวรในมุมของผู้ใช้ — ตั้ง purgedAt แทนการลบแถว (ผู้ดูแลเห็นอีก 30 วันแล้ว RetentionService ลบจริง)
+  async remove(user: Pick<CoreHubUser, 'coreUserId' | 'coreRole'>, id: string) {
+    const existing = await this.prisma.design.findFirst({ where: { id, coreUserId: user.coreUserId, purgedAt: null } });
 
     if (!existing) throw new NotFoundException('ไม่พบงานนี้ อาจถูกลบไปแล้ว');
 
@@ -325,7 +337,16 @@ export class DesignsService {
       throw new BadRequestException('ย้ายงานไปถังขยะก่อน แล้วจึงลบถาวรได้');
     }
 
-    await this.prisma.design.delete({ where: { id } });
+    const purgedAt = new Date();
+
+    // ปิดลิงก์แชร์ด้วย — ถ้าผู้ดูแลกู้คืน งานจะกลับไปเป็นงานส่วนตัวในถังขยะของเจ้าของ
+    await this.prisma.design.update({ where: { id }, data: { purgedAt, linkAccess: 'NONE' } });
+    await this.audit.record(user, {
+      action: 'design.delete',
+      targetKind: 'DESIGN',
+      targetId: id,
+      metadata: { ownerCoreUserId: existing.coreUserId, title: existing.title, purgeAfter: purgeDateOf(purgedAt).toISOString() },
+    });
 
     return { id, deleted: true };
   }
@@ -334,7 +355,7 @@ export class DesignsService {
   async typeUsage(coreUserId: string) {
     const groups = await this.prisma.design.groupBy({
       by: ['designType'],
-      where: { coreUserId },
+      where: { coreUserId, purgedAt: null },
       _count: { _all: true },
       _max: { updatedAt: true },
     });
@@ -349,9 +370,7 @@ export class DesignsService {
   }
 
   private async purgeExpiredTrash(coreUserId: string) {
-    const cutoff = new Date(Date.now() - TRASH_RETENTION_DAYS * 86_400_000);
-
-    await this.prisma.design.deleteMany({ where: { coreUserId, trashedAt: { lt: cutoff } } });
+    await expireTrash(this.prisma, this.audit, { coreUserId });
   }
 
   private async assertFolder(coreUserId: string, folderId: string) {
@@ -361,11 +380,55 @@ export class DesignsService {
   }
 }
 
+const DAY_MS = 86_400_000;
+
+/// วันที่ระบบจะลบงานที่ผู้ใช้ลบถาวรออกจริง
+export function purgeDateOf(purgedAt: Date): Date {
+  return new Date(purgedAt.getTime() + PURGE_RETENTION_DAYS * DAY_MS);
+}
+
+/// งานที่อยู่ในถังขยะครบ TRASH_RETENTION_DAYS → ถือว่าเจ้าของลบถาวร (ตั้ง purgedAt ไปอยู่ในมือผู้ดูแลอีก 30 วัน)
+///
+/// ใช้ทั้งตอนผู้ใช้เปิดถังขยะ (เฉพาะงานของคนนั้น) และงานรายวันของ RetentionService (ทุกคน)
+export async function expireTrash(
+  prisma: PrismaService,
+  audit: AuditService,
+  where: Prisma.DesignWhereInput = {},
+  now: Date = new Date(),
+): Promise<number> {
+  const cutoff = new Date(now.getTime() - TRASH_RETENTION_DAYS * DAY_MS);
+  const rows = await prisma.design.findMany({
+    where: { ...where, trashedAt: { lt: cutoff }, purgedAt: null },
+    select: { id: true, coreUserId: true, title: true },
+  });
+
+  if (rows.length === 0) return 0;
+
+  await prisma.design.updateMany({
+    where: { id: { in: rows.map((row) => row.id) }, purgedAt: null },
+    data: { purgedAt: now, linkAccess: 'NONE' },
+  });
+
+  for (const row of rows) {
+    await audit.recordSystem({
+      action: 'design.trash_expired',
+      targetKind: 'DESIGN',
+      targetId: row.id,
+      metadata: { ownerCoreUserId: row.coreUserId, title: row.title, purgeAfter: purgeDateOf(now).toISOString() },
+    });
+  }
+
+  return rows.length;
+}
+
 /// สิทธิ์ของผู้เรียกต่องาน: OWNER · EDIT/COMMENT/VIEW (ผ่านลิงก์) · null = ไม่มีสิทธิ์
+///
+/// งานที่ลบถาวรแล้ว (purgedAt) ไม่มีใครเปิดได้ แม้แต่เจ้าของ — ผู้ดูแลดูผ่าน /deleted-designs เท่านั้น
 export function accessOf(
-  row: { coreUserId: string; linkAccess: string; trashedAt: Date | null },
+  row: { coreUserId: string; linkAccess: string; trashedAt: Date | null; purgedAt?: Date | null },
   coreUserId: string,
 ): 'OWNER' | 'EDIT' | 'COMMENT' | 'VIEW' | null {
+  if (row.purgedAt) return null;
   if (row.coreUserId === coreUserId) return 'OWNER';
   if (row.trashedAt || row.linkAccess === 'NONE') return null;
 

@@ -16,13 +16,13 @@ export class AdminOverviewDto {
   @ApiProperty({ description: 'สมาชิกที่เปิดแอปใน 7 วันที่ผ่านมา' }) activeMemberCount7d!: number;
   @ApiProperty({ description: 'ดีไซน์ที่ยังไม่อยู่ในถังขยะ' }) designCount!: number;
   @ApiProperty() trashedDesignCount!: number;
-  @ApiProperty({ description: 'ดีไซน์ในถังขยะที่เกินระยะเก็บแล้ว รอลบถาวร' }) trashExpiredDesignCount!: number;
+  @ApiProperty({ description: 'ดีไซน์ที่ผู้ใช้ลบถาวรแล้ว เก็บไว้ให้ผู้ดูแล 30 วันก่อนลบจริง' }) deletedDesignCount!: number;
   @ApiProperty({ description: 'เทมเพลตทั้งหมด (รวมเทมเพลตตั้งต้นของทีม)' }) templateCount!: number;
   @ApiProperty({ description: 'เทมเพลตที่ผู้ใช้เผยแพร่เอง' }) userTemplateCount!: number;
   @ApiProperty() assetCount!: number;
   @ApiProperty({ example: '734003200', description: 'ไบต์รวมของไฟล์ทั้งหมด เป็น string' }) storageUsedBytes!: string;
   @ApiProperty() commentCount!: number;
-  @ApiProperty({ description: 'การรายงานเนื้อหา (ฟีดแบ็กชนิด REPORT)' }) openReportCount!: number;
+  @ApiProperty({ description: 'เรื่องร้องเรียนที่ยังไม่ได้จัดการ (สถานะ OPEN)' }) openReportCount!: number;
   @ApiProperty({ description: 'สมาชิกที่ใช้พื้นที่ถึง 90% ของโควตา' }) nearQuotaMemberCount!: number;
   @ApiProperty({ type: [NearQuotaMemberDto], description: 'สูงสุด 5 คนที่ใกล้เต็มที่สุด' }) nearQuotaMembers!: NearQuotaMemberDto[];
   @ApiProperty({ example: '524288000' }) defaultQuotaBytes!: string;

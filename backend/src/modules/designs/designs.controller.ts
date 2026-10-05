@@ -75,10 +75,10 @@ export class DesignsController {
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'ลบถาวร (เฉพาะงานที่อยู่ในถังขยะ)' })
+  @ApiOperation({ summary: 'ลบถาวร (เฉพาะงานที่อยู่ในถังขยะ) — หายจากผู้ใช้ทันที ผู้ดูแลเห็นอีก 30 วันก่อนลบจริง' })
   @ApiEnvelope(DeletedDto)
   remove(@CurrentUser() user: CoreHubUser, @Param('id', UUID) id: string) {
-    return this.designs.remove(user.coreUserId, id);
+    return this.designs.remove(user, id);
   }
 }
 

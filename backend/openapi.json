@@ -545,7 +545,7 @@
             }
           }
         },
-        "summary": "ลบถาวร (เฉพาะงานที่อยู่ในถังขยะ)",
+        "summary": "ลบถาวร (เฉพาะงานที่อยู่ในถังขยะ) — หายจากผู้ใช้ทันที ผู้ดูแลเห็นอีก 30 วันก่อนลบจริง",
         "tags": [
           "designs"
         ]
@@ -3246,6 +3246,797 @@
           "audit-logs"
         ]
       }
+    },
+    "/api/v1/reports": {
+      "post": {
+        "operationId": "ReportsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateReportDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "รับเรื่องแล้ว",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/CreatedReportDto"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ไม่พบสิ่งที่รายงาน หรือคุณไม่มีสิทธิ์เห็น",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "error"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "example": "NOT_FOUND"
+                        },
+                        "message": {
+                          "type": "string",
+                          "example": "ไม่พบคลิปนี้ อาจถูกลบไปแล้ว"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "รายงานเรื่องนี้ไว้แล้วและยังเปิดอยู่",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "error"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "example": "NOT_FOUND"
+                        },
+                        "message": {
+                          "type": "string",
+                          "example": "ไม่พบคลิปนี้ อาจถูกลบไปแล้ว"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "รายงานงานที่แชร์ เทมเพลต ความคิดเห็น หรือเรื่องอื่นให้ผู้ดูแลตรวจสอบ",
+        "tags": [
+          "reports"
+        ]
+      },
+      "get": {
+        "operationId": "ReportsController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "example": 2,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "example": 50,
+              "type": "number"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "description": "ไม่ส่ง = ทุกสถานะ",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "OPEN",
+                "RESOLVED",
+                "REJECTED"
+              ]
+            }
+          },
+          {
+            "name": "targetKind",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "DESIGN",
+                "TEMPLATE",
+                "COMMENT",
+                "OTHER"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "สำเร็จ พร้อมข้อมูลแบ่งหน้า",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ReportDto"
+                      }
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PaginationMeta"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "เฉพาะผู้ดูแลระบบ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "error"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "example": "NOT_FOUND"
+                        },
+                        "message": {
+                          "type": "string",
+                          "example": "ไม่พบคลิปนี้ อาจถูกลบไปแล้ว"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "เรื่องร้องเรียนทั้งหมด (เจ้าหน้าที่และผู้ดูแลระบบเท่านั้น)",
+        "tags": [
+          "reports"
+        ]
+      }
+    },
+    "/api/v1/reports/{id}": {
+      "patch": {
+        "operationId": "ReportsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateReportDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ReportDto"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "เฉพาะผู้ดูแลระบบ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "error"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "example": "NOT_FOUND"
+                        },
+                        "message": {
+                          "type": "string",
+                          "example": "ไม่พบคลิปนี้ อาจถูกลบไปแล้ว"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "เรื่องนี้ถูกปิดไปแล้ว",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "error"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "example": "NOT_FOUND"
+                        },
+                        "message": {
+                          "type": "string",
+                          "example": "ไม่พบคลิปนี้ อาจถูกลบไปแล้ว"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "ปิดเรื่อง — จัดการแล้ว (ซ่อนเป้าหมายได้) หรือปัดตก · แจ้งผู้รายงาน",
+        "tags": [
+          "reports"
+        ]
+      }
+    },
+    "/api/v1/deleted-designs": {
+      "get": {
+        "operationId": "DeletedDesignsController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "example": 2,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "example": 50,
+              "type": "number"
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "ค้นจากชื่องาน หรือ coreUserId ของเจ้าของ (ตรงทั้งคำ)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "สำเร็จ พร้อมข้อมูลแบ่งหน้า",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/DeletedDesignDto"
+                      }
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PaginationMeta"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "เฉพาะผู้ดูแลระบบ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "error"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "example": "NOT_FOUND"
+                        },
+                        "message": {
+                          "type": "string",
+                          "example": "ไม่พบคลิปนี้ อาจถูกลบไปแล้ว"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "งานที่เจ้าของลบถาวรแล้ว ยังอยู่ในช่วงเก็บ 30 วัน",
+        "tags": [
+          "deleted-designs"
+        ]
+      }
+    },
+    "/api/v1/deleted-designs/{id}": {
+      "get": {
+        "operationId": "DeletedDesignsController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/DeletedDesignDetailDto"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "เฉพาะผู้ดูแลระบบ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "error"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "example": "NOT_FOUND"
+                        },
+                        "message": {
+                          "type": "string",
+                          "example": "ไม่พบคลิปนี้ อาจถูกลบไปแล้ว"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "งานที่ถูกลบหนึ่งชิ้นพร้อม JSON state (ดูอย่างเดียว)",
+        "tags": [
+          "deleted-designs"
+        ]
+      },
+      "patch": {
+        "operationId": "DeletedDesignsController_restore",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestoreDeletedDesignDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/RestoredDesignDto"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "เฉพาะผู้ดูแลระบบ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "error"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "example": "NOT_FOUND"
+                        },
+                        "message": {
+                          "type": "string",
+                          "example": "ไม่พบคลิปนี้ อาจถูกลบไปแล้ว"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "กู้คืนกลับไปไว้ในถังขยะของเจ้าของ และแจ้งเจ้าของ",
+        "tags": [
+          "deleted-designs"
+        ]
+      },
+      "delete": {
+        "operationId": "DeletedDesignsController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/DeletedDto"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "เฉพาะผู้ดูแลระบบ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "error"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "example": "NOT_FOUND"
+                        },
+                        "message": {
+                          "type": "string",
+                          "example": "ไม่พบคลิปนี้ อาจถูกลบไปแล้ว"
+                        },
+                        "details": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "ลบจริงทันที (ไม่รอครบ 30 วัน)",
+        "tags": [
+          "deleted-designs"
+        ]
+      }
     }
   },
   "info": {
@@ -4742,9 +5533,9 @@
           "trashedDesignCount": {
             "type": "number"
           },
-          "trashExpiredDesignCount": {
+          "deletedDesignCount": {
             "type": "number",
-            "description": "ดีไซน์ในถังขยะที่เกินระยะเก็บแล้ว รอลบถาวร"
+            "description": "ดีไซน์ที่ผู้ใช้ลบถาวรแล้ว เก็บไว้ให้ผู้ดูแล 30 วันก่อนลบจริง"
           },
           "templateCount": {
             "type": "number",
@@ -4767,7 +5558,7 @@
           },
           "openReportCount": {
             "type": "number",
-            "description": "การรายงานเนื้อหา (ฟีดแบ็กชนิด REPORT)"
+            "description": "เรื่องร้องเรียนที่ยังไม่ได้จัดการ (สถานะ OPEN)"
           },
           "nearQuotaMemberCount": {
             "type": "number",
@@ -4794,7 +5585,7 @@
           "activeMemberCount7d",
           "designCount",
           "trashedDesignCount",
-          "trashExpiredDesignCount",
+          "deletedDesignCount",
           "templateCount",
           "userTemplateCount",
           "assetCount",
@@ -4985,6 +5776,451 @@
           "targetId",
           "metadata",
           "createdAt"
+        ]
+      },
+      "CreatedReportDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "targetKind": {
+            "type": "string",
+            "enum": [
+              "DESIGN",
+              "TEMPLATE",
+              "COMMENT",
+              "OTHER"
+            ]
+          },
+          "targetId": {
+            "type": "object",
+            "format": "uuid",
+            "nullable": true
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "COPYRIGHT",
+              "INAPPROPRIATE",
+              "SPAM",
+              "PERSONAL_DATA",
+              "OTHER"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "OPEN",
+              "RESOLVED",
+              "REJECTED"
+            ]
+          },
+          "createdAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "targetKind",
+          "reason",
+          "status",
+          "createdAt"
+        ]
+      },
+      "CreateReportDto": {
+        "type": "object",
+        "properties": {
+          "targetKind": {
+            "type": "string",
+            "enum": [
+              "DESIGN",
+              "TEMPLATE",
+              "COMMENT",
+              "OTHER"
+            ],
+            "description": "DESIGN = งานที่แชร์ · TEMPLATE = เทมเพลต · COMMENT = ความคิดเห็น · OTHER = เรื่องอื่นในระบบ"
+          },
+          "targetId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "id ของงาน เทมเพลต หรือความคิดเห็น (ไม่ส่งเมื่อ targetKind = OTHER)"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "COPYRIGHT",
+              "INAPPROPRIATE",
+              "SPAM",
+              "PERSONAL_DATA",
+              "OTHER"
+            ],
+            "description": "COPYRIGHT ละเมิดลิขสิทธิ์ · INAPPROPRIATE ไม่เหมาะสม · SPAM สแปม · PERSONAL_DATA ข้อมูลส่วนบุคคล · OTHER อื่น ๆ"
+          },
+          "details": {
+            "type": "string",
+            "example": "ภาพในเทมเพลตนี้นำมาจากเพจอื่นโดยไม่ได้รับอนุญาต",
+            "description": "รายละเอียด (บังคับอย่างน้อย 5 ตัวอักษรเมื่อเลือก \"อื่น ๆ\")"
+          },
+          "link": {
+            "type": "string",
+            "example": "/templates",
+            "description": "หน้าที่เกี่ยวข้อง (path ภายในระบบ) — ใช้กับ OTHER"
+          }
+        },
+        "required": [
+          "targetKind",
+          "reason"
+        ]
+      },
+      "ReportTargetDto": {
+        "type": "object",
+        "properties": {
+          "exists": {
+            "type": "boolean",
+            "description": "ยังมีอยู่ในระบบ (งานที่เจ้าของลบถาวรแล้วนับว่าไม่มี)"
+          },
+          "hidden": {
+            "type": "boolean",
+            "description": "ถูกซ่อนแล้ว: เทมเพลตถูกซ่อน · งานปิดลิงก์แชร์"
+          },
+          "title": {
+            "type": "object",
+            "nullable": true
+          },
+          "thumbnail": {
+            "type": "object",
+            "nullable": true,
+            "description": "ภาพย่อ (data URL) ของงานหรือเทมเพลต"
+          },
+          "designType": {
+            "type": "object",
+            "nullable": true
+          },
+          "width": {
+            "type": "object",
+            "nullable": true
+          },
+          "height": {
+            "type": "object",
+            "nullable": true
+          },
+          "body": {
+            "type": "object",
+            "nullable": true,
+            "description": "ข้อความของความคิดเห็น"
+          },
+          "ownerCoreUserId": {
+            "type": "object",
+            "nullable": true,
+            "description": "เจ้าของงาน/ผู้เผยแพร่/ผู้เขียน"
+          }
+        },
+        "required": [
+          "exists",
+          "hidden"
+        ]
+      },
+      "ReportDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "targetKind": {
+            "type": "string",
+            "enum": [
+              "DESIGN",
+              "TEMPLATE",
+              "COMMENT",
+              "OTHER"
+            ]
+          },
+          "targetId": {
+            "type": "object",
+            "format": "uuid",
+            "nullable": true
+          },
+          "targetExcerpt": {
+            "type": "object",
+            "nullable": true,
+            "description": "ชื่อหรือข้อความของสิ่งที่ถูกรายงาน ณ ตอนแจ้ง"
+          },
+          "link": {
+            "type": "object",
+            "nullable": true
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "COPYRIGHT",
+              "INAPPROPRIATE",
+              "SPAM",
+              "PERSONAL_DATA",
+              "OTHER"
+            ]
+          },
+          "details": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "OPEN",
+              "RESOLVED",
+              "REJECTED"
+            ]
+          },
+          "reporterCoreUserId": {
+            "type": "string",
+            "description": "ผู้รายงาน — ผู้ดูแลเห็นได้ เพื่อตามการรายงานเท็จซ้ำ ๆ"
+          },
+          "resolvedByCoreUserId": {
+            "type": "object",
+            "nullable": true
+          },
+          "resolutionNote": {
+            "type": "object",
+            "nullable": true
+          },
+          "actionTaken": {
+            "type": "string",
+            "enum": [
+              "HIDE_TARGET"
+            ],
+            "nullable": true
+          },
+          "resolvedAt": {
+            "type": "object",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "target": {
+            "nullable": true,
+            "description": "null เมื่อ targetKind = OTHER",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ReportTargetDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "targetKind",
+          "reason",
+          "details",
+          "status",
+          "reporterCoreUserId",
+          "createdAt"
+        ]
+      },
+      "UpdateReportDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "RESOLVED",
+              "REJECTED"
+            ],
+            "description": "RESOLVED = จัดการแล้ว · REJECTED = พิจารณาแล้วไม่เข้าข่าย (ปัดตก)"
+          },
+          "note": {
+            "type": "string",
+            "description": "บันทึกของผู้ดูแล (เก็บกับเรื่องและใน audit log)"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "HIDE_TARGET"
+            ],
+            "description": "HIDE_TARGET = ซ่อนเทมเพลต · ปิดลิงก์แชร์ของงาน · ลบความคิดเห็น (ใช้ได้กับ RESOLVED เท่านั้น)"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "DeletedDesignDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "designType": {
+            "type": "string"
+          },
+          "width": {
+            "type": "number"
+          },
+          "height": {
+            "type": "number"
+          },
+          "thumbnail": {
+            "type": "object",
+            "nullable": true
+          },
+          "pageCount": {
+            "type": "number"
+          },
+          "ownerCoreUserId": {
+            "type": "string"
+          },
+          "trashedAt": {
+            "type": "object",
+            "nullable": true
+          },
+          "deletedAt": {
+            "type": "string",
+            "description": "เวลาที่เจ้าของลบถาวร"
+          },
+          "purgeAt": {
+            "type": "string",
+            "description": "ระบบจะลบจริงหลังเวลานี้"
+          },
+          "daysLeft": {
+            "type": "number"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "designType",
+          "width",
+          "height",
+          "pageCount",
+          "ownerCoreUserId",
+          "deletedAt",
+          "purgeAt",
+          "daysLeft",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "DeletedDesignDetailDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "designType": {
+            "type": "string"
+          },
+          "width": {
+            "type": "number"
+          },
+          "height": {
+            "type": "number"
+          },
+          "thumbnail": {
+            "type": "object",
+            "nullable": true
+          },
+          "pageCount": {
+            "type": "number"
+          },
+          "ownerCoreUserId": {
+            "type": "string"
+          },
+          "trashedAt": {
+            "type": "object",
+            "nullable": true
+          },
+          "deletedAt": {
+            "type": "string",
+            "description": "เวลาที่เจ้าของลบถาวร"
+          },
+          "purgeAt": {
+            "type": "string",
+            "description": "ระบบจะลบจริงหลังเวลานี้"
+          },
+          "daysLeft": {
+            "type": "number"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "document": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "JSON state ของงาน (ดูอย่างเดียว)"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "designType",
+          "width",
+          "height",
+          "pageCount",
+          "ownerCoreUserId",
+          "deletedAt",
+          "purgeAt",
+          "daysLeft",
+          "createdAt",
+          "updatedAt",
+          "document"
+        ]
+      },
+      "RestoredDesignDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "ownerCoreUserId": {
+            "type": "string"
+          },
+          "trashedAt": {
+            "type": "string",
+            "description": "เริ่มนับ 30 วันของถังขยะใหม่จากเวลานี้"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "ownerCoreUserId",
+          "trashedAt"
+        ]
+      },
+      "RestoreDeletedDesignDto": {
+        "type": "object",
+        "properties": {
+          "restore": {
+            "type": "boolean",
+            "example": true,
+            "description": "true = กู้กลับไปไว้ในถังขยะของเจ้าของ"
+          }
+        },
+        "required": [
+          "restore"
         ]
       }
     }

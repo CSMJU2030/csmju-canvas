@@ -27,7 +27,7 @@ export function OverviewTab() {
     {
       label: 'ดีไซน์',
       value: data.designCount.toLocaleString('th-TH'),
-      hint: `ในถังขยะ ${data.trashedDesignCount.toLocaleString('th-TH')} · รอลบถาวร ${data.trashExpiredDesignCount.toLocaleString('th-TH')}`,
+      hint: `ในถังขยะ ${data.trashedDesignCount.toLocaleString('th-TH')} · ถูกลบรอตรวจ ${data.deletedDesignCount.toLocaleString('th-TH')}`,
     },
     {
       label: 'เทมเพลต',
