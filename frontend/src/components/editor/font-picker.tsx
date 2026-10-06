@@ -4,15 +4,20 @@ import { Check, ChevronDown, Search } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { FloatingPanel, useAnchoredMenu } from '@/components/csmju/floating';
 import { cx } from '@/components/csmju/primitives';
-import { FONT_FAMILIES, cssFamily, ensureFont, type FontFamily } from '@/lib/editor/fonts';
+import { FONT_FAMILIES, assetFontId, cssFamily, ensureFont, fontLabel, isPopularFont, popularFirst, userFontName, useUserFonts, type FontFamily, type FontStyle } from '@/lib/editor/fonts';
+import { useMyFonts } from './use-my-fonts';
 
 /// หมวดของฟอนต์ (ชิปใต้ช่องค้นหา แบบภาพบรีฟ "อันนี้ฟอนต์")
-const CATEGORIES: { key: FontFamily['style'] | 'all'; label: string }[] = [
+type Category = FontStyle | 'all' | 'popular';
+
+const CATEGORIES: { key: Category; label: string }[] = [
   { key: 'all', label: 'ทั้งหมด' },
+  { key: 'popular', label: 'ยอดนิยม' },
   { key: 'handwriting', label: 'ลายมือ' },
   { key: 'display', label: 'ดิสเพลย์' },
   { key: 'sans', label: 'ไม่มีหัว' },
   { key: 'serif', label: 'มีเชิง' },
+  { key: 'mono', label: 'โมโนสเปซ' },
 ];
 
 /// โหลดฟอนต์ทุกตัวไว้ให้ตัวอย่างในรายการแสดงด้วยฟอนต์จริง (ไฟล์อยู่ใน repo ไม่ออกเน็ตภายนอก)
@@ -52,13 +57,16 @@ export function FontName({ id, label, className }: { id: string; label: string; 
   );
 }
 
-export function matchFonts(query: string, category: FontFamily['style'] | 'all' = 'all'): FontFamily[] {
+/// ค้นฟอนต์ในคลัง · ยอดนิยมขึ้นก่อน
+export function matchFonts(query: string, category: Category = 'all'): FontFamily[] {
   const term = query.trim().toLowerCase();
 
-  return FONT_FAMILIES.filter(
-    (font) =>
-      (category === 'all' || font.style === category) &&
-      (!term || font.label.toLowerCase().includes(term) || font.id.toLowerCase().includes(term)),
+  return popularFirst(
+    FONT_FAMILIES.filter(
+      (font) =>
+        (category === 'all' || (category === 'popular' ? isPopularFont(font.id) : font.style === category)) &&
+        (!term || font.label.toLowerCase().includes(term) || font.id.toLowerCase().includes(term)),
+    ),
   );
 }
 
@@ -66,10 +74,10 @@ export function matchFonts(query: string, category: FontFamily['style'] | 'all' 
 export function FontPicker({ value, onChange, label = 'ฟอนต์' }: { value: string; onChange: (id: string) => void; label?: string }) {
   const { open, setOpen, anchorRef, menuRef } = useAnchoredMenu('start');
   const [query, setQuery] = useState('');
-  const [category, setCategory] = useState<FontFamily['style'] | 'all'>('all');
+  const [category, setCategory] = useState<Category>('all');
   const searchId = useId();
-  const current = FONT_FAMILIES.find((f) => f.id === value);
-  const fonts = matchFonts(query, category);
+  const names = useUserFonts((s) => s.names);
+  const currentLabel = fontLabel(value, names);
 
   usePreloadFonts([value]);
 
@@ -80,13 +88,13 @@ export function FontPicker({ value, onChange, label = 'ฟอนต์' }: { val
         type="button"
         aria-haspopup="dialog"
         aria-expanded={open}
-        aria-label={`${label}: ${current?.label ?? value}`}
+        aria-label={`${label}: ${currentLabel}`}
         title="เลือกฟอนต์"
         onClick={() => setOpen((v) => !v)}
         className="flex min-h-12 w-full items-center justify-between gap-2 rounded-xl border border-line-strong bg-surface-muted px-4 text-csmju-body text-ink hover:bg-surface"
         style={{ fontFamily: cssFamily(value) }}
       >
-        <span className="truncate">{current?.label ?? value}</span>
+        <span className="truncate">{currentLabel}</span>
         <ChevronDown aria-hidden className="size-5 shrink-0" />
       </button>
       <FloatingPanel open={open} menuRef={menuRef} role="dialog" label="เลือกฟอนต์" className="w-96 max-w-full rounded-2xl border border-line bg-surface p-4 shadow-csmju-lg">
@@ -117,28 +125,52 @@ export function FontPicker({ value, onChange, label = 'ฟอนต์' }: { val
             </button>
           ))}
         </div>
-        <ul role="listbox" aria-label="ฟอนต์" className="mt-2 max-h-popover overflow-y-auto">
-          {fonts.length === 0 ? (
-            <li className="px-2 py-4 text-csmju-caption text-muted">ไม่พบฟอนต์ที่ค้นหา</li>
-          ) : (
-            fonts.map((font) => (
-              <li key={font.id} role="option" aria-selected={font.id === value}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onChange(font.id);
-                    setOpen(false);
-                  }}
-                  className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left hover:bg-surface-muted"
-                >
-                  <FontName id={font.id} label={font.label} className="flex-1 truncate text-csmju-body text-ink" />
-                  {font.id === value && <Check aria-hidden className="size-5 text-ink" />}
-                </button>
-              </li>
-            ))
-          )}
-        </ul>
+        {open && (
+          <FontOptions
+            query={query}
+            category={category}
+            value={value}
+            onPick={(id) => {
+              onChange(id);
+              setOpen(false);
+            }}
+          />
+        )}
       </FloatingPanel>
     </>
+  );
+}
+
+/// รายการฟอนต์ในตัวเลือก (โหลด "ฟอนต์ของฉัน" เมื่อเปิดรายการเท่านั้น)
+function FontOptions({ query, category, value, onPick }: { query: string; category: Category; value: string; onPick: (id: string) => void }) {
+  const myFonts = useMyFonts();
+  const term = query.trim().toLowerCase();
+  // ฟอนต์ของฉันขึ้นก่อน (หมวด "ทั้งหมด" เท่านั้น)
+  const mine =
+    category === 'all'
+      ? (myFonts.data?.items ?? []).map((a) => ({ id: assetFontId(a.id), label: userFontName(a.fileName), mine: true })).filter((f) => !term || f.label.toLowerCase().includes(term))
+      : [];
+  const fonts: Array<{ id: string; label: string; mine?: boolean }> = [...mine, ...matchFonts(query, category)];
+
+  return (
+    <ul role="listbox" aria-label="ฟอนต์" className="mt-2 max-h-popover overflow-y-auto">
+      {fonts.length === 0 ? (
+        <li className="px-2 py-4 text-csmju-caption text-muted">ไม่พบฟอนต์ที่ค้นหา</li>
+      ) : (
+        fonts.map((font) => (
+          <li key={font.id} role="option" aria-selected={font.id === value}>
+            <button
+              type="button"
+              onClick={() => onPick(font.id)}
+              className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left hover:bg-surface-muted"
+            >
+              <FontName id={font.id} label={font.label} className="flex-1 truncate text-csmju-body text-ink" />
+              {font.mine && <span className="text-csmju-caption text-muted">ของฉัน</span>}
+              {font.id === value && <Check aria-hidden className="size-5 text-ink" />}
+            </button>
+          </li>
+        ))
+      )}
+    </ul>
   );
 }

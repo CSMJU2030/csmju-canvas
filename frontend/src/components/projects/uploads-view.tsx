@@ -34,6 +34,10 @@ const TYPE_OPTIONS = [
   { value: 'audio/mp4', label: 'เสียง M4A' },
   { value: 'audio/ogg', label: 'เสียง OGG' },
   { value: 'audio/wav', label: 'เสียง WAV' },
+  { value: 'font/ttf', label: 'ฟอนต์ TTF' },
+  { value: 'font/otf', label: 'ฟอนต์ OTF' },
+  { value: 'font/woff', label: 'ฟอนต์ WOFF' },
+  { value: 'font/woff2', label: 'ฟอนต์ WOFF2' },
 ];
 
 const SORT_OPTIONS = [
@@ -54,6 +58,10 @@ const MIME_LABEL: Record<string, string> = {
   'audio/mp4': 'M4A',
   'audio/ogg': 'OGG',
   'audio/wav': 'WAV',
+  'font/ttf': 'TTF',
+  'font/otf': 'OTF',
+  'font/woff': 'WOFF',
+  'font/woff2': 'WOFF2',
 };
 
 /// โฟลเดอร์ "อัปโหลด" แบบ Canva (ภาพบรีฟ "ส่วนของ โปรเจกต์ - อัพโหลดแบบใหม่ 2 และ 3")
@@ -408,7 +416,7 @@ function AssetDetails({ asset, onClose }: { asset: Asset; onClose: () => void })
   }, [onClose]);
 
   const rows: [string, ReactNode][] = [
-    ['ชนิด', `${asset.mimeType.startsWith('video/') ? 'วิดีโอ' : asset.mimeType.startsWith('audio/') ? 'เสียง' : 'รูปภาพ'} ${MIME_LABEL[asset.mimeType] ?? ''}`],
+    ['ชนิด', `${asset.mimeType.startsWith('video/') ? 'วิดีโอ' : asset.mimeType.startsWith('audio/') ? 'เสียง' : asset.mimeType.startsWith('font/') ? 'ฟอนต์' : 'รูปภาพ'} ${MIME_LABEL[asset.mimeType] ?? ''}`],
     ['ขนาดไฟล์', formatBytes(asset.sizeBytes)],
     ['อัปโหลดเมื่อ', new Date(asset.createdAt).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' })],
     ['บันทึกใน', 'อัปโหลด'],

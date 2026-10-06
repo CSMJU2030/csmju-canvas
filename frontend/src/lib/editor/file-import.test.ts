@@ -21,6 +21,18 @@ describe('planImport', () => {
     expect(planImport(f('data.tsv', ''))).toEqual({ kind: 'table', delimiter: '\t' });
   });
 
+  it('uploads font files as “my fonts” (by extension or font mime) up to 5 MB', () => {
+    expect(planImport(f('ลายมือ.ttf', ''))).toEqual({ kind: 'font' });
+    expect(planImport(f('Brand.OTF', 'application/octet-stream'))).toEqual({ kind: 'font' });
+    expect(planImport(f('web.woff2', 'font/woff2'))).toEqual({ kind: 'font' });
+    expect(planImport(f('legacy', 'application/x-font-woff'))).toEqual({ kind: 'font' });
+    expect(planImport(f('huge.ttf', 'font/ttf', 6 * 1024 * 1024)).kind).toBe('unsupported');
+
+    const collection = planImport(f('set.ttc', 'font/collection'));
+
+    expect(collection.kind === 'unsupported' && collection.reason).toContain('TTC');
+  });
+
   it('explains files it cannot place', () => {
     const pdf = planImport(f('report.pdf', 'application/pdf'));
 

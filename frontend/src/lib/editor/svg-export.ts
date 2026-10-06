@@ -1,5 +1,5 @@
 import { chartSvg } from './chart';
-import { cssFamily } from './fonts';
+import { assetFontUrl, assetIdOfFont, cssFamily, fontFaceName } from './fonts';
 import { isGradient, parseGradient } from './paint';
 import { HIGHLIGHTER_ALPHA, dashFor, drawElement, layoutLines, preloadPage, svgDataUrl } from './render';
 import { tableSvg } from './table-render';
@@ -8,15 +8,58 @@ import { isLineShape, type CanvasElement, type FrameElement, type GridElement, t
 /// ส่งออกหน้าเป็น SVG (เวกเตอร์) — ข้อความ รูปทรง เส้นวาด และไอคอนยังเป็นเวกเตอร์ แก้ต่อในโปรแกรมอื่นได้
 ///
 /// รูปภาพฝังเป็น PNG ในไฟล์ (รวมการครอป ปรับสี และขอบมนแล้ว) · ฟอนต์อ้างชื่อฟอนต์ไว้
-/// เครื่องที่เปิดไฟล์ต้องมีฟอนต์นั้นจึงจะเห็นเหมือนกัน (ฟอนต์อยู่ใน /fonts ของระบบ ดาวน์โหลดได้ฟรี สัญญาอนุญาต OFL)
+/// เครื่องที่เปิดไฟล์ต้องมีฟอนต์นั้นจึงจะเห็นเหมือนกัน (ฟอนต์อยู่ใน /fonts ของระบบ ดาวน์โหลดได้ฟรี สัญญาอนุญาต OFL/Apache 2.0)
+/// ยกเว้นฟอนต์ที่ผู้ใช้อัปโหลดเอง ("asset:<uuid>") ซึ่งฝังเป็น @font-face ในไฟล์ (เครื่องอื่นไม่มีฟอนต์นี้แน่นอน) ·
+/// โหลดไฟล์ฟอนต์ไม่ได้ → ข้ามไป ข้อความแสดงด้วยฟอนต์สำรอง
 
 const esc = (text: string) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const n = (v: number) => Math.round(v * 100) / 100;
 
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = '';
+
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+
+  return btoa(binary);
+}
+
+/// ฟอนต์ที่อัปโหลดเองที่หน้านี้ใช้ (ข้อความ ตาราง ชาร์ต)
+export function assetFontsOf(page: Page): string[] {
+  const ids = new Set<string>();
+
+  for (const el of page.elements) {
+    if ((el.type === 'text' || el.type === 'table' || el.type === 'chart') && assetIdOfFont(el.fontFamily)) ids.add(el.fontFamily);
+  }
+
+  return [...ids];
+}
+
+async function embeddedFontFaces(page: Page): Promise<string[]> {
+  const faces = await Promise.all(
+    assetFontsOf(page).map(async (id) => {
+      try {
+        const response = await fetch(assetFontUrl(assetIdOfFont(id)!), { credentials: 'same-origin' });
+
+        if (!response.ok) return '';
+
+        const type = response.headers.get('content-type')?.split(';')[0] || 'font/ttf';
+        const data = bytesToBase64(new Uint8Array(await response.arrayBuffer()));
+
+        return `@font-face{font-family:"${fontFaceName(id)}";src:url(data:${type};base64,${data})}`;
+      } catch {
+        return '';
+      }
+    }),
+  );
+
+  return faces.filter(Boolean);
+}
+
 export async function pageToSvg(page: Page, size: { width: number; height: number }): Promise<string> {
   await preloadPage(page);
 
-  const defs: string[] = [];
+  const faces = await embeddedFontFaces(page);
+  const defs: string[] = faces.length ? [`<style>${faces.join('')}</style>`] : [];
   const body: string[] = [];
   let uid = 0;
   const id = (prefix: string) => `${prefix}${++uid}`;

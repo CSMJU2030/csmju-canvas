@@ -27,7 +27,7 @@ import {
 } from '@/lib/editor/chart-data';
 import { SWATCHES } from '@/lib/editor/color';
 import { createChart } from '@/lib/editor/factory';
-import { FONT_FAMILIES, cssFamily } from '@/lib/editor/fonts';
+import { cssFamily, shortFontLabel, useUserFonts } from '@/lib/editor/fonts';
 import { currentPage, useEditor } from '@/lib/editor/store';
 import type { CanvasElement, ChartElement, ChartKind } from '@/lib/editor/types';
 import { useEditorUi } from '@/lib/editor/ui-store';
@@ -167,7 +167,7 @@ export function ChartKindGlyph({ kind, className = 'size-10' }: { kind: ChartKin
 /// ปุ่มบนแถบเครื่องมือลอยเมื่อเลือกชาร์ต · `children` = ปุ่มท้ายแถบร่วม (ความโปร่งใส เอฟเฟกต์ ฯลฯ)
 export function ChartTools({ el, children }: { el: ChartElement; children?: ReactNode }) {
   const panel = useEditorUi((s) => s.panel);
-  const font = FONT_FAMILIES.find((f) => f.id === el.fontFamily);
+  const fontNames = useUserFonts((s) => s.names);
   const ring = el.chart === 'progress-ring';
 
   return (
@@ -218,7 +218,7 @@ export function ChartTools({ el, children }: { el: ChartElement; children?: Reac
       </PopoverButton>
       <ToolbarButton label="ฟอนต์ของชาร์ต" wide onClick={() => openChartPanel('settings')}>
         <span className="max-w-32 truncate text-csmju-caption" style={{ fontFamily: cssFamily(el.fontFamily) }}>
-          {font?.label.replace(/\s*\(.*\)$/, '') ?? el.fontFamily}
+          {shortFontLabel(el.fontFamily, fontNames)}
         </span>
       </ToolbarButton>
       <ToolbarButton label={ring ? 'แสดงชื่อใต้เปอร์เซ็นต์' : 'แสดงคำอธิบายสี'} active={el.showLegend} onClick={() => update(el.id, (c) => ({ showLegend: !c.showLegend }))}>

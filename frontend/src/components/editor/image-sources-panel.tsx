@@ -2,28 +2,30 @@
 
 import { useQuery } from '@tanstack/react-query';
 import {
-  Aperture, BookOpen, Camera, ClipboardPaste, Eraser, ExternalLink, Image as ImageIcon, Images, Info, Library, Lightbulb, MousePointer2,
+  AppWindow, Aperture, BookOpen, Inbox, Camera, ClipboardPaste, Eraser, ExternalLink, Image as ImageIcon, Images, Info, Library, Lightbulb, MousePointer2,
   PanelRight, Quote, Rocket, Search, ShieldAlert, X, type LucideIcon,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button, EmptyState, ErrorState, FormField, Spinner, cx, errorMessage, inputClass, useToast } from '@/components/csmju/primitives';
 import { api, qs } from '@/lib/csmju/api';
-import { createImage } from '@/lib/editor/factory';
-import { fillSelectedFrame, setImageDragData } from '@/lib/editor/frame-actions';
+import { setImageDragData } from '@/lib/editor/frame-actions';
+import { insertImported } from '@/lib/editor/insert-asset';
 import {
-  IMAGE_SOURCES, IMPORTED_GROUPS, SITE_LABELS, SOURCE_WINDOW_NAME, canCredit, createCreditText, hostOf, needsPermission, originOfAsset,
+  IMAGE_SOURCES, IMPORTED_GROUPS, INSPIRATION_GROUP_LABEL, SITE_LABELS, SOURCE_WINDOW_NAME, canCredit, createCreditText, hostOf, needsPermission, originOfAsset,
   sideWindowFeatures, sourceUrl, useImportHint, useSourceIntent, type ImageSourceSite, type KnownSite, type SourceSite,
 } from '@/lib/editor/image-sources';
+import { useSourcesWindow } from '@/lib/editor/sources-window';
 import { canEditDoc, currentPage, useEditor } from '@/lib/editor/store';
 import type { ImageElement } from '@/lib/editor/types';
 import { useEditorUi } from '@/lib/editor/ui-store';
 import type { Asset } from '@/lib/types';
 import { SectionHeading } from './panel-parts';
+import { TrayLink, trayHint } from './receive-tray';
 
 /// "แหล่งภาพ" (ตามที่ PL ตัดสิน): ทางลัดไปเว็บคลังภาพที่เปิดข้างจอ · ผู้ใช้คัดลอก/ลากภาพกลับมาเองอย่างถูกสิทธิ์
 /// ไม่มี iframe ไม่ดึงภาพจากเว็บอื่นฝั่งเซิร์ฟเวอร์ ไม่มี API key · ไอคอนเป็นไอคอนทั่วไปของ lucide ไม่ใช่โลโก้ของเว็บนั้น
 
-const SOURCE_ICONS: Record<KnownSite, LucideIcon> = {
+export const SOURCE_ICONS: Record<KnownSite, LucideIcon> = {
   unsplash: Camera,
   pexels: Aperture,
   pixabay: ImageIcon,
@@ -36,7 +38,7 @@ const SOURCE_ICONS: Record<KnownSite, LucideIcon> = {
 
 // ── เปิดหน้าต่างข้างจอ ───────────────────────────────────────────
 
-function useOpenSource() {
+export function useOpenSource() {
   const toast = useToast();
 
   return (source: ImageSourceSite, q: string) => {
@@ -64,9 +66,21 @@ function useOpenSource() {
 export function ImageSourcesBrowser({ onShowImported }: { onShowImported?: () => void }) {
   const free = IMAGE_SOURCES.filter((s) => s.group === 'free');
   const inspiration = IMAGE_SOURCES.filter((s) => s.group === 'inspiration');
+  const floating = useSourcesWindow((s) => s.open);
 
   return (
     <div className="flex flex-col gap-5">
+      <button
+        type="button"
+        aria-pressed={floating}
+        onClick={() => useSourcesWindow.getState().toggle()}
+        className={cx(
+          'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-3 text-csmju-caption font-semibold',
+          floating ? 'border-primary bg-primary-soft text-primary' : 'border-line-strong bg-surface text-ink hover:bg-surface-muted',
+        )}
+      >
+        <AppWindow aria-hidden className="size-4" /> {floating ? 'ปิดหน้าต่างลอยแหล่งภาพ' : 'แยกเป็นหน้าต่างลอย (ย้าย/ย่อได้ เหนือหน้างาน)'}
+      </button>
       <p className="text-csmju-caption text-body">
         เปิดเว็บคลังภาพไว้ข้างจอ แล้วคัดลอกหรือลากภาพกลับมาใส่งาน — CS Canvas ไม่ฝังหรือดึงภาพจากเว็บเหล่านี้เอง และไม่ส่งข้อมูลของคุณไปให้ (คำค้นที่พิมพ์จะไปที่เว็บนั้นโดยตรง)
       </p>
@@ -77,10 +91,10 @@ export function ImageSourcesBrowser({ onShowImported }: { onShowImported?: () =>
 
       <ImportGuide />
 
-      <section aria-label="คลังภาพสัญญาอนุญาตเสรี">
-        <h3 className="mb-2 text-csmju-body font-bold text-ink">คลังภาพสัญญาอนุญาตเสรี</h3>
+      <section aria-label={INSPIRATION_GROUP_LABEL}>
+        <h3 className="mb-2 text-csmju-body font-bold text-ink">{INSPIRATION_GROUP_LABEL}</h3>
         <ul className="flex flex-col gap-3">
-          {free.map((source) => (
+          {inspiration.map((source) => (
             <li key={source.key}>
               <SourceCard source={source} />
             </li>
@@ -88,10 +102,10 @@ export function ImageSourcesBrowser({ onShowImported }: { onShowImported?: () =>
         </ul>
       </section>
 
-      <section aria-label="หาไอเดียเท่านั้น">
-        <h3 className="mb-2 text-csmju-body font-bold text-ink">หาไอเดียเท่านั้น</h3>
+      <section aria-label="คลังภาพสัญญาอนุญาตเสรี">
+        <h3 className="mb-2 text-csmju-body font-bold text-ink">คลังภาพสัญญาอนุญาตเสรี</h3>
         <ul className="flex flex-col gap-3">
-          {inspiration.map((source) => (
+          {free.map((source) => (
             <li key={source.key}>
               <SourceCard source={source} />
             </li>
@@ -176,6 +190,14 @@ function SourceCard({ source }: { source: ImageSourceSite }) {
             <ExternalLink aria-hidden className="size-4" /> เปิดในแท็บใหม่
           </a>
         </div>
+        <TrayLink
+          source={source}
+          q={q}
+          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-line-strong bg-surface px-3 text-csmju-caption font-medium text-ink hover:bg-surface-muted"
+        >
+          <Inbox aria-hidden className="size-4" /> เปิดถาดรับภาพ แล้วไปที่ {source.name}
+        </TrayLink>
+        {source.key === 'pinterest' && <p className="text-csmju-caption text-muted">{trayHint()}</p>}
       </form>
     </article>
   );
@@ -185,31 +207,6 @@ function SourceCard({ source }: { source: ImageSourceSite }) {
 
 const PREVIEW_PER_GROUP = 6;
 const PAGE_LIMIT = 40;
-
-function loadImage(src: string): Promise<{ width: number; height: number }> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-
-    img.onload = () => resolve({ width: img.naturalWidth || 400, height: img.naturalHeight || 400 });
-    img.onerror = () => reject(new Error('เปิดรูปนี้ไม่ได้'));
-    img.src = src;
-  });
-}
-
-/// ใส่ภาพที่นำเข้าลงหน้า (หรือลงกรอบที่เลือกอยู่) · คืน id ของชิ้นรูปใหม่ (ใส่ลงกรอบ = null)
-async function insertImported(asset: Asset): Promise<string | null> {
-  const size = await loadImage(asset.contentUrl);
-  const source = { src: asset.contentUrl, assetId: asset.id, naturalWidth: size.width, naturalHeight: size.height, name: asset.fileName, origin: originOfAsset(asset) };
-
-  if (fillSelectedFrame(source)) return null;
-
-  const state = useEditor.getState();
-  const image = createImage({ width: state.width, height: state.height }, source);
-
-  state.addElements([image]);
-
-  return image.id;
-}
 
 /// เลือกรูปแล้วเปิดแผง "ลบพื้นหลัง" (แผงทำงานกับรูปที่เลือกอยู่)
 export function openBgRemoveFor(id: string) {

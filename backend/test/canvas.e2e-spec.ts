@@ -292,6 +292,83 @@ describe('CS Canvas API (e2e)', () => {
     await http().get('/api/v1/assets?kind=document').set('Authorization', bearer(student, 'student')).expect(400);
   });
 
+  it('ฟอนต์ของฉัน: ตรวจ TTF/WOFF2 จากไบต์ · กรอง kind=font · นับโควตา · เกิน 5 MB ไม่รับ · คนที่ได้ลิงก์งานโหลดฟอนต์ได้', async () => {
+    // หัว sfnt ของ TrueType (00 01 00 00 + จำนวนตาราง) และ WOFF2 ที่ช่อง length ตรงกับขนาดไฟล์
+    const ttf = Buffer.concat([Buffer.from([0x00, 0x01, 0x00, 0x00, 0x00, 0x0c]), Buffer.alloc(58)]);
+    const woff2 = Buffer.alloc(48);
+
+    woff2.write('wOF2', 0, 'latin1');
+    Buffer.from([0x00, 0x01, 0x00, 0x00]).copy(woff2, 4);
+    woff2.writeUInt32BE(woff2.length, 8);
+
+    const before = await http().get('/api/v1/quotas').set('Authorization', bearer(student, 'student')).expect(200);
+    const font = await http()
+      .post('/api/v1/assets')
+      .set('Authorization', bearer(student, 'student'))
+      // แหล่งที่มาไม่มีความหมายกับฟอนต์ — ระบบไม่เก็บ
+      .field('sourceSite', 'pinterest')
+      .attach('file', ttf, 'ฟอนต์ลายมือ.ttf')
+      .expect(201);
+    const fontId = font.body.data.id as string;
+
+    expect(font.body.data).toMatchObject({ mimeType: 'font/ttf', fileName: 'ฟอนต์ลายมือ.ttf', sourceSite: null, sourceUrl: null });
+
+    const packed = await http().post('/api/v1/assets').set('Authorization', bearer(student, 'student')).attach('file', woff2, 'brand.woff2').expect(201);
+
+    expect(packed.body.data.mimeType).toBe('font/woff2');
+
+    const after = await http().get('/api/v1/quotas').set('Authorization', bearer(student, 'student')).expect(200);
+
+    expect(after.body.data.usedBytes).toBeGreaterThanOrEqual(before.body.data.usedBytes + ttf.length + woff2.length);
+
+    const fonts = await http().get('/api/v1/assets?kind=font').set('Authorization', bearer(student, 'student')).expect(200);
+    const kinds = (fonts.body.data as { id: string; mimeType: string }[]).map((a) => a.mimeType);
+
+    expect(kinds.every((m) => m.startsWith('font/'))).toBe(true);
+    expect((fonts.body.data as { id: string }[]).map((a) => a.id)).toEqual(expect.arrayContaining([fontId, packed.body.data.id]));
+
+    const images = await http().get('/api/v1/assets?kind=image').set('Authorization', bearer(student, 'student')).expect(200);
+
+    expect((images.body.data as { id: string }[]).some((a) => a.id === fontId)).toBe(false);
+
+    const content = await http().get(`/api/v1/assets/${fontId}/content`).set('Authorization', bearer(student, 'student')).expect(200);
+
+    expect(content.headers['content-type']).toBe('font/ttf');
+
+    // ฟอนต์ใหญ่เกิน 5 MB (แต่ยังไม่เกินเพดานรวมของตัวรับไฟล์)
+    const huge = Buffer.concat([ttf, Buffer.alloc(5 * 1024 * 1024)]);
+
+    await http().post('/api/v1/assets').set('Authorization', bearer(student, 'student')).attach('file', huge, 'huge.ttf').expect(400);
+    // TrueType Collection ไม่รับ
+    await http()
+      .post('/api/v1/assets')
+      .set('Authorization', bearer(student, 'student'))
+      .attach('file', Buffer.concat([Buffer.from('ttcf', 'latin1'), Buffer.alloc(60)]), 'set.ttc')
+      .expect(400);
+
+    // งานที่ใช้ฟอนต์นี้ (fontFamily: "asset:<uuid>") เปิดแชร์ด้วยลิงก์ → คนอื่นโหลดฟอนต์ได้ · ปิดลิงก์แล้วโหลดไม่ได้
+    const withFont = {
+      version: 1,
+      pages: [{ id: 'p1', background: null, elements: [{ id: 't', type: 'text', text: 'สวัสดี', fontFamily: `asset:${fontId}`, x: 0, y: 0, width: 50, height: 20 }] }],
+    };
+    const design = await http()
+      .post('/api/v1/designs')
+      .set('Authorization', bearer(student, 'student'))
+      .send({ title: 'ใช้ฟอนต์ของฉัน', designType: 'poster', width: 100, height: 100, document: withFont })
+      .expect(201);
+    const designId = design.body.data.id as string;
+
+    await http().get(`/api/v1/assets/${fontId}/content`).set('Authorization', bearer(other, 'student')).expect(404);
+    await http().patch(`/api/v1/designs/${designId}`).set('Authorization', bearer(student, 'student')).send({ linkAccess: 'VIEW' }).expect(200);
+    await http().get(`/api/v1/assets/${fontId}/content`).set('Authorization', bearer(other, 'student')).expect(200);
+    await http().patch(`/api/v1/designs/${designId}`).set('Authorization', bearer(student, 'student')).send({ linkAccess: 'NONE' }).expect(200);
+    await http().get(`/api/v1/assets/${fontId}/content`).set('Authorization', bearer(other, 'student')).expect(404);
+    // คนอื่นไม่เห็นฟอนต์นี้ในรายการของตัวเอง
+    const othersFonts = await http().get('/api/v1/assets?kind=font').set('Authorization', bearer(other, 'student')).expect(200);
+
+    expect((othersFonts.body.data as { id: string }[]).some((a) => a.id === fontId)).toBe(false);
+  });
+
   it('การตั้งค่าแก้ได้และอ่านกลับได้', async () => {
     await http().patch('/api/v1/preferences').set('Authorization', bearer(student, 'student')).send({ largeText: true }).expect(200);
 

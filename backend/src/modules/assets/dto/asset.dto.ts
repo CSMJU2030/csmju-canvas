@@ -16,8 +16,12 @@ export const ASSET_TYPES = [
   'audio/mp4',
   'audio/ogg',
   'audio/wav',
+  'font/ttf',
+  'font/otf',
+  'font/woff',
+  'font/woff2',
 ] as const;
-export const ASSET_KINDS = ['image', 'video', 'audio'] as const;
+export const ASSET_KINDS = ['image', 'video', 'audio', 'font'] as const;
 export const ASSET_SORTS = ['created', 'name', 'size'] as const;
 
 export class ListAssetsQuery extends PaginationQuery {
@@ -39,9 +43,9 @@ export class ListAssetsQuery extends PaginationQuery {
   @IsIn(ASSET_TYPES, { message: 'mimeType ไม่ถูกต้อง' })
   mimeType?: (typeof ASSET_TYPES)[number];
 
-  @ApiPropertyOptional({ enum: ASSET_KINDS, description: 'เฉพาะรูป วิดีโอ หรือเสียง (ไม่ใส่ = ทุกชนิด)' })
+  @ApiPropertyOptional({ enum: ASSET_KINDS, description: 'เฉพาะรูป วิดีโอ เสียง หรือฟอนต์ที่อัปโหลดเอง (ไม่ใส่ = ทุกชนิด)' })
   @IsOptional()
-  @IsIn(ASSET_KINDS, { message: 'kind ต้องเป็น image, video หรือ audio' })
+  @IsIn(ASSET_KINDS, { message: 'kind ต้องเป็น image, video, audio หรือ font' })
   kind?: (typeof ASSET_KINDS)[number];
 
   @ApiPropertyOptional({ format: 'uuid', description: 'เฉพาะรูปในโฟลเดอร์รูปนี้' })
@@ -87,7 +91,7 @@ export class UpdateAssetDto {
 }
 
 export class UploadAssetDto {
-  @ApiProperty({ type: 'string', format: 'binary', description: 'รูป PNG · JPEG · WebP · GIF · SVG ไม่เกิน 10 MB · วิดีโอ MP4 · WebM และเสียง MP3 · M4A · OGG · WAV ไม่เกิน 50 MB' })
+  @ApiProperty({ type: 'string', format: 'binary', description: 'รูป PNG · JPEG · WebP · GIF · SVG ไม่เกิน 10 MB · วิดีโอ MP4 · WebM และเสียง MP3 · M4A · OGG · WAV ไม่เกิน 50 MB · ฟอนต์ TTF · OTF · WOFF · WOFF2 ไม่เกิน 5 MB' })
   @IsOptional()
   file!: unknown;
 
