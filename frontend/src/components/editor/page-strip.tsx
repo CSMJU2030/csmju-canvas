@@ -2,8 +2,8 @@
 
 import { useQuery } from '@tanstack/react-query';
 import {
-  ChevronDown, ChevronLeft, ClipboardPaste, Copy, CopyPlus, Download, Ellipsis, Eye, EyeOff, FilePlus, Files, Grid2x2,
-  HelpCircle, Link, Lock, LockOpen, Maximize, Minus, NotebookPen, Pencil, Plus, Ruler, Scaling, Timer, Trash2, Upload,
+  Check, ChevronDown, ChevronLeft, ClipboardPaste, Copy, CopyPlus, Download, Ellipsis, Eye, EyeOff, FilePlus, Files, Grid2x2,
+  HelpCircle, LayoutDashboard, Link, Lock, LockOpen, Maximize, Minus, NotebookPen, Pencil, Plus, Rows3, Ruler, Scaling, Square, Timer, Trash2, Upload,
 } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { FloatingPanel, useAnchoredMenu } from '@/components/csmju/floating';
@@ -12,9 +12,11 @@ import { DESIGN_GROUPS, DESIGN_TYPES } from '@/lib/design-types';
 import { exportPages } from '@/lib/editor/export';
 import { renderPageToCanvas } from '@/lib/editor/render';
 import { canEditDoc, useEditor } from '@/lib/editor/store';
+import type { PagesLayout } from '@/lib/editor/page-layout';
 import { pageSizeOf, type Page } from '@/lib/editor/types';
 import { useEditorUi } from '@/lib/editor/ui-store';
-import { clampZoom, fitToScreen } from './stage';
+import { zoomBy, zoomTo } from '@/lib/editor/viewport';
+import { fitView } from './stage';
 import { AudioTrackBar } from './media-panel';
 import { useTimer } from './timer';
 
@@ -55,6 +57,8 @@ export function PageStrip() {
   const pages = useEditor((s) => s.doc.pages);
   const pageIndex = useEditor((s) => s.pageIndex);
   const readOnly = useEditor((s) => !canEditDoc(s));
+  /// ภาพย่อที่ชิ้นงานบนผืนผ้าใบกำลังถูกลากมาทับ (ปล่อย = ย้ายชิ้นงานไปหน้านั้น)
+  const dropTarget = useEditorUi((s) => s.pageDropTarget);
   const [dragging, setDragging] = useState<number | null>(null);
   const activeRef = useRef<HTMLLIElement>(null);
 
@@ -83,10 +87,15 @@ export function PageStrip() {
               onClick={() => useEditor.getState().setPageIndex(index)}
               aria-current={index === pageIndex ? 'page' : undefined}
               aria-label={`ไปที่หน้า ${index + 1}${page.name ? ` ${page.name}` : ''}${page.hidden ? ' (ซ่อนอยู่)' : ''}`}
-              title="ไปที่เพจ"
+              title="ไปที่เพจ · ลากชิ้นงานจากผืนผ้าใบมาวางที่นี่เพื่อย้ายไปหน้านี้"
+              data-page-drop={index}
               className={cx(
                 'relative block h-16 overflow-hidden rounded-lg border-2 bg-surface transition-colors',
-                index === pageIndex ? 'border-primary' : 'border-transparent hover:border-line-strong',
+                dropTarget === index
+                  ? cx('ring-2 ring-offset-2', page.locked ? 'border-danger ring-danger' : 'border-primary ring-primary')
+                  : index === pageIndex
+                    ? 'border-primary'
+                    : 'border-transparent hover:border-line-strong',
               )}
             >
               <PageThumb page={page} className={cx('h-full', page.hidden && 'opacity-40')} />
@@ -584,22 +593,7 @@ export function BottomBar({ onPresent, readOnly = false }: { onPresent: () => vo
   const setStripOpen = (open: boolean) => useEditorUi.getState().set({ stripOpen: open });
   const timer = useTimer();
 
-  const zoomTo = (next: number) => {
-    const state = useEditor.getState();
-    const stage = document.querySelector('canvas[aria-label^="ผืนผ้าใบ"]') as HTMLCanvasElement | null;
-    const w = stage?.clientWidth ?? 800;
-    const h = stage?.clientHeight ?? 600;
-    const z = clampZoom(next);
-    const world = { x: (w / 2 - state.pan.x) / state.zoom, y: (h / 2 - state.pan.y) / state.zoom };
-
-    state.setViewport(z, { x: w / 2 - world.x * z, y: h / 2 - world.y * z });
-  };
-
-  const fit = () => {
-    const stage = document.querySelector('canvas[aria-label^="ผืนผ้าใบ"]') as HTMLCanvasElement | null;
-
-    if (stage) fitToScreen({ width: stage.clientWidth, height: stage.clientHeight });
-  };
+  const fit = () => fitView();
 
   return (
     <>
@@ -628,19 +622,20 @@ export function BottomBar({ onPresent, readOnly = false }: { onPresent: () => vo
             max={400}
             step={1}
             value={Math.round(zoom * 100)}
-            onChange={(event) => zoomTo(Number(event.target.value) / 100)}
+            onChange={(event) => zoomTo(Number(event.target.value) / 100, undefined, { animate: false })}
             className="hidden w-28 accent-primary lg:block"
           />
-          <IconButton label="ซูมออก" onClick={() => zoomTo(zoom / 1.2)} className="lg:hidden">
+          <IconButton label="ซูมออก" onClick={() => zoomBy(1 / 1.2)} className="lg:hidden">
             <Minus aria-hidden className="size-4" />
           </IconButton>
           <button type="button" onClick={fit} title="พอดีจอ" className="min-h-10 min-w-14 rounded-lg px-1 text-csmju-caption font-medium text-ink tabular-nums hover:bg-surface/70">
             {Math.round(zoom * 100)}%
           </button>
-          <IconButton label="ซูมเข้า" onClick={() => zoomTo(zoom * 1.2)} className="lg:hidden">
+          <IconButton label="ซูมเข้า" onClick={() => zoomBy(1.2)} className="lg:hidden">
             <Plus aria-hidden className="size-4" />
           </IconButton>
           <BarToggle active={stripOpen && pagesView === 'strip'} onClick={() => { useEditorUi.getState().setPagesView('strip'); setStripOpen(!stripOpen); }} icon={<Files aria-hidden className="size-4" />} label="หน้า" />
+          <PagesLayoutMenu />
           <span className="px-1 text-csmju-caption text-ink tabular-nums" aria-label={`หน้า ${pageIndex + 1} จาก ${pageCount}`}>
             {pageIndex + 1} / {pageCount}
           </span>
@@ -655,6 +650,67 @@ export function BottomBar({ onPresent, readOnly = false }: { onPresent: () => vo
           </a>
         </div>
       </div>
+    </>
+  );
+}
+
+const LAYOUTS: { key: PagesLayout; label: string; hint: string }[] = [
+  { key: 'single', label: 'ทีละหน้า', hint: 'แสดงเฉพาะหน้าที่เลือก' },
+  { key: 'scroll', label: 'เลื่อนดู', hint: 'ทุกหน้าเรียงต่อกัน เลื่อนดูและลากชิ้นงานข้ามหน้าได้' },
+  { key: 'board', label: 'บอร์ด', hint: 'วางหน้าอิสระ ลากป้ายชื่อหน้าเพื่อย้าย ลำดับยังตามรายการหน้า' },
+];
+
+function layoutIcon(layout: PagesLayout) {
+  if (layout === 'scroll') return <Rows3 aria-hidden className="size-4" />;
+  if (layout === 'board') return <LayoutDashboard aria-hidden className="size-4" />;
+
+  return <Square aria-hidden className="size-4" />;
+}
+
+/// ปุ่มเลือกการจัดวางหน้าบนผืนผ้าใบ (แถบล่าง): ทีละหน้า · เลื่อนดู · บอร์ด
+function PagesLayoutMenu() {
+  const layout = useEditorUi((s) => s.pagesLayout);
+  const { open, setOpen, anchorRef, menuRef } = useAnchoredMenu('end');
+  const current = LAYOUTS.find((item) => item.key === layout) ?? LAYOUTS[0];
+
+  return (
+    <>
+      <button
+        ref={anchorRef}
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={`การจัดวางหน้า: ${current.label}`}
+        title="การจัดวางหน้า"
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex min-h-10 items-center gap-1.5 rounded-lg px-2.5 text-csmju-caption font-medium text-ink hover:bg-surface/70"
+      >
+        {layoutIcon(layout)}
+        <span className="hidden sm:inline">{current.label}</span>
+      </button>
+      <FloatingPanel open={open} menuRef={menuRef} label="การจัดวางหน้า" className="w-80 rounded-xl border border-line bg-surface py-1.5 shadow-csmju-lg">
+        {LAYOUTS.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            role="menuitemradio"
+            aria-checked={layout === item.key}
+            onClick={() => {
+              setOpen(false);
+              useEditorUi.getState().setPagesLayout(item.key);
+              if (item.key === 'board') fitView();
+            }}
+            className="flex min-h-12 w-full items-center gap-3 px-3 py-1.5 text-left hover:bg-surface-muted"
+          >
+            <span className="text-ink">{layoutIcon(item.key)}</span>
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="text-csmju-caption font-medium text-ink">{item.label}</span>
+              <span className="text-csmju-caption text-muted">{item.hint}</span>
+            </span>
+            {layout === item.key && <Check aria-hidden className="size-4 text-primary" />}
+          </button>
+        ))}
+      </FloatingPanel>
     </>
   );
 }

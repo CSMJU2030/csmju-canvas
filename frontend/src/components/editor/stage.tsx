@@ -1,6 +1,9 @@
 'use client';
 
+import { LayoutGrid, Maximize } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { FloatingPanel, useAnchoredMenu } from '@/components/csmju/floating';
+import { useToast } from '@/components/csmju/primitives';
 import { cssFamily } from '@/lib/editor/fonts';
 import {
   HANDLES,
@@ -22,30 +25,72 @@ import {
 import { createImage, createPath } from '@/lib/editor/factory';
 import { fillCell, hasImageDrag, isFrameLike, moveImageIntoCell, patchCellImage, readImageDragData, type FrameLike } from '@/lib/editor/frame-actions';
 import { cellArea, cellAt, cellCorners, cellImages, clampZoom as clampFrameZoom, panOffset, toLocalDelta } from '@/lib/editor/frames';
+import {
+  autoArrange,
+  edgePoint,
+  keepInside,
+  layoutPages,
+  mostVisiblePage,
+  pageAt,
+  pageGap,
+  pageOffset,
+  rectsOverlap,
+  unionRects,
+  visibleFraction,
+  type PagesLayout,
+} from '@/lib/editor/page-layout';
 import { brushStyle, drawFrameEditGhost, drawPage, getImage, strokeFreehand, subscribeImageReady } from '@/lib/editor/render';
-import { snapRect } from '@/lib/editor/snapping';
+import { snapRect, type Guide } from '@/lib/editor/snapping';
 import { tableCellAt, tableCellCorners } from '@/lib/editor/table-render';
 import { activeCell, useTableUi } from '@/lib/editor/table-ui';
-import { brushWidth, canEditDoc, currentPage, selectionBox, useEditor, type DrawBrush } from '@/lib/editor/store';
-import type { CanvasElement, ImageElement, PathElement, TextElement } from '@/lib/editor/types';
+import { brushWidth, canEditDoc, cloneElements, currentPage, selectionBox, useEditor, type DrawBrush } from '@/lib/editor/store';
+import { pageSizeOf, type CanvasElement, type ImageElement, type Page, type PathElement, type TextElement } from '@/lib/editor/types';
 import { PREVIEW_MS, useEditorUi } from '@/lib/editor/ui-store';
+import { animateViewport, cancelViewportAnimation, clampZoom, fitRect, setStageSize, stageSize, wheelPixels, wheelZoomFactor, zoomBy } from '@/lib/editor/viewport';
 import { FileDropOverlay, dragHasFiles, imageUrlFrom, originFrom, useFileImport } from './file-import';
 import { TableCellEditor } from './table-editor';
+
+export { clampZoom } from '@/lib/editor/viewport';
 
 /// ผืนผ้าใบหลักของ editor — วาดด้วย Canvas 2D ทุกเฟรมที่มีการเปลี่ยน (requestAnimationFrame)
 ///
 /// สถานะระหว่างลากเก็บใน ref ไม่ใช่ React state เพื่อไม่ให้ React render ซ้ำทุก pointermove
 /// (หัวใจของการลากลื่น 60 FPS) · ส่วนที่ต้องจำถาวรอยู่ใน store (zustand)
+///
+/// การจัดวางหน้า (`useEditorUi.pagesLayout`): ทีละหน้า · เลื่อนดูทุกหน้า · บอร์ดอิสระ
+/// - ทุกหน้ามีกรอบใน "พิกัดโลก" (`layoutPages`) · `pan` ใน store ยังเป็นตำแหน่งบนจอของมุมซ้ายบนของหน้าที่เปิดอยู่
+///   ส่วนอื่น (ไม้บรรทัด กล่องแก้ข้อความ หมุดความคิดเห็น) จึงทำงานเหมือนเดิม
+/// - เมื่อหน้าที่เปิดเปลี่ยน (หรือหน้าถูกย้าย) ผืนผ้าใบชดเชย `pan` ให้กล้องอยู่ที่เดิมในพิกัดโลก — ภาพบนจอไม่กระโดด
 
 const HANDLE_SIZE = 10;
 const ROTATE_OFFSET = 28;
 const SNAP_PX = 6;
 const MIN_SIZE = 4;
+/// ลากเข้าใกล้ขอบผืนผ้าใบภายในระยะนี้ (px) = เลื่อนมุมมองตามอัตโนมัติ
+const EDGE_PX = 36;
+const EDGE_SPEED = 18;
+const ZERO: Point = { x: 0, y: 0 };
+
+type PointerInput = { clientX: number; clientY: number; shiftKey: boolean; altKey: boolean; ctrlKey: boolean; metaKey: boolean };
 
 type Gesture =
   | { kind: 'none' }
   | { kind: 'pan'; start: Point; pan: Point }
-  | { kind: 'move'; start: Point; origin: Map<string, Point>; box: Rect; moved: boolean }
+  | {
+      kind: 'move';
+      start: Point;
+      origin: Map<string, Point>;
+      box: Rect;
+      moved: boolean;
+      /// Alt ตอนเริ่มลาก = ลากสำเนาออกไป (ต้นฉบับอยู่ที่เดิม)
+      duplicate: boolean;
+      /// Shift+คลิกชิ้นที่เลือกอยู่แล้ว = เอาออกจากการเลือกเมื่อปล่อยโดยไม่ได้ลาก
+      toggleOff: string[] | null;
+      /// หน้าอื่นบนผืนผ้าใบที่เมาส์อยู่ (ปล่อย = ย้ายชิ้นงานไปหน้านั้น)
+      cross: number | null;
+      /// ภาพย่อหน้าในแถบภาพย่อที่เมาส์อยู่
+      strip: number | null;
+    }
   | { kind: 'resize'; handle: Handle; id: string; start: CanvasElement; keepAspect: boolean }
   | { kind: 'rotate'; id: string; startAngle: number; startRotation: number }
   | { kind: 'marquee'; start: Point; current: Point; additive: boolean; base: string[] }
@@ -53,12 +98,59 @@ type Gesture =
   | { kind: 'draw'; points: number[] }
   | { kind: 'erase'; last: Point }
   | { kind: 'image-erase'; id: string }
-  | { kind: 'frame-pan'; id: string; cell: number; start: Point; origin: { offsetX: number; offsetY: number } };
+  | { kind: 'frame-pan'; id: string; cell: number; start: Point; origin: { offsetX: number; offsetY: number } }
+  /// บอร์ด: ลากป้ายชื่อหน้าเพื่อย้ายหน้า (พิกัดโลก)
+  | { kind: 'page-move'; index: number; start: Point; base: Point[]; moved: boolean };
+
+type GestureKind = Gesture['kind'];
+
+/// การลากที่กด Esc เพื่อยกเลิกได้
+const CANCELABLE = new Set<GestureKind>(['move', 'resize', 'rotate', 'marquee', 'page-move', 'draw', 'erase', 'image-erase', 'frame-pan']);
+/// การลากที่เลื่อนมุมมองตามเมื่อเข้าใกล้ขอบ
+const AUTO_SCROLL = new Set<GestureKind>(['move', 'resize', 'rotate', 'marquee', 'page-move']);
+
+interface LayoutSnapshot {
+  pages: Page[];
+  baseWidth: number;
+  baseHeight: number;
+  mode: PagesLayout;
+  rects: Rect[];
+}
+
+interface LabelHit {
+  index: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 
 function cssVar(name: string, fallback: string): string {
   if (typeof window === 'undefined') return fallback;
 
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+}
+
+function inputOf(event: PointerInput): PointerInput {
+  return { clientX: event.clientX, clientY: event.clientY, shiftKey: event.shiftKey, altKey: event.altKey, ctrlKey: event.ctrlKey, metaKey: event.metaKey };
+}
+
+/// กรอบของทุกหน้าตามการจัดวางปัจจุบัน (พิกัดโลก)
+export function currentLayoutRects(): { mode: PagesLayout; rects: Rect[] } {
+  const state = useEditor.getState();
+  const mode = useEditorUi.getState().pagesLayout;
+
+  return { mode, rects: layoutPages(state.doc.pages, { width: state.baseWidth, height: state.baseHeight }, mode) };
+}
+
+/// ภาพย่อหน้า (แถบภาพย่อ) ใต้จุดนี้ — ใช้ตอนลากชิ้นงานออกจากผืนผ้าใบไปวางบนภาพย่อ
+function stripTargetAt(clientX: number, clientY: number): number | null {
+  if (typeof document === 'undefined') return null;
+
+  const el = document.elementFromPoint(clientX, clientY)?.closest('[data-page-drop]');
+  const index = el ? Number(el.getAttribute('data-page-drop')) : NaN;
+
+  return Number.isInteger(index) && index >= 0 ? index : null;
 }
 
 export function Stage() {
@@ -74,6 +166,7 @@ export function Stage() {
   // ลากไฟล์จากเครื่อง/รูปจากเว็บอื่นอยู่เหนือผืนผ้าใบ → แสดงแผ่น "ปล่อยไฟล์ที่นี่"
   const [fileDrag, setFileDrag] = useState<'page' | 'cell' | null>(null);
   const { importFiles, importImageUrl } = useFileImport();
+  const toast = useToast();
   const fitted = useRef<string | null>(null);
   const sizeRef = useRef(size);
   /// ตำแหน่งเมาส์ล่าสุด (พิกัดหน้า) — ใช้วาดวงยางลบ
@@ -84,12 +177,61 @@ export function Stage() {
   const dropTarget = useRef<{ id: string; cell: number } | null>(null);
   /// รวมการซูมด้วยล้อเมาส์ในโหมดจัดตำแหน่งรูปเป็น undo ขั้นเดียว
   const wheelTimer = useRef<number | null>(null);
+  /// การจัดวางหน้าล่าสุด (คำนวณใหม่เมื่อรายการหน้า ขนาดงาน หรือโหมดเปลี่ยน)
+  const layoutCache = useRef<LayoutSnapshot | null>(null);
+  /// มุมซ้ายบน (พิกัดโลก) ของหน้าที่เปิดอยู่ตอนวาดล่าสุด — ใช้ชดเชย pan เมื่อหน้าที่เปิด/ตำแหน่งหน้าเปลี่ยน
+  const anchor = useRef<{ mode: PagesLayout; designId: string; x: number; y: number } | null>(null);
+  /// ผืนผ้าใบเป็นคนเปลี่ยนหน้าที่เปิดเอง (คลิก/เลื่อน/ลากข้ามหน้า) — ไม่ต้องเลื่อนมุมมองไปหาหน้านั้น
+  const selfActivate = useRef(false);
+  const activateTimer = useRef<number | null>(null);
+  /// ป้ายชื่อหน้าที่วาดล่าสุด (พิกัดจอ) — คลิก = เปิดหน้า · บอร์ด: ลากเพื่อย้ายหน้า
+  const labelRects = useRef<LabelHit[]>([]);
+  const lastInput = useRef<PointerInput | null>(null);
+  const autoScrollFrame = useRef<number | null>(null);
+  const applyRef = useRef<(input: PointerInput) => void>(() => undefined);
+  const cancelRef = useRef<() => void>(() => undefined);
 
   const editingTextId = useEditor((s) => s.editingTextId);
   const editingTable = useTableUi((s) => s.editing);
+  const pagesLayout = useEditorUi((s) => s.pagesLayout);
 
-  // ── การแปลงพิกัด ────────────────────────────────────────────────
+  // ── การจัดวางหน้า และการแปลงพิกัด ─────────────────────────────────
 
+  const getLayout = useCallback((): LayoutSnapshot => {
+    const state = useEditor.getState();
+    const mode = useEditorUi.getState().pagesLayout;
+    const cached = layoutCache.current;
+
+    if (cached && cached.pages === state.doc.pages && cached.baseWidth === state.baseWidth && cached.baseHeight === state.baseHeight && cached.mode === mode) {
+      return cached;
+    }
+
+    const next: LayoutSnapshot = {
+      pages: state.doc.pages,
+      baseWidth: state.baseWidth,
+      baseHeight: state.baseHeight,
+      mode,
+      rects: layoutPages(state.doc.pages, { width: state.baseWidth, height: state.baseHeight }, mode),
+    };
+
+    layoutCache.current = next;
+
+    return next;
+  }, []);
+
+  /// มุมซ้ายบนของหน้าที่เปิดอยู่ในพิกัดโลก (ทีละหน้า = 0, 0)
+  const activeOrigin = useCallback((): Point => {
+    const layout = getLayout();
+
+    if (layout.mode === 'single') return ZERO;
+
+    const state = useEditor.getState();
+    const rect = layout.rects[Math.min(state.pageIndex, layout.rects.length - 1)];
+
+    return { x: rect.x, y: rect.y };
+  }, [getLayout]);
+
+  /// พิกัดของหน้าที่เปิดอยู่
   const toPage = useCallback((clientX: number, clientY: number): Point => {
     const rect = canvasRef.current!.getBoundingClientRect();
     const { zoom, pan } = useEditor.getState();
@@ -101,6 +243,40 @@ export function Stage() {
     const { zoom, pan } = useEditor.getState();
 
     return { x: p.x * zoom + pan.x, y: p.y * zoom + pan.y };
+  }, []);
+
+  const toWorld = useCallback(
+    (clientX: number, clientY: number): Point => {
+      const p = toPage(clientX, clientY);
+      const o = activeOrigin();
+
+      return { x: p.x + o.x, y: p.y + o.y };
+    },
+    [toPage, activeOrigin],
+  );
+
+  /// พื้นที่ที่มองเห็นในพิกัดโลก
+  const viewWorld = useCallback((): Rect => {
+    const { zoom, pan } = useEditor.getState();
+    const o = activeOrigin();
+    const area = sizeRef.current;
+
+    return { x: o.x - pan.x / zoom, y: o.y - pan.y / zoom, width: area.width / zoom, height: area.height / zoom };
+  }, [activeOrigin]);
+
+  /// เปิดหน้าโดยผืนผ้าใบเอง (มุมมองไม่เลื่อนตาม)
+  const activatePage = useCallback((index: number) => {
+    const state = useEditor.getState();
+
+    if (state.pageIndex === index || !state.doc.pages[index]) return;
+
+    selfActivate.current = true;
+
+    try {
+      state.setPageIndex(index);
+    } finally {
+      selfActivate.current = false;
+    }
   }, []);
 
   // ── การวาด ──────────────────────────────────────────────────────
@@ -115,65 +291,139 @@ export function Stage() {
     const ctx = canvas.getContext('2d')!;
     const dpr = window.devicePixelRatio || 1;
     const state = useEditor.getState();
-    const page = currentPage(state);
-    const { zoom, pan, width, height } = state;
+    const ui = useEditorUi.getState();
+    const layout = getLayout();
+    const multi = layout.mode !== 'single';
+    const activeIndex = Math.min(state.pageIndex, state.doc.pages.length - 1);
+    const page = state.doc.pages[activeIndex];
+    const origin = activeOrigin();
+    const { zoom, pan } = state;
+    const primary = cssVar('--csmju-color-primary', 'rgb(0 76 153)');
+    const ink = cssVar('--csmju-color-ink', 'rgb(15 23 42)');
+    const stageColor = cssVar('--csmju-color-stage', 'rgb(235 236 240)');
+    const g = gesture.current;
+    const screenOf = (i: number): Point => ({ x: pan.x + (layout.rects[i].x - origin.x) * zoom, y: pan.y + (layout.rects[i].y - origin.y) * zoom });
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = cssVar('--csmju-color-stage', 'rgb(235 236 240)');
+    ctx.fillStyle = stageColor;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // หน้า (พิกัดหน้า)
-    ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, dpr * pan.x, dpr * pan.y);
-    ctx.save();
-    ctx.shadowColor = 'rgba(15, 23, 42, 0.15)';
-    ctx.shadowBlur = 24 / zoom;
-    ctx.fillStyle = 'rgb(255 255 255)';
-    ctx.fillRect(0, 0, width, height);
-    ctx.restore();
+    // วาดเฉพาะหน้าที่อยู่ในจอ (เผื่อระยะป้ายชื่อหน้า)
+    const view = viewWorld();
+    const gap = pageGap({ width: state.baseWidth, height: state.baseHeight });
+    const visible = multi ? layout.rects.map((_, i) => i).filter((i) => rectsOverlap(layout.rects[i], view, gap)) : [activeIndex];
 
-    if (!page.background) drawChecker(ctx, width, height, zoom);
+    // บอร์ด: ลูกศรจาง ๆ จากแต่ละหน้าไปหน้าถัดไป ให้เห็นลำดับ
+    if (layout.mode === 'board') {
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      drawConnectors(ctx, layout.rects, (w) => ({ x: pan.x + (w.x - origin.x) * zoom, y: pan.y + (w.y - origin.y) * zoom }), ink);
+    }
 
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(0, 0, width, height);
-    ctx.clip();
     // ตัวอย่างแอนิเมชันจากแผงแอนิเมต — เล่นจนครบแล้วหยุดเอง
-    const preview = useEditorUi.getState().preview;
+    const preview = ui.preview;
     const elapsed = preview ? performance.now() - preview.start : Infinity;
     const playing = preview && elapsed < PREVIEW_MS;
 
-    drawPage(ctx, page, { width, height }, {
-      skipIds: state.editingTextId ? new Set([state.editingTextId]) : undefined,
-      progress: playing ? (el) => (preview.ids.includes(el.id) ? elapsed / PREVIEW_MS : undefined) : undefined,
-    });
+    for (const i of visible) {
+      const pg = state.doc.pages[i];
+      const r = layout.rects[i];
+      const s = screenOf(i);
+      const isActive = i === activeIndex;
+
+      // หน้า (พิกัดของหน้านั้น)
+      ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, dpr * s.x, dpr * s.y);
+      ctx.save();
+      ctx.shadowColor = 'rgba(15, 23, 42, 0.15)';
+      ctx.shadowBlur = 24 / zoom;
+      ctx.fillStyle = 'rgb(255 255 255)';
+      ctx.fillRect(0, 0, r.width, r.height);
+      ctx.restore();
+
+      if (!pg.background) drawChecker(ctx, r.width, r.height, zoom);
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, 0, r.width, r.height);
+      ctx.clip();
+      drawPage(
+        ctx,
+        pg,
+        { width: r.width, height: r.height },
+        isActive
+          ? {
+              skipIds: state.editingTextId ? new Set([state.editingTextId]) : undefined,
+              progress: playing ? (el) => (preview.ids.includes(el.id) ? elapsed / PREVIEW_MS : undefined) : undefined,
+            }
+          : {},
+      );
+
+      // เส้นที่กำลังวาด (ยังไม่เป็น element จนกว่าจะปล่อย)
+      if (isActive && g.kind === 'draw' && state.tool.brush !== 'eraser') {
+        const brush = state.tool.brush;
+
+        ctx.save();
+        brushStyle(ctx, brush, state.tool.colors[brush], brushWidth(state.tool.weights[brush], state));
+        strokeFreehand(ctx, g.points);
+        ctx.restore();
+      }
+
+      ctx.restore();
+
+      // หน้าที่ซ่อน (ไม่แสดงตอนพรีเซนต์/ดาวน์โหลด) แสดงจาง ๆ
+      if (multi && pg.hidden) {
+        ctx.save();
+        ctx.globalAlpha = 0.6;
+        ctx.fillStyle = stageColor;
+        ctx.fillRect(0, 0, r.width, r.height);
+        ctx.restore();
+      }
+    }
 
     if (playing) frame.current = requestAnimationFrame(() => drawLoop.current());
 
-    // เส้นที่กำลังวาด (ยังไม่เป็น element จนกว่าจะปล่อย)
-    const g = gesture.current;
+    // ป้ายชื่อหน้า · กรอบหน้าที่เปิด · หน้าที่จะรับชิ้นงานที่ลากมา (พิกัดจอ)
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    if (g.kind === 'draw' && state.tool.brush !== 'eraser') {
-      const brush = state.tool.brush;
+    if (multi) {
+      const danger = cssVar('--csmju-color-danger-text', 'rgb(185 28 28)');
+      const font = cssVar('--csmju-font-body', 'system-ui, sans-serif');
 
-      ctx.save();
-      brushStyle(ctx, brush, state.tool.colors[brush], brushWidth(state.tool.weights[brush], state));
-      strokeFreehand(ctx, g.points);
-      ctx.restore();
+      labelRects.current = drawPageLabels(ctx, state.doc.pages, visible, screenOf, layout.mode, activeIndex, { primary, ink, font });
+
+      const a = screenOf(activeIndex);
+
+      outline(ctx, rectCorners({ x: a.x, y: a.y, width: layout.rects[activeIndex].width * zoom, height: layout.rects[activeIndex].height * zoom }), primary, [], 2);
+
+      const target = g.kind === 'move' && g.moved ? g.cross : null;
+
+      if (target !== null && layout.rects[target]) {
+        const t = screenOf(target);
+        const box = { x: t.x, y: t.y, width: layout.rects[target].width * zoom, height: layout.rects[target].height * zoom };
+        const blocked = Boolean(state.doc.pages[target].locked || page.locked);
+
+        ctx.save();
+        ctx.globalAlpha = 0.1;
+        ctx.fillStyle = blocked ? danger : primary;
+        ctx.fillRect(box.x, box.y, box.width, box.height);
+        ctx.restore();
+        outline(ctx, rectCorners(box), blocked ? danger : primary, [8, 5], 3);
+      }
+    } else {
+      labelRects.current = [];
     }
 
-    ctx.restore();
-
     // โหมดจัดตำแหน่งรูปในกรอบ: รูปส่วนที่ล้นกรอบแสดงจาง ๆ (วาดนอกขอบหน้าได้)
-    const ui = useEditorUi.getState();
     const frameEdit = ui.frameEdit;
     const editingFrame = frameEdit ? page.elements.find((el): el is FrameLike => el.id === frameEdit.id && isFrameLike(el)) : undefined;
 
-    if (editingFrame && frameEdit) drawFrameEditGhost(ctx, editingFrame, frameEdit.cell);
+    if (editingFrame && frameEdit) {
+      ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, dpr * pan.x, dpr * pan.y);
+      drawFrameEditGhost(ctx, editingFrame, frameEdit.cell);
+    }
 
     // ส่วนควบคุม (พิกัดจอ)
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    const primary = cssVar('--csmju-color-primary', 'rgb(0 76 153)');
     const guide = 'rgb(236 72 153)';
     const selected = page.elements.filter((el) => state.selection.includes(el.id));
 
@@ -237,18 +487,18 @@ export function Stage() {
     ctx.strokeStyle = guide;
     ctx.lineWidth = 1;
 
-    for (const g of state.guides) {
+    for (const gd of state.guides) {
       ctx.beginPath();
 
-      if (g.axis === 'x') {
-        const a = toScreen({ x: g.at, y: g.from });
-        const b = toScreen({ x: g.at, y: g.to });
+      if (gd.axis === 'x') {
+        const a = toScreen({ x: gd.at, y: gd.from });
+        const b = toScreen({ x: gd.at, y: gd.to });
 
         ctx.moveTo(Math.round(a.x) + 0.5, a.y);
         ctx.lineTo(Math.round(b.x) + 0.5, b.y);
       } else {
-        const a = toScreen({ x: g.from, y: g.at });
-        const b = toScreen({ x: g.to, y: g.at });
+        const a = toScreen({ x: gd.from, y: gd.at });
+        const b = toScreen({ x: gd.to, y: gd.at });
 
         ctx.moveTo(a.x, Math.round(a.y) + 0.5);
         ctx.lineTo(b.x, Math.round(b.y) + 0.5);
@@ -257,7 +507,7 @@ export function Stage() {
       ctx.stroke();
     }
 
-    const imageErase = useEditorUi.getState().imageErase;
+    const imageErase = ui.imageErase;
 
     if (((state.tool.mode === 'draw' && state.tool.brush === 'eraser') || imageErase) && hover.current) {
       const c = toScreen(hover.current);
@@ -281,7 +531,7 @@ export function Stage() {
       ctx.fillRect(a.x, a.y, m.width * zoom, m.height * zoom);
       ctx.strokeRect(a.x + 0.5, a.y + 0.5, m.width * zoom, m.height * zoom);
     }
-  }, [toScreen]);
+  }, [toScreen, getLayout, activeOrigin, viewWorld]);
 
   useEffect(() => {
     drawLoop.current = draw;
@@ -310,6 +560,7 @@ export function Stage() {
     const canvas = canvasRef.current;
 
     sizeRef.current = size;
+    setStageSize(size);
 
     if (!canvas || size.width === 0) return;
 
@@ -331,16 +582,81 @@ export function Stage() {
     requestDraw();
   }, [size, requestDraw]);
 
+  /// เลื่อนมุมมองไปหาหน้าที่ถูกเปิดจากที่อื่น (แถบภาพย่อ ลิงก์ ?page= ย้อนกลับ) ถ้ามองเห็นไม่ถึงครึ่ง
+  const revealPage = useCallback(
+    (index: number) => {
+      const state = useEditor.getState();
+      const rect = getLayout().rects[index];
+      const area = sizeRef.current;
+
+      if (!rect || area.width === 0 || visibleFraction(rect, viewWorld()) >= 0.6) return;
+
+      const margin = area.width < 640 ? 24 : 56;
+      const zoom = state.zoom;
+      const x = (area.width - rect.width * zoom) / 2;
+      const y = rect.height * zoom > area.height - margin * 2 ? margin : (area.height - rect.height * zoom) / 2;
+
+      animateViewport(zoom, { x, y });
+    },
+    [getLayout, viewWorld],
+  );
+
+  /// โหมดเลื่อนดู: หน้าที่กินพื้นที่จอมากที่สุดกลายเป็นหน้าที่เปิด (ถ้ายังเลือกชิ้นงานอยู่ รอจนหน้านั้นพ้นจอ)
+  const autoActivate = useCallback(() => {
+    activateTimer.current = null;
+
+    const state = useEditor.getState();
+    const ui = useEditorUi.getState();
+    const layout = getLayout();
+
+    if (layout.mode !== 'scroll' || gesture.current.kind !== 'none' || state.editingTextId || ui.frameEdit || ui.imageErase || useTableUi.getState().editing) return;
+
+    const view = viewWorld();
+    const best = mostVisiblePage(layout.rects, view);
+    const active = Math.min(state.pageIndex, layout.rects.length - 1);
+
+    if (best < 0 || best === active) return;
+    if (state.selection.length > 0 && visibleFraction(layout.rects[active], view) > 0.02) return;
+
+    activatePage(best);
+  }, [getLayout, viewWorld, activatePage]);
+
   useEffect(() => {
+    /// ชดเชย pan เมื่อมุมซ้ายบนของหน้าที่เปิดย้ายในพิกัดโลก (เปลี่ยนหน้า · ย้ายหน้าบนบอร์ด · หน้าข้างบนเปลี่ยนขนาด)
+    const syncCamera = () => {
+      const state = useEditor.getState();
+      const layout = getLayout();
+      const origin = activeOrigin();
+      const prev = anchor.current;
+
+      anchor.current = { mode: layout.mode, designId: state.designId, x: origin.x, y: origin.y };
+
+      if (!prev || prev.mode !== layout.mode || prev.designId !== state.designId) return;
+
+      const dx = origin.x - prev.x;
+      const dy = origin.y - prev.y;
+
+      if (dx !== 0 || dy !== 0) state.setViewport(state.zoom, { x: state.pan.x + dx * state.zoom, y: state.pan.y + dy * state.zoom });
+    };
+
+    syncCamera();
+
     const unsubscribeImages = subscribeImageReady(requestDraw);
 
     const unsubscribeUi = useEditorUi.subscribe((ui, prev) => {
+      if (ui.pagesLayout !== prev.pagesLayout) {
+        syncCamera();
+        requestDraw();
+      }
+
       if (ui.preview !== prev.preview || ui.imageErase !== prev.imageErase || ui.frameCell !== prev.frameCell || ui.frameEdit !== prev.frameEdit) requestDraw();
     });
     // เลือกช่อง/เริ่มหรือเลิกพิมพ์ในตาราง
     const unsubscribeTable = useTableUi.subscribe(requestDraw);
     const unsubscribe = useEditor.subscribe((state, prev) => {
-      const { imageErase: erasing, frameEdit } = useEditorUi.getState();
+      const { imageErase: erasing, frameEdit, pagesLayout: mode } = useEditorUi.getState();
+
+      syncCamera();
 
       // เลือกชิ้นอื่นหรือเปลี่ยนหน้า = ออกจากโหมดยางลบพิกเซล
       if (erasing && (state.selection.length !== 1 || state.selection[0] !== erasing.id || state.pageIndex !== prev.pageIndex)) {
@@ -362,9 +678,16 @@ export function Stage() {
         }
       }
 
-      if (state.width !== prev.width || state.height !== prev.height) {
+      if (state.designId !== prev.designId || (mode === 'single' && (state.width !== prev.width || state.height !== prev.height))) {
         fitted.current = `${state.designId}:${state.width}x${state.height}`;
         fitToScreen(sizeRef.current);
+      } else if (mode !== 'single' && state.pageIndex !== prev.pageIndex && !selfActivate.current) {
+        revealPage(Math.min(state.pageIndex, state.doc.pages.length - 1));
+      }
+
+      if (mode === 'scroll' && (state.pan !== prev.pan || state.zoom !== prev.zoom)) {
+        if (activateTimer.current !== null) window.clearTimeout(activateTimer.current);
+        activateTimer.current = window.setTimeout(autoActivate, 160);
       }
 
       requestDraw();
@@ -375,9 +698,9 @@ export function Stage() {
       unsubscribeUi();
       unsubscribeTable();
       unsubscribeImages();
+      if (activateTimer.current !== null) window.clearTimeout(activateTimer.current);
     };
-  }, [requestDraw]);
-
+  }, [requestDraw, getLayout, activeOrigin, revealPage, autoActivate]);
 
   // ── การโต้ตอบด้วย pointer ────────────────────────────────────────
 
@@ -391,8 +714,8 @@ export function Stage() {
       if (Math.hypot(screen.x - rotateScreen.x, screen.y - rotateScreen.y) <= HANDLE_SIZE) return 'rotate';
 
       for (const handle of visibleHandles(el, zoom)) {
-        const anchor = HANDLE_ANCHOR[handle];
-        const local = { x: el.x + anchor.x * el.width, y: el.y + anchor.y * el.height };
+        const anchorPoint = HANDLE_ANCHOR[handle];
+        const local = { x: el.x + anchorPoint.x * el.width, y: el.y + anchorPoint.y * el.height };
         const p = toScreen(rotatePoint(local, c, el.rotation));
 
         if (Math.abs(screen.x - p.x) <= HANDLE_SIZE && Math.abs(screen.y - p.y) <= HANDLE_SIZE) return handle;
@@ -433,6 +756,22 @@ export function Stage() {
     return null;
   }, []);
 
+  /// ป้ายชื่อหน้าใต้จุดนี้ (พิกัดจอ)
+  const labelAt = (screen: Point): LabelHit | null =>
+    labelRects.current.find((l) => screen.x >= l.x && screen.x <= l.x + l.width && screen.y >= l.y && screen.y <= l.y + l.height) ?? null;
+
+  /// หน้าอื่นใต้เมาส์ (โหมดเลื่อนดู/บอร์ด) — ไม่นับถ้าเมาส์อยู่บนชิ้นงานของหน้าที่เปิดอยู่ (ชิ้นที่ล้นขอบหน้า)
+  const otherPageAt = (clientX: number, clientY: number): number => {
+    const layout = getLayout();
+
+    if (layout.mode === 'single' || topElementAt(toPage(clientX, clientY))) return -1;
+
+    const active = Math.min(useEditor.getState().pageIndex, layout.rects.length - 1);
+    const under = pageAt(layout.rects, toWorld(clientX, clientY), active);
+
+    return under >= 0 && under !== active ? under : -1;
+  };
+
   /// ยางลบ: ลบเส้นวาด (path) ทุกเส้นที่อยู่ใกล้ส่วนของเส้นจาก a ไป b
   const eraseAlong = (a: Point, b: Point) => {
     const state = useEditor.getState();
@@ -445,23 +784,80 @@ export function Stage() {
     if (hits.length > 0) state.removeElements(hits);
   };
 
+  // ── เลื่อนมุมมองอัตโนมัติเมื่อลากเข้าใกล้ขอบ ─────────────────────────
+
+  const edgeVelocity = (input: PointerInput): Point => {
+    const canvas = canvasRef.current;
+
+    if (!canvas) return ZERO;
+
+    const r = canvas.getBoundingClientRect();
+    const x = input.clientX - r.left;
+    const y = input.clientY - r.top;
+
+    if (x < 0 || y < 0 || x > r.width || y > r.height) return ZERO;
+
+    const speed = (distance: number) => (distance < EDGE_PX ? ((EDGE_PX - distance) / EDGE_PX) * EDGE_SPEED : 0);
+
+    return { x: speed(r.width - x) - speed(x), y: speed(r.height - y) - speed(y) };
+  };
+
+  const stopAutoScroll = () => {
+    if (autoScrollFrame.current !== null) cancelAnimationFrame(autoScrollFrame.current);
+    autoScrollFrame.current = null;
+  };
+
+  function autoScrollStep() {
+    autoScrollFrame.current = null;
+
+    const input = lastInput.current;
+
+    if (!input || !AUTO_SCROLL.has(gesture.current.kind)) return;
+
+    const v = edgeVelocity(input);
+
+    if (v.x === 0 && v.y === 0) return;
+
+    const state = useEditor.getState();
+
+    state.setViewport(state.zoom, { x: state.pan.x - v.x, y: state.pan.y - v.y });
+    applyRef.current(input);
+    autoScrollFrame.current = requestAnimationFrame(autoScrollStep);
+  }
+
+  const updateAutoScroll = (input: PointerInput) => {
+    const v = edgeVelocity(input);
+
+    if ((v.x !== 0 || v.y !== 0) && autoScrollFrame.current === null && AUTO_SCROLL.has(gesture.current.kind)) {
+      autoScrollFrame.current = requestAnimationFrame(autoScrollStep);
+    }
+  };
+
+  // ── เริ่มลาก ──────────────────────────────────────────────────────
+
   const onPointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current!;
 
     canvas.setPointerCapture(event.pointerId);
     pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    cancelViewportAnimation();
 
-    const state = useEditor.getState();
+    let state = useEditor.getState();
 
     if (state.editingTextId) state.setEditingText(null);
 
     // สองนิ้ว = ซูม/เลื่อนมุมมอง (ยกเลิกการลากชิ้นงานหรือเส้นที่เริ่มไปแล้ว)
     if (pointers.current.size === 2) {
-      const kind = gesture.current.kind;
+      const current = gesture.current;
 
-      if (kind === 'move' || kind === 'resize' || kind === 'rotate' || kind === 'erase') {
+      if (current.kind === 'move' || current.kind === 'resize' || current.kind === 'rotate' || current.kind === 'erase' || current.kind === 'page-move') {
         state.endGesture();
       }
+
+      if (current.kind === 'move' && current.strip !== null) useEditorUi.getState().set({ pageDropTarget: null });
+
+      stopAutoScroll();
+      dropTarget.current = null;
 
       const [a, b] = [...pointers.current.values()];
 
@@ -476,6 +872,49 @@ export function Stage() {
       return;
     }
 
+    const rect = canvas.getBoundingClientRect();
+    const screen = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    const layout = getLayout();
+    const multi = layout.mode !== 'single';
+    const ui = useEditorUi.getState();
+    const panning = event.button === 1 || spaceDown.current;
+
+    // ป้ายชื่อหน้า: คลิก = เปิดหน้า · บอร์ด: ลากเพื่อย้ายหน้า
+    if (multi && event.button === 0 && !panning) {
+      const label = labelAt(screen);
+
+      if (label) {
+        activatePage(label.index);
+
+        if (layout.mode === 'board' && canEditDoc(state)) {
+          state = useEditor.getState();
+          state.beginGesture();
+          gesture.current = {
+            kind: 'page-move',
+            index: label.index,
+            start: toWorld(event.clientX, event.clientY),
+            base: getLayout().rects.map((r) => ({ x: r.x, y: r.y })),
+            moved: false,
+          };
+          setCursor('grabbing');
+        }
+
+        return;
+      }
+    }
+
+    // หน้าใต้เมาส์กลายเป็นหน้าที่เปิด (ยกเว้นกำลังจับ handle ของชิ้นที่เลือก หรืออยู่ในโหมดแก้รูปในกรอบ/ยางลบ)
+    if (multi && !panning && !ui.frameEdit && !ui.imageErase) {
+      const selected = currentPage(state).elements.filter((el) => state.selection.includes(el.id));
+      const onHandle = canEditDoc(state) && selected.length === 1 && !selected[0].locked && handleAt(screen, selected[0]) !== null;
+      const other = onHandle ? -1 : otherPageAt(event.clientX, event.clientY);
+
+      if (other >= 0) {
+        activatePage(other);
+        state = useEditor.getState();
+      }
+    }
+
     // โหมดแสดงความคิดเห็น: คลิกชิ้นงานเพื่อเลือกแล้วเขียนความคิดเห็น (ไม่ลาก)
     if (state.viewMode === 'comment' && event.button === 0 && !spaceDown.current) {
       const hit = topElementAt(toPage(event.clientX, event.clientY));
@@ -487,18 +926,16 @@ export function Stage() {
       return;
     }
 
-    if (event.button === 1 || spaceDown.current || !canEditDoc(state)) {
+    if (panning || !canEditDoc(state)) {
       gesture.current = { kind: 'pan', start: { x: event.clientX, y: event.clientY }, pan: state.pan };
       setCursor('grabbing');
       return;
     }
 
-    const rect = canvas.getBoundingClientRect();
-    const screen = { x: event.clientX - rect.left, y: event.clientY - rect.top };
     const p = toPage(event.clientX, event.clientY);
 
     // โหมดจัดตำแหน่งรูปในกรอบ: ลากในช่อง = เลื่อนรูป · คลิกนอกช่อง = เสร็จ
-    const frameEdit = useEditorUi.getState().frameEdit;
+    const frameEdit = ui.frameEdit;
 
     if (frameEdit) {
       const target = currentPage(state).elements.find((el) => el.id === frameEdit.id);
@@ -515,7 +952,7 @@ export function Stage() {
     }
 
     // ยางลบพิกเซล: ลากบนรูปที่เลือกเพื่อลบส่วนนั้นให้โปร่งใส (หนึ่งรอยลาก = undo หนึ่งขั้น)
-    const imageErase = useEditorUi.getState().imageErase;
+    const imageErase = ui.imageErase;
 
     if (imageErase) {
       const target = currentPage(state).elements.find((el): el is ImageElement => el.id === imageErase.id && el.type === 'image');
@@ -595,7 +1032,10 @@ export function Stage() {
     }
 
     if (hit) {
-      let ids = state.selection;
+      const ids = state.selection;
+      // ทั้งกลุ่มของชิ้นที่คลิก (คลิกชิ้นเดียวในกลุ่ม = ทั้งกลุ่ม)
+      const group = hit.groupId ? page.elements.filter((el) => el.groupId === hit.groupId).map((el) => el.id) : [hit.id];
+      let toggleOff: string[] | null = null;
 
       // ตาราง: คลิกแรกเลือกทั้งตาราง · คลิกตารางที่เลือกอยู่แล้ว = เลือกช่อง (แบบ Canva)
       if (hit.type === 'table' && !event.shiftKey) {
@@ -605,8 +1045,9 @@ export function Stage() {
       }
 
       if (event.shiftKey) {
-        ids = ids.includes(hit.id) ? ids.filter((id) => id !== hit.id) : [...ids, hit.id];
-        state.select(ids);
+        // Shift+คลิกชิ้นที่เลือกอยู่ = เอาออกเมื่อปล่อย (ถ้าลาก = ลากทั้งหมดที่เลือกแบบล็อกแนว)
+        if (ids.includes(hit.id)) toggleOff = group;
+        else state.select([...ids, ...group]);
       } else if (!ids.includes(hit.id)) {
         state.select([hit.id]);
       }
@@ -621,7 +1062,10 @@ export function Stage() {
       const fresh = useEditor.getState();
       const movable = currentPage(fresh).elements.filter((el) => fresh.selection.includes(el.id) && !el.locked);
 
-      if (movable.length === 0) return;
+      if (movable.length === 0) {
+        if (toggleOff) state.select(fresh.selection.filter((id) => !toggleOff.includes(id)));
+        return;
+      }
 
       state.beginGesture();
       gesture.current = {
@@ -630,6 +1074,10 @@ export function Stage() {
         origin: new Map(movable.map((el) => [el.id, { x: el.x, y: el.y }])),
         box: selectionBox(currentPage(fresh), movable.map((el) => el.id))!,
         moved: false,
+        duplicate: event.altKey,
+        toggleOff,
+        cross: null,
+        strip: null,
       };
       return;
     }
@@ -646,6 +1094,206 @@ export function Stage() {
     if (!event.shiftKey) state.select([]);
     gesture.current = { kind: 'marquee', start: p, current: p, additive: event.shiftKey, base };
   };
+
+  /// Alt+ลาก: สร้างสำเนาที่ตำแหน่งเดิมแล้วลากสำเนาออกไป (ต้นฉบับอยู่ที่เดิม · อยู่ในขั้น undo เดียวกับการลาก)
+  const duplicateForDrag = (g: Extract<Gesture, { kind: 'move' }>) => {
+    const state = useEditor.getState();
+    const originals = currentPage(state).elements.filter((el) => g.origin.has(el.id));
+    const clones = cloneElements(originals, 0);
+    const origin = new Map<string, Point>();
+
+    originals.forEach((el, i) => origin.set(clones[i].id, g.origin.get(el.id)!));
+    state.addElements(clones);
+    g.origin = origin;
+    g.toggleOff = null;
+  };
+
+  // ── ระหว่างลาก (ใช้ซ้ำตอนเลื่อนมุมมองอัตโนมัติ) ─────────────────────
+
+  const applyPointer = (input: PointerInput) => {
+    const g = gesture.current;
+    const state = useEditor.getState();
+
+    if (g.kind === 'move') {
+      const p = toPage(input.clientX, input.clientY);
+      let dx = p.x - g.start.x;
+      let dy = p.y - g.start.y;
+
+      if (!g.moved && Math.hypot(dx, dy) * state.zoom < 3) return;
+      if (!g.moved && g.duplicate) duplicateForDrag(g);
+
+      g.moved = true;
+
+      // Shift = ล็อกแนวนอน/แนวตั้ง ตามทิศที่ลากมากกว่า
+      const lock = input.shiftKey ? (Math.abs(dx) >= Math.abs(dy) ? 'horizontal' : 'vertical') : null;
+
+      if (lock === 'horizontal') dy = 0;
+      if (lock === 'vertical') dx = 0;
+
+      const layout = getLayout();
+      const activeIndex = Math.min(state.pageIndex, layout.rects.length - 1);
+      const under = layout.mode === 'single' ? -1 : pageAt(layout.rects, toWorld(input.clientX, input.clientY), activeIndex);
+      const cross = under >= 0 && under !== activeIndex ? under : null;
+      const strip = cross === null ? stripTargetAt(input.clientX, input.clientY) : null;
+
+      if (strip !== g.strip) {
+        g.strip = strip;
+        useEditorUi.getState().set({ pageDropTarget: strip });
+      }
+
+      g.cross = cross;
+
+      const page = currentPage(state);
+      const moving = { ...g.box, x: g.box.x + dx, y: g.box.y + dy };
+      const ui = useEditorUi.getState();
+      let bounds: Rect = { x: 0, y: 0, width: state.width, height: state.height };
+      let targets: Rect[];
+
+      if (cross !== null) {
+        // ลากข้ามไปอีกหน้า: ดูดกับขอบ/ชิ้นงานของหน้านั้น (แปลงเป็นพิกัดของหน้าที่เปิดอยู่)
+        const r = layout.rects[cross];
+        const o = activeOrigin();
+        const off = { x: r.x - o.x, y: r.y - o.y };
+
+        bounds = { x: off.x, y: off.y, width: r.width, height: r.height };
+        targets = state.doc.pages[cross].elements
+          .filter((el) => !el.hidden)
+          .map((el) => {
+            const b = boundingBox(el);
+
+            return { ...b, x: b.x + off.x, y: b.y + off.y };
+          });
+      } else {
+        targets = [
+          ...page.elements.filter((el) => !g.origin.has(el.id) && !el.hidden).map(boundingBox),
+          // เส้นไกด์จากไม้บรรทัดเป็นเป้าดูดด้วย
+          ...(ui.rulers ? ui.guideLines.map((guide) => (guide.axis === 'x' ? { x: guide.at, y: 0, width: 0, height: state.height } : { x: 0, y: guide.at, width: state.width, height: 0 })) : []),
+        ];
+      }
+
+      // Ctrl/⌘ ค้าง = ปิดการดูดชั่วคราว
+      const snap = input.ctrlKey || input.metaKey || strip !== null ? { dx: 0, dy: 0, guides: [] as Guide[] } : snapRect(moving, targets, bounds, SNAP_PX / state.zoom);
+
+      dx += lock === 'vertical' ? 0 : snap.dx;
+      dy += lock === 'horizontal' ? 0 : snap.dy;
+      state.setGuides(snap.guides.filter((gd) => (lock === 'horizontal' ? gd.axis === 'x' : lock === 'vertical' ? gd.axis === 'y' : true)));
+      state.updateElements([...g.origin.keys()], (el) => {
+        const o = g.origin.get(el.id)!;
+
+        return { x: Math.round((o.x + dx) * 10) / 10, y: Math.round((o.y + dy) * 10) / 10 };
+      });
+
+      // ลากรูปเดี่ยวไปทับกรอบ/ช่องของกริด → เน้นช่องที่จะรับรูปเมื่อปล่อย
+      const movingId = g.origin.size === 1 ? [...g.origin.keys()][0] : null;
+      const movingEl = movingId ? currentPage(useEditor.getState()).elements.find((el) => el.id === movingId) : undefined;
+
+      dropTarget.current = movingEl?.type === 'image' && cross === null && strip === null ? frameDropAt(p, movingEl.id) : null;
+
+      const blocked = cross !== null && Boolean(state.doc.pages[cross].locked || page.locked);
+
+      setCursor(blocked || (strip !== null && strip !== activeIndex && (state.doc.pages[strip]?.locked || page.locked)) ? 'not-allowed' : 'move');
+      return;
+    }
+
+    if (g.kind === 'resize') {
+      const p = toPage(input.clientX, input.clientY);
+      // Shift = สลับการล็อกสัดส่วน (มุม) · Alt = ย่อขยายจากกึ่งกลาง
+      const next = resizeRect(g.start, g.handle, p, {
+        keepAspect: g.keepAspect !== input.shiftKey,
+        minSize: MIN_SIZE,
+        fromCenter: input.altKey,
+      });
+
+      state.updateElements([g.id], (el) => {
+        if (el.type === 'text' && g.start.type === 'text') {
+          // ลากมุม = ย่อขยายตัวอักษรด้วย · ลากขอบซ้าย/ขวา = เปลี่ยนความกว้างกล่อง (ตัดบรรทัดใหม่)
+          const corner = g.handle.length === 2;
+          const scale = next.width / g.start.width;
+
+          return corner
+            ? { x: next.x, y: next.y, width: next.width, fontSize: Math.max(4, Math.round(g.start.fontSize * scale * 10) / 10) }
+            : { x: next.x, width: next.width };
+        }
+
+        return { x: next.x, y: next.y, width: next.width, height: next.height };
+      });
+      return;
+    }
+
+    if (g.kind === 'rotate') {
+      const p = toPage(input.clientX, input.clientY);
+      const el = currentPage(state).elements.find((e) => e.id === g.id);
+
+      if (!el) return;
+
+      let rotation = normalizeAngle(g.startRotation + angleFromCenter(center(el), p) - g.startAngle);
+
+      if (input.shiftKey) rotation = Math.round(rotation / 15) * 15;
+      else for (const snapTo of [0, 90, 180, 270, 360]) if (Math.abs(rotation - snapTo) < 3) rotation = snapTo % 360;
+
+      state.updateElements([g.id], () => ({ rotation: Math.round(rotation * 10) / 10 }));
+      return;
+    }
+
+    if (g.kind === 'marquee') {
+      const p = toPage(input.clientX, input.clientY);
+
+      g.current = p;
+      marquee.current = normalizeRect(g.start, p);
+
+      const page = currentPage(state);
+      const inside = page.elements
+        .filter((el) => !el.hidden && rectsIntersect(boundingBox(el), marquee.current!))
+        .map((el) => el.id);
+
+      state.select(g.additive ? [...new Set([...g.base, ...inside])] : inside);
+      requestDraw();
+      return;
+    }
+
+    if (g.kind === 'page-move') {
+      // พิกัดโลกคงที่ระหว่างลาก (pan ถูกชดเชยเมื่อหน้าที่เปิดย้าย)
+      const w = toWorld(input.clientX, input.clientY);
+      let dx = w.x - g.start.x;
+      let dy = w.y - g.start.y;
+
+      if (!g.moved && Math.hypot(dx, dy) * state.zoom < 3) return;
+
+      g.moved = true;
+
+      const lock = input.shiftKey ? (Math.abs(dx) >= Math.abs(dy) ? 'horizontal' : 'vertical') : null;
+
+      if (lock === 'horizontal') dy = 0;
+      if (lock === 'vertical') dx = 0;
+
+      const layout = getLayout();
+      const base = g.base[g.index];
+      const moving = { x: base.x + dx, y: base.y + dy, width: layout.rects[g.index].width, height: layout.rects[g.index].height };
+      const others = g.base
+        .map((b, i) => ({ x: b.x, y: b.y, width: layout.rects[i]?.width ?? 0, height: layout.rects[i]?.height ?? 0 }))
+        .filter((_, i) => i !== g.index);
+      const snap =
+        others.length > 0 && !input.ctrlKey && !input.metaKey ? snapRect(moving, others.slice(1), others[0], SNAP_PX / state.zoom) : { dx: 0, dy: 0, guides: [] as Guide[] };
+      const pos = {
+        x: Math.round(moving.x + (lock === 'vertical' ? 0 : snap.dx)),
+        y: Math.round(moving.y + (lock === 'horizontal' ? 0 : snap.dy)),
+      };
+
+      state.setBoardPositions(g.base.map((b, i) => (i === g.index ? pos : b)));
+      // เส้นไกด์เก็บเป็นพิกัดของหน้าที่เปิดอยู่ (= หน้าที่กำลังย้าย)
+      useEditor.getState().setGuides(
+        snap.guides
+          .filter((gd) => (lock === 'horizontal' ? gd.axis === 'x' : lock === 'vertical' ? gd.axis === 'y' : true))
+          .map((gd) =>
+            gd.axis === 'x' ? { ...gd, at: gd.at - pos.x, from: gd.from - pos.y, to: gd.to - pos.y } : { ...gd, at: gd.at - pos.y, from: gd.from - pos.x, to: gd.to - pos.x },
+          ),
+      );
+    }
+  };
+
+  useEffect(() => {
+    applyRef.current = applyPointer;
+  });
 
   const onPointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
     if (pointers.current.has(event.pointerId)) {
@@ -741,97 +1389,61 @@ export function Stage() {
       return;
     }
 
-    const p = toPage(event.clientX, event.clientY);
+    const input = inputOf(event);
 
-    if (g.kind === 'move') {
-      let dx = p.x - g.start.x;
-      let dy = p.y - g.start.y;
+    lastInput.current = input;
+    applyPointer(input);
+    updateAutoScroll(input);
+  };
 
-      if (!g.moved && Math.hypot(dx, dy) * state.zoom < 3) return;
+  /// ปล่อยชิ้นงานบนหน้าอื่น (บนผืนผ้าใบหรือบนภาพย่อ) = ย้ายไปหน้านั้นในขั้น undo เดียว
+  const finishPageTransfer = (g: Extract<Gesture, { kind: 'move' }>) => {
+    const state = useEditor.getState();
+    const source = currentPage(state);
+    const target = g.cross ?? g.strip;
+    const targetPage = target === null ? undefined : state.doc.pages[target];
 
-      g.moved = true;
-
-      const page = currentPage(state);
-      const moving = { ...g.box, x: g.box.x + dx, y: g.box.y + dy };
-      const ui = useEditorUi.getState();
-      const targets = [
-        ...page.elements.filter((el) => !g.origin.has(el.id) && !el.hidden).map(boundingBox),
-        // เส้นไกด์จากไม้บรรทัดเป็นเป้าดูดด้วย
-        ...(ui.rulers ? ui.guideLines.map((guide) => (guide.axis === 'x' ? { x: guide.at, y: 0, width: 0, height: state.height } : { x: 0, y: guide.at, width: state.width, height: 0 })) : []),
-      ];
-      const snap = event.altKey
-        ? { dx: 0, dy: 0, guides: [] }
-        : snapRect(moving, targets, { x: 0, y: 0, width: state.width, height: state.height }, SNAP_PX / state.zoom);
-
-      dx += snap.dx;
-      dy += snap.dy;
-      state.setGuides(snap.guides);
-      state.updateElements([...g.origin.keys()], (el) => {
-        const o = g.origin.get(el.id)!;
-
-        return { x: Math.round((o.x + dx) * 10) / 10, y: Math.round((o.y + dy) * 10) / 10 };
-      });
-
-      // ลากรูปเดี่ยวไปทับกรอบ/ช่องของกริด → เน้นช่องที่จะรับรูปเมื่อปล่อย
-      const movingId = g.origin.size === 1 ? [...g.origin.keys()][0] : null;
-      const movingEl = movingId ? page.elements.find((el) => el.id === movingId) : undefined;
-
-      dropTarget.current = movingEl?.type === 'image' ? frameDropAt(p, movingEl.id) : null;
+    if (target === null || !targetPage || target === state.pageIndex) {
+      state.cancelGesture();
       return;
     }
 
-    if (g.kind === 'resize') {
-      const next = resizeRect(g.start, g.handle, p, {
-        keepAspect: g.keepAspect !== event.shiftKey,
-        minSize: MIN_SIZE,
-      });
-
-      state.updateElements([g.id], (el) => {
-        if (el.type === 'text' && g.start.type === 'text') {
-          // ลากมุม = ย่อขยายตัวอักษรด้วย · ลากขอบซ้าย/ขวา = เปลี่ยนความกว้างกล่อง (ตัดบรรทัดใหม่)
-          const corner = g.handle.length === 2;
-          const scale = next.width / g.start.width;
-
-          return corner
-            ? { x: next.x, y: next.y, width: next.width, fontSize: Math.max(4, Math.round(g.start.fontSize * scale * 10) / 10) }
-            : { x: next.x, width: next.width };
-        }
-
-        return { x: next.x, y: next.y, width: next.width, height: next.height };
-      });
+    if (source.locked || targetPage.locked) {
+      state.cancelGesture();
+      toast(source.locked ? 'หน้านี้ล็อกอยู่ ย้ายชิ้นงานออกไม่ได้' : `หน้า ${target + 1} ล็อกอยู่ ย้ายชิ้นงานเข้าไปไม่ได้`, 'error');
       return;
     }
 
-    if (g.kind === 'rotate') {
-      const el = currentPage(state).elements.find((e) => e.id === g.id);
+    const ids = [...g.origin.keys()];
 
-      if (!el) return;
+    if (g.cross !== null) {
+      const rect = getLayout().rects[target];
 
-      let rotation = normalizeAngle(g.startRotation + angleFromCenter(center(el), p) - g.startAngle);
+      selfActivate.current = true;
 
-      if (event.shiftKey) rotation = Math.round(rotation / 15) * 15;
-      else for (const snapTo of [0, 90, 180, 270, 360]) if (Math.abs(rotation - snapTo) < 3) rotation = snapTo % 360;
+      try {
+        state.transferElements(ids, target, pageOffset(activeOrigin(), rect));
+      } finally {
+        selfActivate.current = false;
+      }
+    } else {
+      // ภาพย่อ: วางที่ตำแหน่งเดิมบนหน้าปลายทาง (หลุดนอกหน้าที่เล็กกว่า = ย้ายมากลางหน้า)
+      state.updateElements(ids, (el) => ({ x: g.origin.get(el.id)!.x, y: g.origin.get(el.id)!.y }));
 
-      state.updateElements([g.id], () => ({ rotation: Math.round(rotation * 10) / 10 }));
-      return;
+      const box = selectionBox(currentPage(useEditor.getState()), ids);
+      const size = pageSizeOf(targetPage, { width: state.baseWidth, height: state.baseHeight });
+
+      state.transferElements(ids, target, box ? keepInside(box, size) : { dx: 0, dy: 0 });
+      toast(`ย้ายชิ้นงานไปหน้า ${target + 1} แล้ว`);
     }
 
-    if (g.kind === 'marquee') {
-      g.current = p;
-      marquee.current = normalizeRect(g.start, p);
-
-      const page = currentPage(state);
-      const inside = page.elements
-        .filter((el) => !el.hidden && rectsIntersect(boundingBox(el), marquee.current!))
-        .map((el) => el.id);
-
-      state.select(g.additive ? [...new Set([...g.base, ...inside])] : inside);
-      requestDraw();
-    }
+    useEditor.getState().endGesture();
   };
 
   const onPointerUp = (event: React.PointerEvent<HTMLCanvasElement>) => {
     pointers.current.delete(event.pointerId);
+    stopAutoScroll();
+    lastInput.current = null;
 
     const g = gesture.current;
     const state = useEditor.getState();
@@ -846,15 +1458,46 @@ export function Stage() {
 
     dropTarget.current = null;
 
-    if (g.kind === 'move' && g.moved && drop) {
-      const image = currentPage(state).elements.find((el): el is ImageElement => el.type === 'image' && g.origin.has(el.id));
+    if (g.kind === 'move') {
+      if (g.strip !== null) useEditorUi.getState().set({ pageDropTarget: null });
 
-      if (image) moveImageIntoCell(image, drop.id, drop.cell);
+      if (g.moved && (g.cross !== null || g.strip !== null)) {
+        finishPageTransfer(g);
+        marquee.current = null;
+        gesture.current = { kind: 'none' };
+        setCursor('default');
+        requestDraw();
+        return;
+      }
+
+      if (g.moved && drop) {
+        const image = currentPage(state).elements.find((el): el is ImageElement => el.type === 'image' && g.origin.has(el.id));
+
+        if (image) moveImageIntoCell(image, drop.id, drop.cell);
+      }
+
+      if (!g.moved && g.toggleOff) {
+        const off = g.toggleOff;
+
+        state.select(useEditor.getState().selection.filter((id) => !off.includes(id)));
+      }
     }
 
-    if (g.kind === 'move' || g.kind === 'resize' || g.kind === 'rotate' || g.kind === 'erase' || g.kind === 'image-erase' || g.kind === 'frame-pan') state.endGesture();
+    if (
+      g.kind === 'move' ||
+      g.kind === 'resize' ||
+      g.kind === 'rotate' ||
+      g.kind === 'erase' ||
+      g.kind === 'image-erase' ||
+      g.kind === 'frame-pan' ||
+      g.kind === 'page-move'
+    ) {
+      state.endGesture();
+    }
+
     if (g.kind === 'pan') setCursor(spaceDown.current ? 'grab' : 'default');
-    if (g.kind === 'frame-pan') setCursor('grab');
+    if (g.kind === 'frame-pan' || g.kind === 'page-move') setCursor('grab');
+    if (g.kind === 'move') setCursor('move');
 
     if (g.kind === 'draw' && state.tool.brush !== 'eraser') {
       const brush = state.tool.brush;
@@ -872,6 +1515,44 @@ export function Stage() {
     gesture.current = { kind: 'none' };
     requestDraw();
   };
+
+  /// Esc ระหว่างลาก = ยกเลิก คืนทุกอย่างเป็นสภาพก่อนลาก
+  const cancelDrag = () => {
+    const g = gesture.current;
+    const state = useEditor.getState();
+
+    stopAutoScroll();
+
+    if (g.kind === 'marquee') state.select(g.base);
+    else if (g.kind !== 'draw') state.cancelGesture();
+
+    if (g.kind === 'move' && g.strip !== null) useEditorUi.getState().set({ pageDropTarget: null });
+
+    dropTarget.current = null;
+    marquee.current = null;
+    gesture.current = { kind: 'none' };
+    setCursor('default');
+    requestDraw();
+  };
+
+  useEffect(() => {
+    cancelRef.current = cancelDrag;
+  });
+
+  useEffect(() => {
+    // ฟังช่วง capture เพื่อให้ Esc ระหว่างลากไม่ไปถึงคีย์ลัดอื่น (เช่น ยกเลิกการเลือก)
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || !CANCELABLE.has(gesture.current.kind)) return;
+
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      cancelRef.current();
+    };
+
+    window.addEventListener('keydown', onKey, true);
+
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, []);
 
   const updateHoverCursor = (event: React.PointerEvent<HTMLCanvasElement>) => {
     if (spaceDown.current) return setCursor('grab');
@@ -894,6 +1575,9 @@ export function Stage() {
     const selected = page.elements.filter((el) => state.selection.includes(el.id));
     const rect = canvasRef.current!.getBoundingClientRect();
     const screen = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    const label = labelAt(screen);
+
+    if (label) return setCursor(getLayout().mode === 'board' && canEditDoc(state) ? 'grab' : 'pointer');
 
     if (selected.length === 1 && !selected[0].locked) {
       const handle = handleAt(screen, selected[0]);
@@ -903,6 +1587,8 @@ export function Stage() {
     }
 
     const hit = topElementAt(toPage(event.clientX, event.clientY));
+
+    if (!hit && otherPageAt(event.clientX, event.clientY) >= 0) return setCursor('pointer');
 
     setCursor(hit ? (hit.locked ? 'not-allowed' : 'move') : 'default');
   };
@@ -971,7 +1657,7 @@ export function Stage() {
     }
   };
 
-  // ซูมด้วย Ctrl+ล้อ (หรือถ่างบนทัชแพด) · เลื่อนมุมมองด้วยล้อ
+  // ซูมด้วย Ctrl+ล้อ (หรือถ่างบนทัชแพด) แบบนุ่มนวลรอบเมาส์ · เลื่อนมุมมองด้วยล้อ (Shift+ล้อ = แนวนอน)
   useEffect(() => {
     const canvas = canvasRef.current!;
     const onWheel = (event: WheelEvent) => {
@@ -993,20 +1679,22 @@ export function Stage() {
             wheelTimer.current = null;
             useEditor.getState().endGesture();
           }, 400);
-          patchCellImage(frameEdit.id, frameEdit.cell, { zoom: clampFrameZoom(image.zoom * Math.exp(-event.deltaY * 0.002)) });
+          patchCellImage(frameEdit.id, frameEdit.cell, { zoom: clampFrameZoom(image.zoom * Math.exp(-wheelPixels(event.deltaY, event.deltaMode) * 0.002)) });
           return;
         }
       }
 
       if (event.ctrlKey || event.metaKey) {
         const rect = canvas.getBoundingClientRect();
-        const mouse = { x: event.clientX - rect.left, y: event.clientY - rect.top };
-        const zoom = clampZoom(state.zoom * Math.exp(-event.deltaY * 0.01));
-        const world = { x: (mouse.x - state.pan.x) / state.zoom, y: (mouse.y - state.pan.y) / state.zoom };
 
-        state.setViewport(zoom, { x: mouse.x - world.x * zoom, y: mouse.y - world.y * zoom });
+        zoomBy(wheelZoomFactor(event.deltaY, event.deltaMode), { x: event.clientX - rect.left, y: event.clientY - rect.top });
       } else {
-        state.setViewport(state.zoom, { x: state.pan.x - event.deltaX, y: state.pan.y - event.deltaY });
+        const dx = wheelPixels(event.deltaX, event.deltaMode);
+        const dy = wheelPixels(event.deltaY, event.deltaMode);
+        const sideways = event.shiftKey && dx === 0;
+
+        cancelViewportAnimation();
+        state.setViewport(state.zoom, { x: state.pan.x - (sideways ? dy : dx), y: state.pan.y - (sideways ? 0 : dy) });
       }
     };
 
@@ -1043,7 +1731,7 @@ export function Stage() {
   }, []);
 
   // ── ลากมาวาง: รูปจากแผง (อัปโหลด/คลังภาพ) · ไฟล์จากเครื่อง · รูปจากเว็บอื่น ──
-  // บนกรอบ/ช่อง = ใส่รูปลงช่อง · ที่อื่น = เพิ่มตรงจุดที่ปล่อย
+  // บนกรอบ/ช่อง = ใส่รูปลงช่อง · ที่อื่น = เพิ่มตรงจุดที่ปล่อย (โหมดเลื่อนดู/บอร์ด: ลงหน้าที่ปล่อย)
 
   const onDragOver = (event: React.DragEvent<HTMLDivElement>) => {
     const types = Array.from(event.dataTransfer.types);
@@ -1079,6 +1767,11 @@ export function Stage() {
 
   const onDrop = (event: React.DragEvent<HTMLDivElement>) => {
     setFileDrag(null);
+
+    // ปล่อยบนหน้าอื่น = เปิดหน้านั้นก่อน แล้วใส่ลงหน้านั้น
+    const other = otherPageAt(event.clientX, event.clientY);
+
+    if (other >= 0 && canEditDoc(useEditor.getState())) activatePage(other);
 
     if (!hasImageDrag(event.dataTransfer)) {
       const files = Array.from(event.dataTransfer.files);
@@ -1133,7 +1826,11 @@ export function Stage() {
       <canvas
         ref={canvasRef}
         role="img"
-        aria-label="ผืนผ้าใบ — ใช้แผงเลเยอร์เพื่อเลือกชิ้นงานด้วยคีย์บอร์ด"
+        aria-label={
+          pagesLayout === 'single'
+            ? 'ผืนผ้าใบ — ใช้แผงเลเยอร์เพื่อเลือกชิ้นงานด้วยคีย์บอร์ด'
+            : 'ผืนผ้าใบ แสดงทุกหน้า — คลิกหน้าเพื่อเปิด ลากชิ้นงานไปวางบนหน้าอื่นเพื่อย้าย · ใช้แผงเลเยอร์เพื่อเลือกชิ้นงานด้วยคีย์บอร์ด'
+        }
         tabIndex={0}
         style={{ width: size.width, height: size.height, cursor }}
         onPointerDown={onPointerDown}
@@ -1148,9 +1845,67 @@ export function Stage() {
         onContextMenu={onContextMenu}
         className="block outline-none"
       />
+      {pagesLayout === 'board' && <BoardToolbar />}
       {editingTextId && <TextEditor id={editingTextId} />}
       {fileDrag && <FileDropOverlay target={fileDrag} />}
       {editingTable && <TableCellEditor />}
+    </div>
+  );
+}
+
+// ── แถบเครื่องมือของบอร์ด ────────────────────────────────────────
+
+/// มุมซ้ายบนของบอร์ด: ดูทุกหน้า · จัดเรียงอัตโนมัติ (แถวเดียว/ตาราง)
+function BoardToolbar() {
+  const editable = useEditor((s) => canEditDoc(s));
+  const pageCount = useEditor((s) => s.doc.pages.length);
+  const { open, setOpen, anchorRef, menuRef } = useAnchoredMenu('start');
+
+  const arrange = (mode: 'row' | 'grid') => {
+    setOpen(false);
+
+    const state = useEditor.getState();
+    const base = { width: state.baseWidth, height: state.baseHeight };
+
+    state.setBoardPositions(autoArrange(state.doc.pages.map((page) => pageSizeOf(page, base)), mode, pageGap(base)));
+    fitView();
+  };
+
+  return (
+    <div className="absolute top-3 left-3 z-10 flex items-center gap-1 rounded-xl border border-line bg-surface p-1 shadow-csmju-md">
+      <button
+        type="button"
+        onClick={() => fitView()}
+        className="inline-flex min-h-10 items-center gap-1.5 rounded-lg px-2.5 text-csmju-caption font-medium text-ink hover:bg-surface-muted"
+      >
+        <Maximize aria-hidden className="size-4" />
+        ดูทุกหน้า
+      </button>
+      {editable && pageCount > 1 && (
+        <>
+          <button
+            ref={anchorRef}
+            type="button"
+            aria-haspopup="menu"
+            aria-expanded={open}
+            onClick={() => setOpen((v) => !v)}
+            className="inline-flex min-h-10 items-center gap-1.5 rounded-lg px-2.5 text-csmju-caption font-medium text-ink hover:bg-surface-muted"
+          >
+            <LayoutGrid aria-hidden className="size-4" />
+            จัดเรียงอัตโนมัติ
+          </button>
+          <FloatingPanel open={open} menuRef={menuRef} label="จัดเรียงอัตโนมัติ" className="w-64 rounded-xl border border-line bg-surface py-1.5 shadow-csmju-lg">
+            <button type="button" role="menuitem" onClick={() => arrange('row')} className="flex min-h-10 w-full flex-col items-start px-3 py-1.5 text-left hover:bg-surface-muted">
+              <span className="text-csmju-caption font-medium text-ink">เรียงเป็นแถวเดียว</span>
+              <span className="text-csmju-caption text-muted">ตามลำดับหน้า จากซ้ายไปขวา</span>
+            </button>
+            <button type="button" role="menuitem" onClick={() => arrange('grid')} className="flex min-h-10 w-full flex-col items-start px-3 py-1.5 text-left hover:bg-surface-muted">
+              <span className="text-csmju-caption font-medium text-ink">เรียงเป็นตาราง</span>
+              <span className="text-csmju-caption text-muted">ตามลำดับหน้า ทีละแถว</span>
+            </button>
+          </FloatingPanel>
+        </>
+      )}
     </div>
   );
 }
@@ -1233,23 +1988,145 @@ export function isTyping(target: EventTarget | null): boolean {
   return Boolean(el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable));
 }
 
-export function clampZoom(zoom: number): number {
-  return Math.min(8, Math.max(0.05, zoom));
-}
-
-/// ซูมให้หน้าพอดีพื้นที่ (เว้นขอบ 40px)
-export function fitToScreen(area: { width: number; height: number }) {
+/// ซูมให้หน้าที่เปิดอยู่พอดีพื้นที่ (เว้นขอบ) · animate = เลื่อนไปแบบนุ่มนวล
+export function fitToScreen(area: { width: number; height: number }, animate = false) {
   const state = useEditor.getState();
 
   if (area.width === 0 || area.height === 0) return;
 
   const margin = area.width < 640 ? 24 : 56;
-  const zoom = clampZoom(Math.min((area.width - margin * 2) / state.width, (area.height - margin * 2) / state.height));
+  const { zoom, pan } = fitRect({ x: 0, y: 0, width: state.width, height: state.height }, area, margin);
 
-  state.setViewport(zoom, {
-    x: (area.width - state.width * zoom) / 2,
-    y: (area.height - state.height * zoom) / 2,
-  });
+  if (animate) animateViewport(zoom, pan);
+  else state.setViewport(zoom, pan);
+}
+
+/// ปุ่ม "พอดีจอ": บอร์ด = เห็นทุกหน้า · โหมดอื่น = หน้าที่เปิดอยู่ (ใช้ขนาดผืนผ้าใบล่าสุด)
+export function fitView() {
+  const area = stageSize();
+
+  if (area.width === 0 || area.height === 0) return;
+
+  const { mode, rects } = currentLayoutRects();
+
+  if (mode !== 'board' || rects.length < 2) {
+    fitToScreen(area, true);
+    return;
+  }
+
+  const state = useEditor.getState();
+  const active = rects[Math.min(state.pageIndex, rects.length - 1)];
+  const all = unionRects(rects)!;
+  const { zoom, pan } = fitRect({ ...all, x: all.x - active.x, y: all.y - active.y }, area, area.width < 640 ? 24 : 56);
+
+  animateViewport(zoom, pan);
+}
+
+function pageLabel(page: Page, index: number): string {
+  return `หน้า ${index + 1}${page.name ? ` - ${page.name}` : ''}${page.hidden ? ' · ซ่อนอยู่' : ''}${page.locked ? ' · ล็อก' : ''}`;
+}
+
+/// ป้ายชื่อเหนือแต่ละหน้า (พิกัดจอ) · บอร์ด: มีวงกลมเลขลำดับหน้าขนาดใหญ่ และป้ายใช้เป็นที่จับลากหน้า
+function drawPageLabels(
+  ctx: CanvasRenderingContext2D,
+  pages: Page[],
+  visible: number[],
+  screenOf: (i: number) => Point,
+  mode: PagesLayout,
+  activeIndex: number,
+  colors: { primary: string; ink: string; font: string },
+): LabelHit[] {
+  const hits: LabelHit[] = [];
+
+  ctx.save();
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'left';
+
+  for (const i of visible) {
+    const s = screenOf(i);
+    const text = pageLabel(pages[i], i);
+    const active = i === activeIndex;
+
+    ctx.font = `${active ? 600 : 500} 14px ${colors.font}`;
+
+    const textWidth = ctx.measureText(text).width;
+
+    ctx.globalAlpha = pages[i].hidden ? 0.6 : 1;
+
+    if (mode === 'board') {
+      const r = 15;
+      const cy = s.y - 10 - r;
+
+      ctx.fillStyle = active ? colors.primary : colors.ink;
+      ctx.beginPath();
+      ctx.arc(s.x + r, cy, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgb(255 255 255)';
+      ctx.font = `700 15px ${colors.font}`;
+      ctx.textAlign = 'center';
+      ctx.fillText(String(i + 1), s.x + r, cy + 1);
+      ctx.textAlign = 'left';
+      ctx.font = `${active ? 600 : 500} 14px ${colors.font}`;
+      ctx.fillStyle = active ? colors.primary : colors.ink;
+      ctx.fillText(text, s.x + r * 2 + 8, cy);
+      hits.push({ index: i, x: s.x - 4, y: cy - r - 4, width: r * 2 + 16 + textWidth, height: r * 2 + 8 });
+    } else {
+      const cy = s.y - 14;
+
+      ctx.fillStyle = active ? colors.primary : colors.ink;
+      ctx.fillText(text, s.x, cy);
+      hits.push({ index: i, x: s.x - 4, y: cy - 12, width: textWidth + 8, height: 24 });
+    }
+  }
+
+  ctx.restore();
+
+  return hits;
+}
+
+/// บอร์ด: เส้นประจาง ๆ พร้อมหัวลูกศรจากหน้าหนึ่งไปหน้าถัดไปตามลำดับในรายการหน้า
+function drawConnectors(ctx: CanvasRenderingContext2D, rects: Rect[], toScreenWorld: (p: Point) => Point, color: string) {
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.globalAlpha = 0.35;
+  ctx.lineWidth = 2;
+
+  for (let i = 0; i < rects.length - 1; i++) {
+    const a = rects[i];
+    const b = rects[i + 1];
+
+    if (rectsOverlap(a, b)) continue;
+
+    const ca = { x: a.x + a.width / 2, y: a.y + a.height / 2 };
+    const cb = { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+    const p1 = toScreenWorld(edgePoint(a, cb));
+    const p2 = toScreenWorld(edgePoint(b, ca));
+    const length = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+
+    if (length < 24) continue;
+
+    const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+    const head = 10;
+    // เว้นระยะจากขอบหน้าเล็กน้อย
+    const start = { x: p1.x + Math.cos(angle) * 6, y: p1.y + Math.sin(angle) * 6 };
+    const end = { x: p2.x - Math.cos(angle) * 6, y: p2.y - Math.sin(angle) * 6 };
+
+    ctx.setLineDash([6, 6]);
+    ctx.beginPath();
+    ctx.moveTo(start.x, start.y);
+    ctx.lineTo(end.x - Math.cos(angle) * head, end.y - Math.sin(angle) * head);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(end.x, end.y);
+    ctx.lineTo(end.x - Math.cos(angle - 0.45) * head, end.y - Math.sin(angle - 0.45) * head);
+    ctx.lineTo(end.x - Math.cos(angle + 0.45) * head, end.y - Math.sin(angle + 0.45) * head);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  ctx.restore();
 }
 
 function rectCorners(r: Rect): Point[] {

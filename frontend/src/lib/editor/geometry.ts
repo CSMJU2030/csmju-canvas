@@ -114,11 +114,27 @@ export function resizeRect(
   start: Rect & { rotation: number },
   handle: Handle,
   pointer: Point,
-  options: { keepAspect: boolean; minSize: number },
+  options: { keepAspect: boolean; minSize: number; fromCenter?: boolean },
 ): Rect {
   const c = center(start);
   const local = rotatePoint(pointer, c, -start.rotation);
   const anchor = HANDLE_ANCHOR[handle];
+
+  // Alt: ย่อขยายจากกึ่งกลาง — ตรึงจุดศูนย์กลางไว้ ขนาดเป็นสองเท่าของระยะจากศูนย์กลางถึงเมาส์
+  if (options.fromCenter) {
+    let width = anchor.x !== 0.5 ? Math.max(options.minSize, Math.abs(local.x - c.x) * 2) : start.width;
+    let height = anchor.y !== 0.5 ? Math.max(options.minSize, Math.abs(local.y - c.y) * 2) : start.height;
+
+    if (options.keepAspect && anchor.x !== 0.5 && anchor.y !== 0.5) {
+      const ratio = start.width / start.height;
+
+      if (width / height > ratio) height = width / ratio;
+      else width = height * ratio;
+    }
+
+    return { x: c.x - width / 2, y: c.y - height / 2, width, height };
+  }
+
   const fixed = { x: start.x + (1 - anchor.x) * start.width, y: start.y + (1 - anchor.y) * start.height };
   const movesX = anchor.x !== 0.5;
   const movesY = anchor.y !== 0.5;

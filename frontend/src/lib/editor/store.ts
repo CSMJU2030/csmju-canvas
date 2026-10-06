@@ -99,6 +99,12 @@ export interface EditorState extends EditorMeta {
   /// เริ่มการลาก/ย่อขยาย — การแก้ระหว่างนี้รวมเป็นหนึ่งขั้นของ undo
   beginGesture(): void;
   endGesture(): void;
+  /// ยกเลิกการลากที่ค้างอยู่ (Esc ระหว่างลาก) — คืนงานเป็นสภาพตอนเริ่มลาก ไม่เพิ่มประวัติ undo
+  cancelGesture(): void;
+  /// ย้ายชิ้นงานจากหน้าที่เปิดอยู่ไปหน้าอื่น (ลากข้ามหน้า) แล้วเปิดหน้านั้น · offset = ค่าที่บวกกับ x/y ให้เป็นพิกัดของหน้าปลายทาง
+  transferElements(ids: string[], toIndex: number, offset: { dx: number; dy: number }): void;
+  /// ตำแหน่งของหน้าบนบอร์ด (ลำดับตามรายการหน้า) · null = ให้ editor วางอัตโนมัติ
+  setBoardPositions(positions: ({ x: number; y: number } | null)[]): void;
 
   updateElements(ids: string[], patch: (el: CanvasElement) => Partial<CanvasElement>): void;
   addElements(elements: CanvasElement[], options?: { select?: boolean }): void;
@@ -357,6 +363,74 @@ export const useEditor = create<EditorState>((set, get) => {
       } else {
         set({ guides: [] });
       }
+    },
+
+    cancelGesture() {
+      const snapshot = gestureSnapshot;
+
+      gestureSnapshot = null;
+
+      const state = get();
+
+      if (!snapshot || snapshot === state.doc) {
+        set({ guides: [] });
+        return;
+      }
+
+      const pageIndex = Math.min(state.pageIndex, snapshot.pages.length - 1);
+      const alive = new Set(snapshot.pages[pageIndex].elements.map((el) => el.id));
+
+      set({
+        doc: snapshot,
+        pageIndex,
+        ...sized(snapshot, pageIndex),
+        selection: state.selection.filter((id) => alive.has(id)),
+        guides: [],
+        revision: state.revision + 1,
+      });
+    },
+
+    transferElements(ids, toIndex, offset) {
+      const state = get();
+      const from = state.pageIndex;
+
+      if (toIndex === from || !state.doc.pages[toIndex]) return;
+
+      const picked = new Set(ids);
+      const moving = currentPage(state).elements.filter((el) => picked.has(el.id));
+
+      if (moving.length === 0) return;
+
+      const moved = moving.map((el) => ({ ...el, x: Math.round((el.x + offset.dx) * 10) / 10, y: Math.round((el.y + offset.dy) * 10) / 10 }));
+      const pages = state.doc.pages.map((page, i) => {
+        if (i === from) return { ...page, elements: page.elements.filter((el) => !picked.has(el.id)) };
+        if (i === toIndex) return { ...page, elements: [...page.elements, ...moved] };
+
+        return page;
+      });
+
+      commit({ ...state.doc, pages }, { pageIndex: toIndex, selection: moved.map((el) => el.id), editingTextId: null });
+    },
+
+    setBoardPositions(positions) {
+      const state = get();
+      const pages = state.doc.pages.map((page, i) => {
+        const p = positions[i];
+
+        if (p === undefined) return page;
+        if (p === null) {
+          const rest = { ...page };
+
+          delete rest.boardX;
+          delete rest.boardY;
+
+          return rest;
+        }
+
+        return { ...page, boardX: Math.round(p.x), boardY: Math.round(p.y) };
+      });
+
+      commit({ ...state.doc, pages });
     },
 
     updateElements(ids, patch) {

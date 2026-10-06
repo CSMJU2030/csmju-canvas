@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { PagesLayout } from './page-layout';
 
 /// สถานะหน้าจอของหน้าแก้ไขที่ไม่ใช่เนื้องาน (แผงที่เปิด เมนูคลิกขวา ตัวอย่างแอนิเมชัน)
 ///
@@ -30,6 +31,10 @@ interface EditorUi {
   painting: boolean;
   /// มุมมองหน้า: แบบภาพย่อด้านล่าง หรือแบบตารางเต็มจอ
   pagesView: 'strip' | 'grid';
+  /// การจัดวางหน้าบนผืนผ้าใบ: ทีละหน้า · เลื่อนดูต่อกัน · บอร์ดอิสระ
+  pagesLayout: PagesLayout;
+  /// ภาพย่อหน้าที่ชิ้นงานกำลังถูกลากมาทับ (ปล่อยแล้วย้ายชิ้นงานไปหน้านั้น) — แถบภาพย่อใช้เน้นกรอบ
+  pageDropTarget: number | null;
   rulers: boolean;
   /// เส้นไกด์ที่ลากออกจากไม้บรรทัด (พิกัดหน้า) — ไม่บันทึกลงงาน
   guideLines: { axis: 'x' | 'y'; at: number }[];
@@ -56,10 +61,11 @@ interface EditorUi {
   playPreview(ids: string[]): void;
   setPainting(painting: boolean): void;
   setPagesView(view: 'strip' | 'grid'): void;
+  setPagesLayout(layout: PagesLayout): void;
   toggleRulers(): void;
   addGuide(guide: { axis: 'x' | 'y'; at: number }): void;
   moveGuide(index: number, at: number | null): void;
-  set(patch: Partial<Pick<EditorUi, 'margins' | 'bleed' | 'commentsOpen' | 'commentPins' | 'overlay' | 'stripOpen' | 'imageErase' | 'frameCell' | 'frameEdit'>>): void;
+  set(patch: Partial<Pick<EditorUi, 'margins' | 'bleed' | 'commentsOpen' | 'commentPins' | 'overlay' | 'stripOpen' | 'imageErase' | 'frameCell' | 'frameEdit' | 'pageDropTarget'>>): void;
 }
 
 export const useEditorUi = create<EditorUi>((set, get) => ({
@@ -70,6 +76,8 @@ export const useEditorUi = create<EditorUi>((set, get) => ({
   preview: null,
   painting: false,
   pagesView: 'strip',
+  pagesLayout: 'single',
+  pageDropTarget: null,
   rulers: false,
   guideLines: [],
   margins: false,
@@ -105,6 +113,9 @@ export const useEditorUi = create<EditorUi>((set, get) => ({
   },
   setPagesView(view) {
     set({ pagesView: view });
+  },
+  setPagesLayout(layout) {
+    set({ pagesLayout: layout });
   },
   toggleRulers() {
     set({ rulers: !get().rulers });
