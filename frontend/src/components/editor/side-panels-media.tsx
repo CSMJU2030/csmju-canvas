@@ -6,7 +6,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { ErrorState, Spinner, cx, errorMessage, useToast } from '@/components/csmju/primitives';
 import { api, qs } from '@/lib/csmju/api';
 import { FONT_SETS } from '@/lib/editor/factory';
-import { FONT_FAMILIES, cssFamily, ensureFont, type FontFamily } from '@/lib/editor/fonts';
+import { FONT_FAMILIES, assetIdOfFont, cssFamily, ensureFont, fontLabel, isPopularFont, popularFirst, useUserFonts, type FontFamily, type FontStyle } from '@/lib/editor/fonts';
 import { ADJUST_ZERO, FILTER_GROUPS, FILTER_PRESETS, applyAdjust, dominantColors, effectiveAdjust, type FilterPreset } from '@/lib/editor/image-filters';
 import { fillCell, isFrameLike, loadImageSource, patchCellImage } from '@/lib/editor/frame-actions';
 import { cellImages } from '@/lib/editor/frames';
@@ -17,6 +17,7 @@ import { useEditorUi } from '@/lib/editor/ui-store';
 import type { Asset } from '@/lib/types';
 import { PanelHeader, PresetTile, RangeField, UnderlineTabs } from './controls';
 import { FontName } from './font-picker';
+import { MyFontsSection } from './my-fonts';
 import { ShadowControls } from './side-panels';
 
 function close() {
@@ -67,12 +68,13 @@ function useImageTarget(): ImageTarget | null {
 
 // ── ฟอนต์ ──────────────────────────────────────────────────────────
 
-const STYLE_CHIPS: { key: FontFamily['style'] | 'all'; label: string }[] = [
+const STYLE_CHIPS: { key: FontStyle | 'all'; label: string }[] = [
   { key: 'all', label: 'ทั้งหมด' },
   { key: 'handwriting', label: 'ลายมือ' },
   { key: 'display', label: 'ดิสเพลย์' },
   { key: 'sans', label: 'ไม่มีหัว' },
   { key: 'serif', label: 'มีเชิง' },
+  { key: 'mono', label: 'โมโนสเปซ' },
 ];
 
 /// สไตล์ข้อความตามลำดับชั้นของเนื้อหา (แท็บ "สไตล์ข้อความ") — ขนาดเทียบด้านสั้นของหน้า
@@ -92,8 +94,10 @@ export function FontPanel() {
   const height = useEditor((s) => s.height);
   const [tab, setTab] = useState<'fonts' | 'styles'>('fonts');
   const [query, setQuery] = useState('');
-  const [style, setStyle] = useState<FontFamily['style'] | 'all'>('all');
+  const [style, setStyle] = useState<FontStyle | 'all'>('all');
   const [script, setScript] = useState<'all' | 'th' | 'en'>('all');
+  const [popular, setPopular] = useState(false);
+  const userFontNames = useUserFonts((s) => s.names);
   const current = texts[0]?.fontFamily;
   const ids = texts.filter((t) => !t.locked).map((t) => t.id);
   const term = query.trim().toLowerCase();
@@ -102,10 +106,19 @@ export function FontPanel() {
 
     for (const page of doc.pages) for (const el of page.elements) if (el.type === 'text') set.add(el.fontFamily);
 
-    return FONT_FAMILIES.filter((f) => set.has(f.id));
-  }, [doc]);
-  const fonts = FONT_FAMILIES.filter(
-    (f) => (style === 'all' || f.style === style) && (script === 'all' || (f.script ?? 'th') === script) && (!term || f.label.toLowerCase().includes(term) || f.id.toLowerCase().includes(term)),
+    // ฟอนต์ที่อัปโหลดเองที่ใช้ในงานนี้ด้วย (รวมของเจ้าของงานที่แชร์มา)
+    const uploaded = [...set].filter((id) => assetIdOfFont(id)).map((id) => ({ id, label: fontLabel(id, userFontNames), uploaded: true }));
+
+    return [...FONT_FAMILIES.filter((f) => set.has(f.id)), ...uploaded];
+  }, [doc, userFontNames]);
+  const fonts = popularFirst(
+    FONT_FAMILIES.filter(
+      (f) =>
+        (!popular || isPopularFont(f.id)) &&
+        (style === 'all' || f.style === style) &&
+        (script === 'all' || (f.script ?? 'th') === script) &&
+        (!term || f.label.toLowerCase().includes(term) || f.id.toLowerCase().includes(term)),
+    ),
   );
 
 
@@ -114,7 +127,7 @@ export function FontPanel() {
     patch(ids, { fontFamily: id });
   };
 
-  const fontRow = (font: FontFamily) => (
+  const fontRow = (font: Pick<FontFamily, 'id' | 'label' | 'script'> & { uploaded?: boolean }) => (
     <li key={font.id}>
       <button
         type="button"
@@ -124,7 +137,11 @@ export function FontPanel() {
         className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left hover:bg-surface-muted disabled:opacity-50"
       >
         <FontName id={font.id} label={font.label} className="flex-1 truncate text-csmju-body text-ink" />
-        {(font.script ?? 'th') === 'en' && <span className="text-csmju-caption text-muted">อังกฤษ</span>}
+        {font.uploaded ? (
+          <span className="text-csmju-caption text-muted">อัปโหลด</span>
+        ) : (
+          (font.script ?? 'th') === 'en' && <span className="text-csmju-caption text-muted">อังกฤษ</span>
+        )}
         {font.id === current && <Check aria-hidden className="size-5 text-ink" />}
       </button>
     </li>
@@ -157,6 +174,17 @@ export function FontPanel() {
               />
             </div>
             <div className="csmju-scroll-x mt-3 flex gap-2 overflow-x-auto pb-1">
+              <button
+                type="button"
+                aria-pressed={popular}
+                onClick={() => setPopular((v) => !v)}
+                className={cx(
+                  'min-h-10 shrink-0 rounded-xl border px-3 text-csmju-caption font-semibold',
+                  popular ? 'border-primary bg-primary-soft text-primary' : 'border-line-strong text-ink hover:bg-surface-muted',
+                )}
+              >
+                ยอดนิยม
+              </button>
               {(
                 [
                   ['th', 'ภาษาไทย'],
@@ -195,15 +223,16 @@ export function FontPanel() {
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-2 pt-2 pb-6">
             {ids.length === 0 && <p className="px-2 pb-2 text-csmju-caption text-muted">เลือกข้อความก่อน แล้วเปลี่ยนฟอนต์ได้ที่นี่</p>}
-            {!term && style === 'all' && script === 'all' && inDoc.length > 0 && (
+            {!term && !popular && style === 'all' && script === 'all' && <MyFontsSection current={current} canApply={ids.length > 0} onApply={(id) => void applyFont(id)} />}
+            {!term && !popular && style === 'all' && script === 'all' && inDoc.length > 0 && (
               <>
                 <h3 className="px-2 pt-2 pb-1 text-csmju-caption font-bold text-ink">ฟอนต์ในเอกสาร</h3>
                 <ul>{inDoc.map(fontRow)}</ul>
               </>
             )}
-            <h3 className="px-2 pt-3 pb-1 text-csmju-caption font-bold text-ink">ฟอนต์ทั้งหมด</h3>
+            <h3 className="px-2 pt-3 pb-1 text-csmju-caption font-bold text-ink">{popular ? 'ฟอนต์ยอดนิยม' : 'ฟอนต์ทั้งหมด'} <span className="font-normal text-muted">· {fonts.length} แบบ</span></h3>
             {fonts.length === 0 ? <p className="px-2 text-csmju-caption text-muted">ไม่พบฟอนต์ที่ค้นหา</p> : <ul>{fonts.map(fontRow)}</ul>}
-            <p className="px-2 pt-4 text-csmju-caption text-muted">ฟอนต์ทั้งหมดเป็นสัญญาอนุญาต OFL เก็บในระบบของคณะ ใช้ได้ฟรีทั้งงานส่วนตัวและงานเผยแพร่</p>
+            <p className="px-2 pt-4 text-csmju-caption text-muted">ฟอนต์ในคลังทั้งหมดเป็นสัญญาอนุญาต OFL หรือ Apache 2.0 เก็บในระบบของคณะ ใช้ได้ฟรีทั้งงานส่วนตัวและงานเผยแพร่ · ฟอนต์ที่อัปโหลดเองเป็นความรับผิดชอบของผู้อัปโหลด</p>
           </div>
         </>
       ) : (

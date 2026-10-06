@@ -16,6 +16,7 @@ import { canEditDoc, useEditor } from '@/lib/editor/store';
 import type { CanvasElement } from '@/lib/editor/types';
 import type { Asset } from '@/lib/types';
 import { useInsertMedia } from './media-panel';
+import { useUploadFonts } from './my-fonts';
 
 /// นำเข้าไฟล์จากทุกทาง: ลากไฟล์จากเครื่องมาวางบนผืนผ้าใบ/แผงอัปโหลด · วาง (Ctrl+V) รูปที่แคปหน้าจอ ไฟล์ที่คัดลอก
 /// ข้อความ หรือช่องตารางจาก Excel · ลากรูปจากเว็บอื่นมาวาง — ทุกอย่างผ่าน planImport ใน lib/editor/file-import.ts
@@ -31,7 +32,7 @@ export function FileDropOverlay({ target }: { target: 'page' | 'cell' | 'uploads
         <p className="text-csmju-body font-bold text-ink">
           {target === 'cell' ? 'ปล่อยเพื่อใส่รูปลงในช่อง' : target === 'uploads' ? 'ปล่อยเพื่ออัปโหลดเก็บไว้' : 'ปล่อยเพื่อเพิ่มลงในดีไซน์'}
         </p>
-        <p className="text-csmju-caption text-muted">รูป · วิดีโอ · เสียง · ข้อความ (.txt) · ตาราง (.csv)</p>
+        <p className="text-csmju-caption text-muted">รูป · วิดีโอ · เสียง · ฟอนต์ · ข้อความ (.txt) · ตาราง (.csv)</p>
       </div>
     </div>
   );
@@ -151,6 +152,7 @@ export function useFileImport() {
   const toast = useToast();
   const queryClient = useQueryClient();
   const insertMedia = useInsertMedia();
+  const uploadFonts = useUploadFonts();
 
   const addText = (text: string, at?: { x: number; y: number }, offset = 0) => {
     const state = useEditor.getState();
@@ -192,6 +194,7 @@ export function useFileImport() {
 
     const problems: string[] = [];
     const uploads: File[] = [];
+    const fonts: File[] = [];
     let offset = 0;
 
     for (const file of files) {
@@ -201,6 +204,8 @@ export function useFileImport() {
         problems.push(plan.reason);
       } else if (plan.kind === 'upload') {
         uploads.push(file);
+      } else if (plan.kind === 'font') {
+        fonts.push(file);
       } else if (plan.kind === 'convert-image') {
         try {
           uploads.push(await convertToPng(file));
@@ -219,6 +224,8 @@ export function useFileImport() {
     }
 
     if (problems.length) toast(problems.length > 1 ? `${problems[0]} (และอีก ${problems.length - 1} ไฟล์)` : problems[0], 'error');
+    // ฟอนต์ → "ฟอนต์ของฉัน" (ใช้กับข้อความที่เลือกอยู่ทันทีเมื่อวางลงหน้า)
+    if (fonts.length > 0) await uploadFonts(fonts, { apply: insert });
     if (uploads.length === 0) return;
 
     const activity = useUploadActivity.getState();

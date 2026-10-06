@@ -1586,7 +1586,11 @@
                 "audio/mpeg",
                 "audio/mp4",
                 "audio/ogg",
-                "audio/wav"
+                "audio/wav",
+                "font/ttf",
+                "font/otf",
+                "font/woff",
+                "font/woff2"
               ]
             }
           },
@@ -1594,13 +1598,14 @@
             "name": "kind",
             "required": false,
             "in": "query",
-            "description": "เฉพาะรูป วิดีโอ หรือเสียง (ไม่ใส่ = ทุกชนิด)",
+            "description": "เฉพาะรูป วิดีโอ เสียง หรือฟอนต์ที่อัปโหลดเอง (ไม่ใส่ = ทุกชนิด)",
             "schema": {
               "type": "string",
               "enum": [
                 "image",
                 "video",
-                "audio"
+                "audio",
+                "font"
               ]
             }
           },
@@ -1690,7 +1695,7 @@
             }
           }
         },
-        "summary": "ไฟล์ที่ฉันอัปโหลด (หรือไฟล์ในถังขยะ) · กรองชนิดด้วย kind · ภาพที่นำเข้าด้วย imported/source",
+        "summary": "ไฟล์ที่ฉันอัปโหลด (หรือไฟล์ในถังขยะ) · กรองชนิดด้วย kind (image, video, audio, font) · ภาพที่นำเข้าด้วย imported/source",
         "tags": [
           "assets"
         ]
@@ -1733,7 +1738,7 @@
             }
           }
         },
-        "summary": "อัปโหลดรูป วิดีโอ หรือเสียงไว้ใช้ในงาน · แนบแหล่งที่มาได้ (sourceUrl, sourceSite) เมื่อนำเข้าจากเว็บอื่น",
+        "summary": "อัปโหลดรูป วิดีโอ เสียง หรือฟอนต์ของฉันไว้ใช้ในงาน · แนบแหล่งที่มาได้ (sourceUrl, sourceSite) เมื่อนำเข้าจากเว็บอื่น",
         "tags": [
           "assets"
         ]
@@ -1757,7 +1762,7 @@
             "description": ""
           }
         },
-        "summary": "ไฟล์รูป/วิดีโอ/เสียง (เจ้าของ หรือผู้ได้ลิงก์ของงานที่ใช้ไฟล์นี้ · ไม่ห่อ envelope เพราะเป็นไบต์ · รองรับหัว Range)",
+        "summary": "ไฟล์รูป/วิดีโอ/เสียง/ฟอนต์ (เจ้าของ หรือผู้ได้ลิงก์ของงานที่ใช้ไฟล์นี้ · ไม่ห่อ envelope เพราะเป็นไบต์ · รองรับหัว Range)",
         "tags": [
           "assets"
         ]
@@ -5046,7 +5051,7 @@
           "file": {
             "type": "string",
             "format": "binary",
-            "description": "รูป PNG · JPEG · WebP · GIF · SVG ไม่เกิน 10 MB · วิดีโอ MP4 · WebM และเสียง MP3 · M4A · OGG · WAV ไม่เกิน 50 MB"
+            "description": "รูป PNG · JPEG · WebP · GIF · SVG ไม่เกิน 10 MB · วิดีโอ MP4 · WebM และเสียง MP3 · M4A · OGG · WAV ไม่เกิน 50 MB · ฟอนต์ TTF · OTF · WOFF · WOFF2 ไม่เกิน 5 MB"
           },
           "sourceUrl": {
             "type": "string",

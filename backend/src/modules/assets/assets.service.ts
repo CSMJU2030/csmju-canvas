@@ -12,6 +12,7 @@ import type { Asset } from '../../generated/prisma/client.js';
 import { Paginated } from '../../common/http/envelope.js';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
 import type { ListAssetsQuery } from './dto/asset.dto.js';
+import { FONT_EXTENSIONS, MAX_FONT_BYTES, sniffFont } from './font-type.js';
 import { IMAGE_EXTENSIONS, sniffImage } from './image-type.js';
 import { MEDIA_EXTENSIONS, sniffMedia } from './media-type.js';
 import { resolveSource, type SourceSite } from './source-site.js';
@@ -79,15 +80,20 @@ export class AssetsService {
     if (!file) throw new BadRequestException('กรุณาแนบไฟล์ในช่อง file');
 
     const image = sniffImage(file.buffer);
-    const media = image ? null : sniffMedia(file.buffer);
-    const mimeType = image ?? media;
+    const font = image ? null : sniffFont(file.buffer);
+    const media = image || font ? null : sniffMedia(file.buffer);
+    const mimeType = image ?? font ?? media;
 
     if (!mimeType) {
-      throw new BadRequestException('รองรับเฉพาะรูป PNG, JPEG, WebP, GIF, SVG · วิดีโอ MP4, WebM · เสียง MP3, M4A, OGG, WAV');
+      throw new BadRequestException('รองรับเฉพาะรูป PNG, JPEG, WebP, GIF, SVG · วิดีโอ MP4, WebM · เสียง MP3, M4A, OGG, WAV · ฟอนต์ TTF, OTF, WOFF, WOFF2');
     }
 
     if (image && file.size > MAX_ASSET_BYTES) {
       throw new BadRequestException('ไฟล์รูปใหญ่เกิน 10 MB');
+    }
+
+    if (font && file.size > MAX_FONT_BYTES) {
+      throw new BadRequestException('ไฟล์ฟอนต์ใหญ่เกิน 5 MB');
     }
 
     if (media && file.size > MAX_MEDIA_BYTES) {
@@ -100,10 +106,11 @@ export class AssetsService {
       throw new ConflictException('พื้นที่เก็บไฟล์เต็มแล้ว ลบไฟล์ที่ไม่ใช้ออกจากถังขยะก่อน หรือขอให้ผู้ดูแลระบบเพิ่มพื้นที่');
     }
 
-    // แหล่งที่มาเก็บเป็นข้อความเท่านั้น — ไม่ดึง URL ฝั่งเซิร์ฟเวอร์เด็ดขาด
-    const source = resolveSource(origin.sourceUrl, origin.sourceSite);
+    // แหล่งที่มาเก็บเป็นข้อความเท่านั้น — ไม่ดึง URL ฝั่งเซิร์ฟเวอร์เด็ดขาด · ฟอนต์ไม่มีแหล่งที่มา
+    const source = font ? { sourceUrl: null, sourceSite: null } : resolveSource(origin.sourceUrl, origin.sourceSite);
     const id = randomUUID();
-    const storagePath = `${id}.${image ? IMAGE_EXTENSIONS[image] : MEDIA_EXTENSIONS[media!]}`;
+    const extension = image ? IMAGE_EXTENSIONS[image] : font ? FONT_EXTENSIONS[font] : MEDIA_EXTENSIONS[media!];
+    const storagePath = `${id}.${extension}`;
 
     await mkdir(this.root, { recursive: true });
     await writeFile(join(this.root, storagePath), file.buffer);
@@ -125,7 +132,8 @@ export class AssetsService {
   }
 
   /// เจ้าของเปิดไฟล์ได้เสมอ · คนอื่นเปิดได้เมื่อไฟล์นั้นอยู่ในงานของเจ้าของที่เปิดแชร์ด้วยลิงก์
-  /// (ไม่งั้นคนที่ได้ลิงก์จะเห็นงานแต่รูปหายหมด) · คืนที่อยู่ไฟล์ให้ controller ส่งเป็นช่วงไบต์ได้ (วิดีโอ/เสียง)
+  /// (ไม่งั้นคนที่ได้ลิงก์จะเห็นงานแต่รูปหายหมด) · ฟอนต์ที่อัปโหลดเองใช้กติกาเดียวกัน: งานอ้างฟอนต์ด้วย
+  /// `fontFamily: "asset:<uuid>"` จึงพบ id ของฟอนต์ในเอกสารของงานเหมือนรูป · คืนที่อยู่ไฟล์ให้ controller ส่งเป็นช่วงไบต์ได้ (วิดีโอ/เสียง)
   async content(coreUserId: string, id: string) {
     const row = await this.prisma.asset.findUnique({ where: { id } });
 

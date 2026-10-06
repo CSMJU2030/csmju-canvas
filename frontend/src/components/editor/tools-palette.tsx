@@ -1,11 +1,12 @@
 'use client';
 
-import { Equal, MousePointer2, PenLine, Pipette, Shapes, Signature, StickyNote, Type, X } from 'lucide-react';
+import { Equal, Images, MousePointer2, PenLine, Pipette, Shapes, Signature, StickyNote, Type, X } from 'lucide-react';
 import { useId, useState, type ReactNode } from 'react';
 import { FloatingPanel, useAnchoredMenu } from '@/components/csmju/floating';
 import { cx } from '@/components/csmju/primitives';
 import { documentColors } from '@/lib/editor/color';
 import { STICKY_COLORS, createShape, createSticky, createText } from '@/lib/editor/factory';
+import { useSourcesWindow } from '@/lib/editor/sources-window';
 import { useEditor, type DrawBrush } from '@/lib/editor/store';
 import type { BrushKind, ShapeKind } from '@/lib/editor/types';
 import { ColorPicker, RainbowSwatch, Swatch, hasEyeDropper, pickScreenColor } from './color-picker';
@@ -24,6 +25,7 @@ export function ToolsPalette({ onClose, onSignature }: { onClose: () => void; on
   const height = useEditor((s) => s.height);
   const page = { width, height };
   const state = useEditor.getState;
+  const sourcesOpen = useSourcesWindow((s) => s.open);
 
   const pick = (next: Sub) => {
     setSub(next);
@@ -77,6 +79,9 @@ export function ToolsPalette({ onClose, onSignature }: { onClose: () => void; on
             }}
           >
             <Signature aria-hidden className="size-6 text-ink" />
+          </ToolButton>
+          <ToolButton label="แหล่งภาพ (หน้าต่างลอย)" active={sourcesOpen} onClick={() => useSourcesWindow.getState().toggle()}>
+            <Images aria-hidden className="size-6 text-type-teal" />
           </ToolButton>
         </div>
       </div>

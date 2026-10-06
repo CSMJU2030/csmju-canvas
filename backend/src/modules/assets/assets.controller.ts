@@ -34,7 +34,7 @@ export class AssetsController {
   constructor(private readonly assets: AssetsService) {}
 
   @Get()
-  @ApiOperation({ summary: 'ไฟล์ที่ฉันอัปโหลด (หรือไฟล์ในถังขยะ) · กรองชนิดด้วย kind · ภาพที่นำเข้าด้วย imported/source' })
+  @ApiOperation({ summary: 'ไฟล์ที่ฉันอัปโหลด (หรือไฟล์ในถังขยะ) · กรองชนิดด้วย kind (image, video, audio, font) · ภาพที่นำเข้าด้วย imported/source' })
   @ApiEnvelopeList(AssetDto)
   list(@CurrentUser() user: CoreHubUser, @Query() query: ListAssetsQuery) {
     return this.assets.list(user.coreUserId, query);
@@ -48,7 +48,7 @@ export class AssetsController {
   )
   @ApiConsumes('multipart/form-data')
   @ApiBody({ type: UploadAssetDto })
-  @ApiOperation({ summary: 'อัปโหลดรูป วิดีโอ หรือเสียงไว้ใช้ในงาน · แนบแหล่งที่มาได้ (sourceUrl, sourceSite) เมื่อนำเข้าจากเว็บอื่น' })
+  @ApiOperation({ summary: 'อัปโหลดรูป วิดีโอ เสียง หรือฟอนต์ของฉันไว้ใช้ในงาน · แนบแหล่งที่มาได้ (sourceUrl, sourceSite) เมื่อนำเข้าจากเว็บอื่น' })
   @ApiEnvelope(AssetDto, { status: 201 })
   upload(
     @CurrentUser() user: CoreHubUser,
@@ -61,7 +61,7 @@ export class AssetsController {
   @Get(':id/content')
   @ApiProduces(...ASSET_TYPES)
   @ApiOperation({
-    summary: 'ไฟล์รูป/วิดีโอ/เสียง (เจ้าของ หรือผู้ได้ลิงก์ของงานที่ใช้ไฟล์นี้ · ไม่ห่อ envelope เพราะเป็นไบต์ · รองรับหัว Range)',
+    summary: 'ไฟล์รูป/วิดีโอ/เสียง/ฟอนต์ (เจ้าของ หรือผู้ได้ลิงก์ของงานที่ใช้ไฟล์นี้ · ไม่ห่อ envelope เพราะเป็นไบต์ · รองรับหัว Range)',
   })
   async content(
     @CurrentUser() user: CoreHubUser,

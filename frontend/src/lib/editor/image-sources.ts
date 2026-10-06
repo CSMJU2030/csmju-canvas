@@ -26,9 +26,31 @@ export interface ImageSourceSite {
 
 const enc = encodeURIComponent;
 
+/// หัวข้อกลุ่มแหล่งหาไอเดีย
+export const INSPIRATION_GROUP_LABEL = 'หาไอเดีย — ตรวจสิทธิ์ก่อนใช้';
+
 export const INSPIRATION_WARNING = 'ภาพส่วนใหญ่มีเจ้าของ ใช้ในงานได้เมื่อได้รับอนุญาตจากเจ้าของเท่านั้น — เหมาะใช้หาไอเดีย';
 
 export const IMAGE_SOURCES: ImageSourceSite[] = [
+  // Pinterest ขึ้นก่อน (PL ใช้บ่อยที่สุด) แต่ยังอยู่ในกลุ่ม "หาไอเดีย — ตรวจสิทธิ์ก่อนใช้" พร้อมคำเตือนสิทธิ์
+  {
+    key: 'pinterest',
+    name: 'Pinterest',
+    group: 'inspiration',
+    description: 'รวมไอเดียการจัดหน้า สี และสไตล์',
+    licence: INSPIRATION_WARNING,
+    home: 'https://www.pinterest.com/',
+    search: (q) => `https://www.pinterest.com/search/pins/?q=${enc(q)}`,
+  },
+  {
+    key: 'google',
+    name: 'Google รูปภาพ',
+    group: 'inspiration',
+    description: 'ค้นภาพจากทั่วทั้งเว็บ',
+    licence: INSPIRATION_WARNING,
+    home: 'https://images.google.com/',
+    search: (q) => `https://www.google.com/search?tbm=isch&q=${enc(q)}`,
+  },
   {
     key: 'unsplash',
     name: 'Unsplash',
@@ -83,24 +105,6 @@ export const IMAGE_SOURCES: ImageSourceSite[] = [
     home: 'https://images.nasa.gov/',
     search: (q) => `https://images.nasa.gov/search?q=${enc(q)}&media=image`,
   },
-  {
-    key: 'pinterest',
-    name: 'Pinterest',
-    group: 'inspiration',
-    description: 'รวมไอเดียการจัดหน้า สี และสไตล์',
-    licence: INSPIRATION_WARNING,
-    home: 'https://www.pinterest.com/',
-    search: (q) => `https://www.pinterest.com/search/pins/?q=${enc(q)}`,
-  },
-  {
-    key: 'google',
-    name: 'Google รูปภาพ',
-    group: 'inspiration',
-    description: 'ค้นภาพจากทั่วทั้งเว็บ',
-    licence: INSPIRATION_WARNING,
-    home: 'https://images.google.com/',
-    search: (q) => `https://www.google.com/search?tbm=isch&q=${enc(q)}`,
-  },
 ];
 
 export const SITE_LABELS: Record<SourceSite, string> = {
@@ -116,7 +120,7 @@ export const SITE_LABELS: Record<SourceSite, string> = {
 };
 
 /// ลำดับกลุ่มในหมวด "ภาพที่นำเข้า"
-export const IMPORTED_GROUPS: SourceSite[] = ['unsplash', 'pexels', 'pixabay', 'openverse', 'wikimedia', 'nasa', 'pinterest', 'google', 'other'];
+export const IMPORTED_GROUPS: SourceSite[] = ['pinterest', 'google', 'unsplash', 'pexels', 'pixabay', 'openverse', 'wikimedia', 'nasa', 'other'];
 
 /// แหล่งที่ภาพส่วนใหญ่มีเจ้าของ — แสดงป้าย "ตรวจสิทธิ์ก่อนใช้"
 export function needsPermission(site: string | null | undefined): boolean {

@@ -29,6 +29,7 @@ import { useAutosave } from './use-autosave';
 import { usePasteAndDropImport } from './file-import';
 import { ImportHintBar } from './image-sources-panel';
 import { useShortcuts } from './use-shortcuts';
+import { SourcesLayer } from './sources-window';
 
 export function EditorScreen({ id }: { id: string }) {
   // โหลดงานเข้า store ตอนได้ข้อมูล (ครั้งเดียวต่อการเปิดหน้า) — ไม่ refetch ระหว่างแก้
@@ -198,6 +199,7 @@ function EditorLayout({ needsThumbnail }: { needsThumbnail: boolean }) {
       <EditorDialogs />
       <VersionHistory />
       <ContextMenu />
+      <SourcesLayer />
       <Presenter />
     </div>
   );

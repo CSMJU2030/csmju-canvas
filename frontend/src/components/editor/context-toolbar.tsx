@@ -9,7 +9,7 @@ import { useState } from 'react';
 import { cx } from '@/components/csmju/primitives';
 import { clearCell, detachCell, isFrameLike, patchCellImage, type FrameLike } from '@/lib/editor/frame-actions';
 import { FRAME_SHAPES, GRID_LAYOUTS, cellImages, gridCellRects, maxGridGap, relayoutCells } from '@/lib/editor/frames';
-import { FONT_FAMILIES, cssFamily } from '@/lib/editor/fonts';
+import { cssFamily, shortFontLabel, useUserFonts } from '@/lib/editor/fonts';
 import { formatDuration, trimRange } from '@/lib/editor/media';
 import { SITE_LABELS, canCredit } from '@/lib/editor/image-sources';
 import { isGradient } from '@/lib/editor/paint';
@@ -291,7 +291,7 @@ function TextTools({ els }: { els: TextElement[] }) {
   const el = els[0];
   const ids = els.map((e) => e.id);
   const panel = useEditorUi((s) => s.panel);
-  const font = FONT_FAMILIES.find((f) => f.id === el.fontFamily);
+  const fontNames = useUserFonts((s) => s.names);
   const AlignIcon = { left: AlignLeft, center: AlignCenter, right: AlignRight, justify: AlignJustify }[el.align];
   const list = el.list ?? 'none';
   const setSize = (size: number) => patch(ids, (e) => ({ fontSize: Math.max(4, Math.min(800, Math.round(size * ((e as TextElement).fontSize / el.fontSize) * 10) / 10)) }));
@@ -301,7 +301,7 @@ function TextTools({ els }: { els: TextElement[] }) {
     <>
       <ToolbarButton label="ฟอนต์" wide active={panel === 'font'} onClick={() => useEditorUi.getState().togglePanel('font')}>
         <span className="max-w-32 truncate text-csmju-caption" style={{ fontFamily: cssFamily(el.fontFamily) }}>
-          {font?.label.replace(/\s*\(.*\)$/, '') ?? el.fontFamily}
+          {shortFontLabel(el.fontFamily, fontNames)}
         </span>
       </ToolbarButton>
       <div className="flex shrink-0 items-center rounded-lg border border-line-strong">

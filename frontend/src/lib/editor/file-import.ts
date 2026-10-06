@@ -11,6 +11,8 @@ export type ImportPlan =
   | { kind: 'upload'; media: MediaKind }
   /// รูปที่เบราว์เซอร์เปิดได้แต่ต้องแปลงเป็น PNG ก่อนส่งขึ้นระบบ
   | { kind: 'convert-image' }
+  /// ไฟล์ฟอนต์ → อัปโหลดเป็น "ฟอนต์ของฉัน" (ใช้กับข้อความได้ทันที)
+  | { kind: 'font' }
   | { kind: 'text' }
   | { kind: 'table'; delimiter: ',' | '\t' }
   | { kind: 'unsupported'; reason: string };
@@ -19,6 +21,16 @@ const EXT = (name: string) => name.toLowerCase().match(/\.([a-z0-9]+)$/)?.[1] ??
 
 const CONVERTIBLE_IMAGE = new Set(['bmp', 'avif', 'ico', 'heic', 'heif', 'jfif', 'pjpeg', 'apng']);
 const CONVERTIBLE_MIME = new Set(['image/bmp', 'image/x-ms-bmp', 'image/avif', 'image/x-icon', 'image/vnd.microsoft.icon', 'image/heic', 'image/heif', 'image/apng']);
+
+/// ฟอนต์ที่อัปโหลดเองได้ (ตรวจซ้ำจากไบต์หัวไฟล์ที่หลังบ้าน) · ไม่เกิน 5 MB ตรงกับหลังบ้าน
+export const FONT_EXTENSIONS = ['ttf', 'otf', 'woff', 'woff2'];
+export const FONT_ACCEPT = '.ttf,.otf,.woff,.woff2,font/ttf,font/otf,font/woff,font/woff2';
+export const MAX_FONT_BYTES = 5 * 1024 * 1024;
+const FONT_MIME = /^(font\/(ttf|otf|sfnt|woff2?)|application\/(x-font-(ttf|otf|woff)|font-(woff2?|sfnt)|vnd\.ms-opentype))$/;
+
+export function isFontFile(file: { name: string; type: string }): boolean {
+  return FONT_EXTENSIONS.includes(EXT(file.name)) || FONT_MIME.test(file.type.toLowerCase());
+}
 
 /// ไฟล์ข้อความยาวเกินนี้ไม่ใส่เป็นกล่องข้อความ (หน้ากระดาษอ่านไม่ได้อยู่ดี)
 export const MAX_TEXT_CHARS = 5000;
@@ -42,6 +54,8 @@ const HINTS: Record<string, string> = {
   zip: 'ไฟล์ ZIP ต้องแตกไฟล์ก่อน แล้วลากไฟล์ข้างในมาวาง',
   rar: 'ไฟล์บีบอัดต้องแตกไฟล์ก่อน แล้วลากไฟล์ข้างในมาวาง',
   exe: 'ไฟล์โปรแกรมใส่ในดีไซน์ไม่ได้',
+  ttc: 'ฟอนต์แบบชุด (TTC) ใช้ไม่ได้ — แยกเป็นไฟล์ TTF หรือ OTF ทีละแบบก่อน',
+  fon: 'ฟอนต์แบบเก่าของ Windows (FON) ใช้ไม่ได้ — ใช้ไฟล์ TTF, OTF, WOFF หรือ WOFF2',
 };
 
 export function planImport(file: { name: string; type: string; size: number }): ImportPlan {
@@ -59,6 +73,10 @@ export function planImport(file: { name: string; type: string; size: number }): 
     return { kind: 'upload', media };
   }
 
+  if (isFontFile(file)) {
+    return file.size > MAX_FONT_BYTES ? { kind: 'unsupported', reason: `“${file.name}” ใหญ่เกิน 5 MB (ฟอนต์)` } : { kind: 'font' };
+  }
+
   if (CONVERTIBLE_MIME.has(mime) || CONVERTIBLE_IMAGE.has(ext)) {
     return file.size > MAX_BYTES.image * 3 ? { kind: 'unsupported', reason: `“${file.name}” ใหญ่เกินไป` } : { kind: 'convert-image' };
   }
@@ -67,7 +85,7 @@ export function planImport(file: { name: string; type: string; size: number }): 
   if (ext === 'tsv' || mime === 'text/tab-separated-values') return file.size > MAX_TEXT_BYTES ? tooBig(file.name) : { kind: 'table', delimiter: '\t' };
   if (ext === 'txt' || ext === 'md' || mime === 'text/plain' || mime === 'text/markdown') return file.size > MAX_TEXT_BYTES ? tooBig(file.name) : { kind: 'text' };
 
-  return { kind: 'unsupported', reason: HINTS[ext] ?? `ไฟล์ “${file.name}” ใส่ในดีไซน์ไม่ได้ · รองรับรูป วิดีโอ เสียง ข้อความ (.txt) และตาราง (.csv)` };
+  return { kind: 'unsupported', reason: HINTS[ext] ?? `ไฟล์ “${file.name}” ใส่ในดีไซน์ไม่ได้ · รองรับรูป วิดีโอ เสียง ฟอนต์ ข้อความ (.txt) และตาราง (.csv)` };
 }
 
 function tooBig(name: string): ImportPlan {

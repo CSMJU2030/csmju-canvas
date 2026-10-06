@@ -33,7 +33,7 @@ CMS ของคณะดึงงานได้ที่ `GET /api/v1/designs/
 
 ## เฉพาะแต่ละชนิด
 
-- **text:** `text` (ขึ้นบรรทัดด้วย `\n` และตัดคำตาม `width`), `fontFamily` (ไฟล์อยู่ที่ `/fonts/` ของ frontend), `fontSize`, `fontWeight` (400/700), `italic`, `underline`, `align`, `lineHeight` (เท่าของขนาดตัวอักษร), `letterSpacing` (px), `color`
+- **text:** `text` (ขึ้นบรรทัดด้วย `\n` และตัดคำตาม `width`), `fontFamily` (ชื่อฟอนต์ในคลัง ไฟล์อยู่ที่ `/fonts/` ของ frontend · หรือ `"asset:<uuid>"` = ฟอนต์ที่ผู้ใช้อัปโหลดเอง ดู “ฟอนต์ที่อัปโหลดเอง” ด้านล่าง), `fontSize`, `fontWeight` (400/700), `italic`, `underline`, `align`, `lineHeight` (เท่าของขนาดตัวอักษร), `letterSpacing` (px), `color`
   - ค่าเสริม: `align` เพิ่ม `justify` · `strike` · `uppercase` (แสดงเป็นตัวพิมพ์ใหญ่) · `list` (`none`/`bullet`/`number` ใส่ "• " หรือ "1. " หน้าทุกย่อหน้า) · `curve` (−100..100 ข้อความโค้งบรรทัดเดียว)
   - `effect`: `{ kind, offset, direction, blur, intensity, color }` ค่า 0–100 (direction เป็นองศา) · kind = `shadow` `lift` `hollow` `splice` `echo` `glitch` `neon` `background` `outline` · สูตรอ้างอิงใน render.ts
 - **shape:** `shape` (`rect` · `ellipse` · `triangle` · `triangle-down` · `diamond` · `pentagon` · `hexagon` · `octagon` · `star` · `line` · `arrow` · `curve` · `elbow`), `fill` (สี/กราเดียนต์ CSS · null = ไม่มีสีพื้น), `stroke`, `strokeWidth`, `cornerRadius`, `strokeStyle` (`solid` `dash` `long-dash` `dot`)
@@ -68,6 +68,15 @@ CMS ของคณะดึงงานได้ที่ `GET /api/v1/designs/
   - ค่าเสริม: `name` · `flipX`/`flipY` (พลิกรูปในกรอบ) · `adjust` · `filter` + `filterIntensity` · `colorEdits` · `erase` (ความหมายเดียวกับของ **image**)
   - วางรูป: `scale = max(พื้นที่กว้าง / naturalWidth, พื้นที่สูง / naturalHeight) × zoom` · กล่องรูป `x = พื้นที่.x + (พื้นที่กว้าง − naturalWidth × scale) × offsetX` (แกน y เช่นเดียวกัน) แล้วตัดตามหน้ากาก (`coverRect`)
   - กรอบ/ช่องที่ว่าง editor วาดเป็นพื้นเทาพร้อมไอคอนรูปภาพและคำว่า "ลากรูปมาวางที่นี่" (รวมถึงตอนพรีเซนต์และดาวน์โหลด) · CMS จะไม่วาดช่องว่างก็ได้
+
+### ฟอนต์ที่อัปโหลดเอง (`fontFamily: "asset:<uuid>"`)
+
+- ใช้ได้กับ `fontFamily` ของ text · table · chart · `<uuid>` คือ id ของ asset ชนิด `font/ttf` · `font/otf` · `font/woff` · `font/woff2` (อัปโหลดผ่าน `POST /api/v1/assets` ไม่เกิน 5 MB นับรวมในพื้นที่ของผู้ใช้ · รายการ `GET /api/v1/assets?kind=font`)
+- ตัวไฟล์อยู่ที่ `GET /api/v1/assets/<uuid>/content` (ต้องมี session) · เจ้าของโหลดได้เสมอ · คนอื่นโหลดได้เมื่องานที่อ้างฟอนต์นี้เปิดแชร์ด้วยลิงก์และยังไม่อยู่ในถังขยะ (กติกาเดียวกับรูปในงาน)
+- ตัวแสดงผลติดตั้งเป็น `FontFace` ชื่อ family `CSC asset-<uuid>` น้ำหนัก 400 ไฟล์เดียว (ตัวหนาให้เบราว์เซอร์ทำเทียม) · โหลดไม่ได้ (ถูกลบ/ไม่มีสิทธิ์) ให้วาดด้วยฟอนต์สำรอง Noto Sans Thai
+- ส่งออก SVG: ฝังไฟล์ฟอนต์เป็น `@font-face` (data URL) ในไฟล์ · โหลดไม่ได้ก็ข้ามไปใช้ฟอนต์สำรอง · PNG/JPEG/PDF วาดจากผืนผ้าใบที่โหลดฟอนต์แล้ว
+- CMS ที่ render สด: ใช้ฟอนต์ได้เมื่อผู้ชมมีสิทธิ์เปิดไฟล์ตามกติกาข้างบน ไม่งั้นให้ใช้ฟอนต์สำรอง
+
 
 - **video:** วิดีโอที่ผู้ใช้อัปโหลดเอง · `src` (`/api/v1/assets/{id}/content` ต้องมี session ของเจ้าของ หรือของผู้ได้ลิงก์งานที่แชร์ · รองรับหัว `Range` สำหรับเลื่อนเล่น), `assetId`, `duration` (วินาทีของไฟล์), `naturalWidth`/`naturalHeight` (ขนาดภาพของไฟล์), `cornerRadius`, `muted` (ปิดเสียงคลิป), `loop` (เล่นวนเมื่อถึงจุดจบ), `trimStart` / `trimEnd` (ช่วงที่เล่นเป็นวินาทีของไฟล์ · `trimEnd: null` = ถึงท้ายไฟล์)
   - ภาพครอปแบบ cover ให้เต็มกล่อง (ไม่บิด) · ไฟล์ MP4 หรือ WebM
