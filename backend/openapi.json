@@ -2069,6 +2069,253 @@
         ]
       }
     },
+    "/api/v1/brand-kits": {
+      "get": {
+        "operationId": "BrandKitsController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "example": 2,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "example": 50,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "สำเร็จ พร้อมข้อมูลแบ่งหน้า",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/BrandKitDto"
+                      }
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PaginationMeta"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "ชุดแบรนด์ของฉัน",
+        "tags": [
+          "brand-kits"
+        ]
+      },
+      "post": {
+        "operationId": "BrandKitsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrandKitBodyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/BrandKitDto"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "สร้างชุดแบรนด์ (ไม่เกิน 10 ชุด)",
+        "tags": [
+          "brand-kits"
+        ]
+      }
+    },
+    "/api/v1/brand-kits/{id}": {
+      "get": {
+        "operationId": "BrandKitsController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/BrandKitDto"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "ชุดแบรนด์หนึ่งชุด",
+        "tags": [
+          "brand-kits"
+        ]
+      },
+      "patch": {
+        "operationId": "BrandKitsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateBrandKitDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/BrandKitDto"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "แก้ชุดแบรนด์",
+        "tags": [
+          "brand-kits"
+        ]
+      },
+      "delete": {
+        "operationId": "BrandKitsController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "สำเร็จ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/DeletedDto"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "ลบชุดแบรนด์ (โลโก้ในคลังยังอยู่)",
+        "tags": [
+          "brand-kits"
+        ]
+      }
+    },
     "/api/v1/asset-folders": {
       "get": {
         "operationId": "AssetFoldersController_list",
@@ -5128,6 +5375,154 @@
         "required": [
           "name"
         ]
+      },
+      "BrandLogoDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "fileName": {
+            "type": "string"
+          },
+          "mimeType": {
+            "type": "string"
+          },
+          "contentUrl": {
+            "type": "string",
+            "example": "/api/v1/assets/00000000-0000-4000-8000-000000000000/content"
+          }
+        },
+        "required": [
+          "id",
+          "fileName",
+          "mimeType",
+          "contentUrl"
+        ]
+      },
+      "BrandKitDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "colors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "headingFont": {
+            "type": "string",
+            "nullable": true
+          },
+          "bodyFont": {
+            "type": "string",
+            "nullable": true
+          },
+          "logos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BrandLogoDto"
+            }
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "colors",
+          "headingFont",
+          "bodyFont",
+          "logos",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "BrandKitBodyDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "สาขาวิทยาการคอมพิวเตอร์"
+          },
+          "colors": {
+            "example": [
+              "rgb(0 76 153)",
+              "rgb(255 189 89)"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "headingFont": {
+            "type": "object",
+            "nullable": true,
+            "example": "Sarabun"
+          },
+          "bodyFont": {
+            "type": "object",
+            "nullable": true,
+            "example": "Sarabun"
+          },
+          "logoAssetIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "UpdateBrandKitDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "สาขาวิทยาการคอมพิวเตอร์"
+          },
+          "colors": {
+            "example": [
+              "rgb(0 76 153)",
+              "rgb(255 189 89)"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "headingFont": {
+            "type": "object",
+            "nullable": true,
+            "example": "Sarabun"
+          },
+          "bodyFont": {
+            "type": "object",
+            "nullable": true,
+            "example": "Sarabun"
+          },
+          "logoAssetIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        }
       },
       "AssetFolderDto": {
         "type": "object",

@@ -44,6 +44,7 @@ describe('CS Canvas API (e2e)', () => {
     await prisma.template.deleteMany({ where: { createdByCoreUserId: owners } });
     await prisma.asset.deleteMany({ where: { coreUserId: owners } });
     await prisma.folder.deleteMany({ where: { coreUserId: owners } });
+    await prisma.brandKit.deleteMany({ where: { coreUserId: owners } });
     await prisma.assetFolder.deleteMany({ where: { coreUserId: owners } });
     await prisma.designVisit.deleteMany({ where: { coreUserId: owners } });
     await prisma.notification.deleteMany({ where: { coreUserId: owners } });
@@ -489,6 +490,58 @@ describe('CS Canvas API (e2e)', () => {
     const after = await http().get('/api/v1/assets?q=in-folder').set('Authorization', bearer(student, 'student')).expect(200);
 
     expect(after.body.data[0]).toMatchObject({ id: assetId, folderId: null });
+  });
+
+  it('ชุดแบรนด์: สร้าง แก้ ลบ · สีผิดรูปแบบ 400 · โลโก้ต้องเป็นรูปของตัวเอง · คนอื่นเข้าไม่ได้ · ไม่เกิน 10 ชุด', async () => {
+    const logo = await http()
+      .post('/api/v1/assets')
+      .set('Authorization', bearer(student, 'student'))
+      .attach('file', PNG, { filename: 'logo.png', contentType: 'image/png' })
+      .expect(201);
+    const logoId = logo.body.data.id as string;
+    const created = await http()
+      .post('/api/v1/brand-kits')
+      .set('Authorization', bearer(student, 'student'))
+      .send({ name: 'ชมรมคอม', colors: ['rgb(0 76 153)', 'rgb(0 76 153)', 'hsl(40 100% 67%)'], headingFont: 'Sarabun', logoAssetIds: [logoId] })
+      .expect(201);
+    const id = created.body.data.id as string;
+
+    expect(created.body.data).toMatchObject({ name: 'ชมรมคอม', colors: ['rgb(0 76 153)', 'hsl(40 100% 67%)'], headingFont: 'Sarabun', bodyFont: null });
+    expect(created.body.data.logos).toEqual([{ id: logoId, fileName: 'logo.png', mimeType: 'image/png', contentUrl: `/api/v1/assets/${logoId}/content` }]);
+
+    await http().post('/api/v1/brand-kits').set('Authorization', bearer(student, 'student')).send({ name: 'สีผิด', colors: ['url(javascript:1)'] }).expect(400);
+
+    // โลโก้ของคนอื่น = 400
+    const foreignLogo = await http()
+      .post('/api/v1/assets')
+      .set('Authorization', bearer(other, 'student'))
+      .attach('file', PNG, { filename: 'other.png', contentType: 'image/png' })
+      .expect(201);
+
+    await http().patch(`/api/v1/brand-kits/${id}`).set('Authorization', bearer(student, 'student')).send({ logoAssetIds: [foreignLogo.body.data.id] }).expect(400);
+
+    const updated = await http().patch(`/api/v1/brand-kits/${id}`).set('Authorization', bearer(student, 'student')).send({ bodyFont: 'Kanit', colors: [] }).expect(200);
+
+    expect(updated.body.data).toMatchObject({ bodyFont: 'Kanit', colors: [], headingFont: 'Sarabun' });
+
+    await http().get(`/api/v1/brand-kits/${id}`).set('Authorization', bearer(other, 'student')).expect(404);
+    await http().delete(`/api/v1/brand-kits/${id}`).set('Authorization', bearer(other, 'student')).expect(404);
+
+    const list = await http().get('/api/v1/brand-kits').set('Authorization', bearer(student, 'student')).expect(200);
+
+    expect(list.body.meta).toMatchObject({ total: 1, page: 1 });
+
+    for (let i = 1; i < 10; i++) {
+      await http().post('/api/v1/brand-kits').set('Authorization', bearer(student, 'student')).send({ name: `ชุด ${i}` }).expect(201);
+    }
+
+    const full = await http().post('/api/v1/brand-kits').set('Authorization', bearer(student, 'student')).send({ name: 'เกิน' }).expect(409);
+
+    expect(full.body.error.code).toBe('CONFLICT');
+
+    const removed = await http().delete(`/api/v1/brand-kits/${id}`).set('Authorization', bearer(student, 'student')).expect(200);
+
+    expect(removed.body.data).toEqual({ id, deleted: true });
   });
 
   it('แชร์กับคุณ: ขึ้นหลังเปิดลิงก์แชร์ · หายเมื่อเจ้าของปิดลิงก์', async () => {

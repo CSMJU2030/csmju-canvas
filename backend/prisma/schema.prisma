@@ -1,6 +1,6 @@
 // CS Canvas (csmju-canvas) — ฐานข้อมูลของระบบย่อยนี้เท่านั้น (ARC-01)
 //
-// กฎที่ schema นี้ยึด (csmju2030-standards 1.7.1):
+// กฎที่ schema นี้ยึด (csmju2030-standards 1.8.2):
 //   1. ไม่มีตาราง users — อ้างผู้ใช้ด้วย `coreUserId` (ค่า `sub` จาก token) เท่านั้น (DD-01)
 //   2. ไม่เก็บ core role อีเมล หรือชื่อจริง — อ่านจาก token ที่ตรวจแล้วทุก request
 //      (audit_logs เก็บ role ของผู้กระทำ ณ เวลาที่เกิดเหตุ แบบเดียวกับ csmju-nexus — ไม่ใช้ตัดสินสิทธิ์)
@@ -399,4 +399,22 @@ model SubsystemMember {
 
   @@index([lastSeenAt])
   @@map("subsystem_members")
+}
+
+/// ชุดแบรนด์ของผู้ใช้ (สี ฟอนต์ โลโก้) — แผง "แบรนด์" ในหน้าแก้ไข · คนละไม่เกิน 10 ชุด
+model BrandKit {
+  id           String   @id @default(uuid()) @db.Uuid
+  coreUserId   String   @map("core_user_id")
+  name         String   @db.VarChar(80)
+  /// สีแบรนด์ (ข้อความสี CSS) ไม่เกิน 24 สี เรียงตามที่ผู้ใช้จัด
+  colors       String[] @default([])
+  headingFont  String?  @map("heading_font") @db.VarChar(120)
+  bodyFont     String?  @map("body_font") @db.VarChar(120)
+  /// asset ของเจ้าของที่ใช้เป็นโลโก้ (ไม่เกิน 12) · asset ที่ถูกลบภายหลังไม่แสดง
+  logoAssetIds String[] @default([]) @map("logo_asset_ids") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([coreUserId])
+  @@map("brand_kits")
 }
