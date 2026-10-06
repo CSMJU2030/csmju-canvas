@@ -27,8 +27,16 @@ export interface BaseElement {
   groupId: string | null;
   /// เงา (แผงเอฟเฟกต์) · ไม่มี/null = ไม่มีเงา
   shadow?: Shadow | null;
-  /// แอนิเมชันตอนพรีเซนต์ (แผงแอนิเมต) · ไม่มี/null = ไม่เคลื่อนไหว
+  /// แอนิเมชันตอนเข้า (แผงแอนิเมต) · ไม่มี/null = ไม่เคลื่อนไหว
   animation?: AnimationKind | null;
+  /// แอนิเมชันเน้นที่เล่นวนหลังเข้าจนกว่าจะออกจากหน้า
+  animationLoop?: EmphasisKind | null;
+  /// แอนิเมชันตอนออก (ก่อนเปลี่ยนหน้า)
+  animationExit?: ExitKind | null;
+  /// ความเร็วของแอนิเมชันทุกชนิดของชิ้นนี้ (0.25–4 · ไม่มี = 1)
+  animationSpeed?: number;
+  /// เส้นทางเคลื่อนที่หลังแอนิเมชันเข้าจบ · ไม่มี/null = อยู่กับที่
+  motionPath?: MotionPath | null;
   /// ลิงก์เมื่อกดในโหมดพรีเซนต์/เว็บไซต์
   link?: string | null;
   /// โหมดผสมสีกับชิ้นที่อยู่ข้างล่าง (ชื่อเดียวกับ CSS `mix-blend-mode`) · ไม่มี/null/`normal` = ทับปกติ
@@ -60,7 +68,47 @@ export interface Shadow {
   color: string;
 }
 
-export type AnimationKind = 'rise' | 'pan' | 'fade' | 'pop' | 'wipe' | 'blur' | 'drift' | 'tumble' | 'breathe' | 'bounce';
+export type AnimationKind =
+  | 'rise'
+  | 'pan'
+  | 'fade'
+  | 'pop'
+  | 'wipe'
+  | 'blur'
+  | 'drift'
+  | 'tumble'
+  | 'breathe'
+  | 'bounce'
+  | 'zoom'
+  | 'drop'
+  | 'slide-left'
+  | 'flip'
+  | 'spin'
+  | 'stomp'
+  | 'typewriter'
+  | 'flicker';
+
+export type EmphasisKind = 'pulse' | 'wiggle' | 'rotate' | 'float' | 'blink' | 'shake' | 'heartbeat' | 'swing';
+
+export type ExitKind = 'fade' | 'sink' | 'rise' | 'shrink' | 'wipe' | 'blur' | 'spin' | 'slide-right';
+
+/// เส้นทางเคลื่อนที่: จุดเป็นระยะเลื่อนจากตำแหน่งเดิมของชิ้นงาน [dx0, dy0, dx1, dy1, …] (จุดแรก = 0,0)
+export interface MotionPath {
+  points: number[];
+  /// เวลาเดินทางหนึ่งรอบ (มิลลิวินาที ก่อนคูณความเร็ว)
+  duration: number;
+  /// วนซ้ำไป-กลับตลอดเวลาที่อยู่ในหน้า · false = ไปแล้วหยุดที่ปลายทาง
+  loop: boolean;
+}
+
+export type TransitionKind = 'fade' | 'slide' | 'push' | 'wipe' | 'zoom' | 'circle' | 'flip' | 'blinds';
+
+/// การเปลี่ยนหน้าเข้าสู่หน้านี้ (พรีเซนต์ วิดีโอ GIF)
+export interface PageTransition {
+  kind: TransitionKind;
+  /// มิลลิวินาที
+  duration: number;
+}
 
 export type TextAlign = 'left' | 'center' | 'right' | 'justify';
 
@@ -257,6 +305,8 @@ export interface ImageElement extends BaseElement {
   type: 'image';
   /// asset ของผู้ใช้ (null = รูปที่ฝังเป็น data URL)
   assetId: string | null;
+  /// นำเข้าจากไฟล์ GIF — เล่นเป็นภาพเคลื่อนไหว (ถ้าใส่ฟิลเตอร์/ลบพื้นหลัง/สไตล์เลเยอร์ จะแสดงเฟรมแรกเป็นภาพนิ่ง)
+  animated?: boolean;
   src: string;
   cornerRadius: number;
   flipX: boolean;
@@ -491,6 +541,8 @@ export interface Page {
   notes?: string;
   /// เวลาแสดงตอนเล่นอัตโนมัติ (วินาที)
   duration?: number;
+  /// การเปลี่ยนหน้าเข้าสู่หน้านี้ · ไม่มี/null = ตัดทันที
+  transition?: PageTransition | null;
   /// ขนาดเฉพาะหน้านี้ (หน้าต่างขนาดในงานเดียวกัน) · ไม่มี = ใช้ขนาดของงาน
   width?: number;
   height?: number;

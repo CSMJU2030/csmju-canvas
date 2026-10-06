@@ -13,7 +13,7 @@ CMS ของคณะดึงงานได้ที่ `GET /api/v1/designs/
 ```
 
 - `background` เป็นสี CSS, กราเดียนต์ CSS (`linear-gradient(90deg, rgb(…) 0%, rgb(…) 100%)` หรือ `radial-gradient(circle, …)`) หรือ `null` = โปร่งใส
-- ค่าเสริมของหน้า (ไม่มี = ค่าเริ่มต้น): `name` ชื่อหน้า · `hidden` ซ่อนตอนพรีเซนต์/ดาวน์โหลด · `locked` · `notes` โน้ตผู้พรีเซนต์ · `duration` วินาทีตอนเล่นอัตโนมัติ (ค่าเริ่มต้น 5) · `width`/`height` ขนาดเฉพาะหน้านี้ (ไม่มี = ใช้ `data.width`/`data.height` ของงาน) · `audio` เสียงประกอบของหน้า (ดูหัวข้อ "เสียงประกอบของหน้า") · `boardX`/`boardY` ตำแหน่งของหน้าในมุมมอง "บอร์ด" ของ editor (พิกเซลของหน้า) **เป็นค่าจัดวางใน editor เท่านั้น ตัว render และ CMS ข้ามได้** · ลำดับหน้าที่ถูกต้องคือลำดับใน `pages` เสมอ ไม่ใช่ตำแหน่งบนบอร์ด
+- ค่าเสริมของหน้า (ไม่มี = ค่าเริ่มต้น): `name` ชื่อหน้า · `hidden` ซ่อนตอนพรีเซนต์/ดาวน์โหลด · `locked` · `notes` โน้ตผู้พรีเซนต์ · `duration` วินาทีตอนเล่นอัตโนมัติ (ค่าเริ่มต้น 5) · `transition` การเปลี่ยนหน้าเข้าสู่หน้านี้ `{ kind, duration }` (kind = `fade` `slide` `push` `wipe` `zoom` `circle` `flip` `blinds` · duration มิลลิวินาที 100–3000) · `width`/`height` ขนาดเฉพาะหน้านี้ (ไม่มี = ใช้ `data.width`/`data.height` ของงาน) · `audio` เสียงประกอบของหน้า (ดูหัวข้อ "เสียงประกอบของหน้า") · `boardX`/`boardY` ตำแหน่งของหน้าในมุมมอง "บอร์ด" ของ editor (พิกเซลของหน้า) **เป็นค่าจัดวางใน editor เท่านั้น ตัว render และ CMS ข้ามได้** · ลำดับหน้าที่ถูกต้องคือลำดับใน `pages` เสมอ ไม่ใช่ตำแหน่งบนบอร์ด
 - `elements` เรียงจากล่างขึ้นบน (ตัวสุดท้ายอยู่บนสุด)
 - ขนาดรวมไม่เกิน 4 MB · ไม่เกิน 100 หน้า · หน้าละไม่เกิน 1000 ชิ้น
 
@@ -28,7 +28,11 @@ CMS ของคณะดึงงานได้ที่ `GET /api/v1/designs/
 | `hidden`, `locked` | `hidden: true` ไม่ต้องวาด |
 | `groupId` | ชิ้นที่ค่าเดียวกันอยู่กลุ่มเดียวกัน (มีผลแค่ใน editor) |
 | `shadow` | ไม่มี/null = ไม่มีเงา · `{ x, y, blur, color }` (px) ใช้กับทุกชนิดยกเว้น text และ table |
-| `animation` | แอนิเมชันตอนเข้า: `rise` `pan` `fade` `pop` `wipe` `blur` `drift` `tumble` `breathe` `bounce` (CMS ไม่เล่นก็ได้) |
+| `animation` | แอนิเมชันตอนเข้า: `rise` `pan` `fade` `pop` `wipe` `blur` `drift` `tumble` `breathe` `bounce` `zoom` `drop` `slide-left` `flip` `spin` `stomp` `typewriter` `flicker` (CMS ไม่เล่นก็ได้) |
+| `animationLoop` | แอนิเมชันเน้นที่เล่นวนหลังเข้าจบ: `pulse` `wiggle` `rotate` `float` `blink` `shake` `heartbeat` `swing` |
+| `animationExit` | แอนิเมชันตอนออกก่อนเปลี่ยนหน้า: `fade` `sink` `rise` `shrink` `wipe` `blur` `spin` `slide-right` |
+| `animationSpeed` | ความเร็วของแอนิเมชันทุกชนิดของชิ้นนี้ 0.25–4 (ไม่มี = 1) |
+| `motionPath` | เส้นทางเคลื่อนที่หลังเข้าจบ `{ points, duration, loop }` · `points` = [dx0, dy0, dx1, dy1, …] ระยะเลื่อนจากตำแหน่งเดิม (px ของหน้า · จุดแรก 0,0) · `duration` มิลลิวินาทีต่อรอบ · `loop: true` เดินไป-กลับตลอด · ลำดับเวลาและสูตรทั้งหมดอยู่ใน `frontend/src/lib/editor/animation.ts` |
 | `link` | ลิงก์เมื่อกด (https:// หรือ mailto:) |
 | `blendMode` | โหมดผสมสีกับสิ่งที่อยู่ข้างล่าง · ไม่มี/null/`normal` = ทับปกติ · ค่า = `multiply` `screen` `overlay` `darken` `lighten` `color-dodge` `color-burn` `hard-light` `soft-light` `difference` `exclusion` `hue` `saturation` `color` `luminosity` (ชื่อเดียวกับ CSS `mix-blend-mode` · ใช้ได้ทุกชนิด) · ทั้งชิ้นผสมทีเดียว (CMS ใส่ `mix-blend-mode` ที่กล่องของชิ้นได้เลย) · ค่าที่ไม่รู้จักให้วาดปกติ |
 
@@ -40,7 +44,7 @@ CMS ของคณะดึงงานได้ที่ `GET /api/v1/designs/
 - **shape:** `shape` (`rect` · `ellipse` · `triangle` · `triangle-down` · `diamond` · `pentagon` · `hexagon` · `octagon` · `star` · `line` · `arrow` · `curve` · `elbow`), `fill` (สี/กราเดียนต์ CSS · null = ไม่มีสีพื้น), `stroke`, `strokeWidth`, `cornerRadius`, `strokeStyle` (`solid` `dash` `long-dash` `dot`)
   - `line`/`arrow` ลากจากกึ่งกลางขอบซ้ายไปกึ่งกลางขอบขวา · `curve` โค้งจากมุมล่างซ้ายแตะขอบบนไปมุมล่างขวา · `elbow` หักศอกจากมุมบนซ้ายผ่านกึ่งกลางลงไปมุมล่างขวา
   - รูปหลายเหลี่ยมมียอดแรกอยู่บนสุด (หกและแปดเหลี่ยมหมุนครึ่งช่องให้ขอบบนแบน)
-- **image:** `src` (รูปของผู้ใช้เป็น `/api/v1/assets/{id}/content` ซึ่งต้องมี session ของเจ้าของ), `assetId`, `cornerRadius`, `flipX`, `flipY`
+- **image:** `src` (รูปของผู้ใช้เป็น `/api/v1/assets/{id}/content` ซึ่งต้องมี session ของเจ้าของ), `assetId`, `cornerRadius`, `flipX`, `flipY` · `animated: true` = ไฟล์ GIF ที่เล่นเป็นภาพเคลื่อนไหว (CMS ใช้ `<img>` ก็เล่นเองได้)
   - ค่าเสริม: `crop` `{x, y, width, height}` สัดส่วน 0–1 ของรูปต้นฉบับ · `border` `{style, width, color}` · `adjust` ค่าปรับ −100..100 (temperature tint brightness contrast highlights shadows whites blacks vibrance saturation sharpness clarity · vignette/blur 0..100) · `filter` + `filterIntensity` ฟิลเตอร์สำเร็จรูปใน `lib/editor/image-filters.ts`
   - `colorEdits` `[{ color, hue, saturation, lightness }]` แก้ไขสีเฉพาะช่วงสี (ค่า −100..100 · hue หมุน ±60°) · `erase` `[{ points, size }]` รอยยางลบพิกเซล (`points` = `[x0, y0, …]` สัดส่วน 0–1 ของรูปเต็มก่อนครอป · `size` สัดส่วนของความกว้างรูป) — ตัว render ต้องทำให้ส่วนนั้นโปร่งใส
   - `levels` · `curves` · `effects` · `layerStyle` ระดับสี เส้นโค้ง เอฟเฟกต์ภาพ และสไตล์เลเยอร์ (ดูหัวข้อ "แต่งภาพ: ระดับสี เส้นโค้ง เอฟเฟกต์ และสไตล์เลเยอร์")

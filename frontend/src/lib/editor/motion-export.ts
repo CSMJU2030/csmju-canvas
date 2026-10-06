@@ -1,33 +1,19 @@
 /// ส่งออกงานแบบเคลื่อนไหว: GIF (เข้ารหัสเอง) และวิดีโอ (MediaRecorder ของเบราว์เซอร์) — ทำในเครื่องผู้ใช้ทั้งหมด
+///
+/// ลำดับเวลาในหน้าหนึ่ง: เปลี่ยนหน้า (ถ้าตั้งไว้) → แอนิเมชันเข้า → เส้นทาง/เน้นวน → แอนิเมชันออกก่อนหมดเวลาหน้า (animation.ts)
 
+import {
+  drawTransition, exitLength, finalMotion, pageLoops, pageMotion, settleLength, transitionLength, type MotionState,
+} from './animation';
 import { encodeGif, type GifFrame } from './gif';
+import { withGifClock } from './gif-player';
 import { PagePlayback, pageHasMedia } from './playback';
-import { drawPage, preloadPage, type VideoFrameSource } from './render';
+import { drawPage, pageGifSources, preloadPage, type VideoFrameSource } from './render';
 import { pageSizeOf, type CanvasElement, type Page } from './types';
+
 
 /// เวลาแสดงหน้าเริ่มต้น (วินาที) ตรงกับปุ่ม ⏱ บนแถบเครื่องมือหน้า
 export const DEFAULT_PAGE_SECONDS = 5;
-/// ชิ้นที่มีแอนิเมชันเล่นต่อกันทีละชิ้น (เหลื่อมกัน 0.15 วินาที ชิ้นละ 0.8 วินาที) แบบ Canva
-const STAGGER_MS = 150;
-const ENTRY_MS = 800;
-
-/// ความคืบหน้าของแอนิเมชันเข้าของแต่ละชิ้น ณ เวลา `elapsed` มิลลิวินาทีหลังเข้าหน้า
-export function entryProgress(page: Page, elapsed: number): (el: CanvasElement) => number | undefined {
-  const animated = page.elements.filter((el) => el.animation);
-
-  return (el) => {
-    const order = animated.indexOf(el);
-
-    return order < 0 ? undefined : Math.max(0, Math.min(1, (elapsed - order * STAGGER_MS) / ENTRY_MS));
-  };
-}
-
-/// เวลาที่แอนิเมชันเข้าของหน้านี้เล่นจบ (0 = ไม่มีแอนิเมชัน)
-export function entryLength(page: Page): number {
-  const count = page.elements.filter((el) => el.animation).length;
-
-  return count === 0 ? 0 : (count - 1) * STAGGER_MS + ENTRY_MS;
-}
 
 export const pageSeconds = (page: Page) => page.duration ?? DEFAULT_PAGE_SECONDS;
 
@@ -40,22 +26,60 @@ function frameCanvas(width: number, height: number) {
   return { canvas, ctx: canvas.getContext('2d', { willReadFrequently: true })! };
 }
 
-function paint(
+/// วาดหน้าเต็มกรอบผลลัพธ์ (คงสัดส่วน อยู่กึ่งกลาง) บนพื้นขาว
+function drawFitted(
   ctx: CanvasRenderingContext2D,
   page: Page,
-  size: { width: number; height: number },
-  scale: number,
+  base: { width: number; height: number },
+  motion: (el: CanvasElement) => MotionState | undefined,
+  videoFrame?: VideoFrameSource,
+) {
+  const { width, height } = ctx.canvas;
+  const size = pageSizeOf(page, base);
+  const fit = Math.min(width / size.width, height / size.height);
+
+  ctx.save();
+  ctx.fillStyle = 'rgb(255 255 255)';
+  ctx.fillRect(0, 0, width, height);
+  ctx.translate((width - size.width * fit) / 2, (height - size.height * fit) / 2);
+  ctx.scale(fit, fit);
+  drawPage(ctx, page, size, { motion, videoFrame });
+  ctx.restore();
+}
+
+/// วาดเฟรมของหน้า `index` ณ เวลา `elapsed` มิลลิวินาทีนับจากต้นช่วงเวลาของหน้านั้น
+export function paintTimeline(
+  ctx: CanvasRenderingContext2D,
+  pages: Page[],
+  index: number,
+  base: { width: number; height: number },
   elapsed: number,
   videoFrame?: VideoFrameSource,
 ) {
+  const page = pages[index];
+  const length = pageSeconds(page) * 1000;
+  const trans = index > 0 ? transitionLength(page) : 0;
+  const exitAt = Math.max(trans, length - exitLength(page)) - trans;
+  const t = elapsed - trans;
+
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.fillStyle = 'rgb(255 255 255)';
-  ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-  ctx.setTransform(scale, 0, 0, scale, 0, 0);
-  drawPage(ctx, page, size, { progress: entryProgress(page, elapsed), videoFrame });
+
+  // GIF ในหน้าเริ่มเฟรมแรกตอนเข้าหน้า
+  withGifClock(Math.max(0, elapsed), () => {
+    const next = () => drawFitted(ctx, page, base, pageMotion(page, Math.max(0, t), exitAt), videoFrame);
+
+    if (trans > 0 && elapsed < trans && page.transition) {
+      const prev = pages[index - 1];
+
+      drawTransition(ctx, page.transition, elapsed / trans, { width: ctx.canvas.width, height: ctx.canvas.height }, () => drawFitted(ctx, prev, base, finalMotion(prev)), next);
+    } else {
+      next();
+    }
+  });
 }
 
-/// GIF: เฟรมละ 1/10 วินาทีระหว่างแอนิเมชัน แล้วค้างภาพสุดท้ายตามเวลาของหน้า
+/// GIF: เฟรมละ 1/10 วินาทีช่วงที่มีการเคลื่อนไหว แล้วค้างภาพนิ่งยาวตามเวลาที่เหลือ
+/// (หน้าที่มีแอนิเมชันวนหรือ GIF เก็บเฟรมทั้งหน้า โดยจำกัดจำนวนเฟรมรวมตามหน่วยความจำ)
 export async function renderGif(pages: Page[], base: { width: number; height: number }, scale: number, onProgress?: (ratio: number) => void): Promise<Blob> {
   const first = pageSizeOf(pages[0], base);
   const width = Math.max(1, Math.round(first.width * scale));
@@ -63,29 +87,51 @@ export async function renderGif(pages: Page[], base: { width: number; height: nu
   const { ctx } = frameCanvas(width, height);
   const frames: GifFrame[] = [];
   const STEP = 100;
+  const budget = Math.max(pages.length * 2, Math.floor((200 * 1024 * 1024) / (width * height * 4)));
+  const perPage = Math.max(10, Math.floor(budget / pages.length));
 
   for (const [i, page] of pages.entries()) {
     await preloadPage(page);
 
-    const size = pageSizeOf(page, base);
-    // หน้าที่ขนาดต่างจากหน้าแรกวาดย่อให้พอดีกรอบ GIF
-    const fit = Math.min(width / size.width, height / size.height);
     const total = pageSeconds(page) * 1000;
-    const anim = Math.min(entryLength(page), total);
+    const trans = i > 0 ? transitionLength(page) : 0;
+    const continuous = pageLoops(page) || pageGifSources(page).length > 0;
+    // ช่วงที่ต้องเก็บหลายเฟรม: [เริ่ม, จบ) — ช่วงอื่นค้างภาพเดียว
+    const spans: [number, number][] = continuous
+      ? [[0, total]]
+      : [
+          [0, Math.min(total, trans + settleLength(page))],
+          [Math.max(0, total - exitLength(page)), total],
+        ];
+    const moving = spans.reduce((sum, [a, b]) => sum + Math.max(0, b - a), 0);
+    const step = Math.max(STEP, Math.ceil(moving / perPage / 10) * 10);
+    let t = 0;
 
-    for (let t = 0; t < anim; t += STEP) {
-      paint(ctx, page, size, fit, t);
-      frames.push({ data: ctx.getImageData(0, 0, width, height).data, delay: STEP });
+    for (const [from, to] of spans) {
+      // ช่วงนิ่งก่อนช่วงนี้: ภาพเดียวค้างไว้
+      if (from > t) {
+        paintTimeline(ctx, pages, i, base, t);
+        frames.push({ data: ctx.getImageData(0, 0, width, height).data, delay: from - t });
+        t = from;
+      }
+
+      for (; t < to; t += step) {
+        paintTimeline(ctx, pages, i, base, t);
+        frames.push({ data: ctx.getImageData(0, 0, width, height).data, delay: Math.min(step, to - t) });
+      }
     }
 
-    paint(ctx, page, size, fit, Number.POSITIVE_INFINITY);
-    frames.push({ data: ctx.getImageData(0, 0, width, height).data, delay: Math.max(STEP, total - anim) });
+    if (t < total) {
+      paintTimeline(ctx, pages, i, base, t);
+      frames.push({ data: ctx.getImageData(0, 0, width, height).data, delay: total - t });
+    }
+
     onProgress?.((i + 1) / (pages.length + 1));
     // คืนจังหวะให้หน้าเว็บวาดแถบความคืบหน้า
     await new Promise((r) => setTimeout(r, 0));
   }
 
-  const bytes = encodeGif(width, height, frames);
+  const bytes = encodeGif(width, height, frames.filter((f) => f.delay > 0));
 
   onProgress?.(1);
 
@@ -165,8 +211,6 @@ export async function renderVideo(
       const length = pageSeconds(page) * 1000;
 
       if (time < start + length || page === pages[pages.length - 1]) {
-        const size = pageSizeOf(page, base);
-
         // เข้าหน้าใหม่: หยุดคลิปของหน้าก่อน แล้วเริ่มคลิปของหน้านี้จากต้นช่วงตัดต่อ
         if (index !== playing) {
           playbacks[playing]?.stop();
@@ -174,7 +218,7 @@ export async function renderVideo(
           void playbacks[index]?.start();
         }
 
-        paint(ctx, page, size, Math.min(width / size.width, h / size.height), time - start, playbacks[index]?.frame);
+        paintTimeline(ctx, pages, index, base, time - start, playbacks[index]?.frame);
 
         return;
       }

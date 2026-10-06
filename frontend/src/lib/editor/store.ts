@@ -909,7 +909,7 @@ export function styleOf(el: CanvasElement): StyleSnapshot {
   return {
     type: el.type,
     color: color && !color.includes('gradient') ? color : null,
-    common: pick(el, ['opacity', 'shadow', 'animation', 'blendMode']),
+    common: pick(el, ['opacity', 'shadow', 'animation', 'animationLoop', 'animationExit', 'animationSpeed', 'blendMode']),
     specific: pick(el, STYLE_KEYS[el.type]),
   };
 }

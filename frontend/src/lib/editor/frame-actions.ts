@@ -23,6 +23,8 @@ export interface ImageSource {
   name: string;
   /// แหล่งที่มาของภาพที่นำเข้าจากเว็บอื่น (ติดไปกับชิ้นรูปเมื่อใส่เป็นรูปเดี่ยว)
   origin?: ImageOrigin | null;
+  /// ชนิดไฟล์ (image/gif = เล่นเป็นภาพเคลื่อนไหวเมื่อใส่เป็นรูปเดี่ยว)
+  mimeType?: string;
 }
 
 export type FrameLike = FrameElement | GridElement;

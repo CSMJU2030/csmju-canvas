@@ -281,6 +281,7 @@ function FileMenu({ onPublish }: { onPublish: () => void }) {
         { label: 'ลบเส้นไกด์ทั้งหมด', icon: <span />, onSelect: () => useEditorUi.setState({ guideLines: [] }) },
         { label: 'แสดงขอบหน้ากระดาษ', icon: <span />, checked: ui.margins, onSelect: () => ui.set({ margins: !ui.margins }) },
         { label: 'แสดงระยะตัดตกสำหรับงานพิมพ์', icon: <span />, checked: ui.bleed, onSelect: () => ui.set({ bleed: !ui.bleed }) },
+        { label: 'เล่น GIF เคลื่อนไหวขณะแก้ไข', icon: <span />, checked: ui.gifPlaying, onSelect: () => ui.set({ gifPlaying: !ui.gifPlaying }) },
       ],
     },
     'divider',

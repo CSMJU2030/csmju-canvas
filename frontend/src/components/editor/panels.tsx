@@ -33,7 +33,8 @@ import type { Asset, AssetFolder, Template, TemplateSummary } from '@/lib/types'
 import { ColorPicker, RainbowSwatch, Swatch } from './color-picker';
 import { matchFonts, usePreloadFonts } from './font-picker';
 import { CreateFolderDialog, ProjectsPanel } from './project-panel';
-import { AnimatePanel, ColorPanel, EffectsPanel, PositionPanel } from './side-panels';
+import { AnimatePanel } from './animate-panel';
+import { ColorPanel, EffectsPanel, PositionPanel } from './side-panels';
 import { ChartDataPanel } from './chart-panel';
 import { PanelHeader, UnderlineTabs } from './controls';
 import { CropPanel, FontPanel, ImageEditPanel, ReplacePanel } from './side-panels-media';
@@ -750,6 +751,7 @@ function UploadsPanel() {
         naturalHeight: img.naturalHeight || 400,
         name: asset.fileName,
         origin: originOfAsset(asset),
+        mimeType: asset.mimeType,
       };
 
       // กรอบ/ช่องว่างที่เลือกอยู่ = ใส่รูปลงช่องนั้นแทนการเพิ่มรูปใหม่

@@ -3,7 +3,7 @@
 import {
   AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignHorizontalDistributeCenter,
   AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, ChartColumn, ChevronsDown, ChevronsUp, ChevronDown, ChevronUp,
-  Eye, EyeOff, Film, Frame, GripVertical, Image as ImageIcon, LayoutGrid, Lock, LockOpen, Pipette, Play, Search, Shapes, Table2, Type,
+  Eye, EyeOff, Film, Frame, GripVertical, Image as ImageIcon, LayoutGrid, Lock, LockOpen, Pipette, Search, Shapes, Table2, Type,
 } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 import { cx } from '@/components/csmju/primitives';
@@ -13,7 +13,7 @@ import { DEFAULT_GRADIENTS, gradientCss, isGradient, paintColors, parseGradient,
 import { getImage } from '@/lib/editor/render';
 import { layerLabel } from '@/lib/editor/factory';
 import { currentPage, useEditor } from '@/lib/editor/store';
-import type { AnimationKind, CanvasElement, Shadow, TextEffect, TextEffectKind, TextElement } from '@/lib/editor/types';
+import type { CanvasElement, Shadow, TextEffect, TextEffectKind, TextElement } from '@/lib/editor/types';
 import { useEditorUi, type ColorTarget } from '@/lib/editor/ui-store';
 import { ColorPicker, RainbowSwatch, Swatch, hasEyeDropper, pickScreenColor } from './color-picker';
 import { PanelHeader, PresetTile, RangeField, UnderlineTabs } from './controls';
@@ -507,71 +507,6 @@ export function ShadowControls({ els }: { els: CanvasElement[] }) {
         </div>
       )}
     </>
-  );
-}
-
-// ── แอนิเมต ────────────────────────────────────────────────────────
-
-const ANIMATIONS: { key: AnimationKind | null; label: string }[] = [
-  { key: null, label: 'ไม่มี' },
-  { key: 'rise', label: 'ลอยขึ้น' },
-  { key: 'pan', label: 'แพน' },
-  { key: 'fade', label: 'จางเข้า' },
-  { key: 'pop', label: 'ป๊อป' },
-  { key: 'wipe', label: 'เช็ด' },
-  { key: 'blur', label: 'เบลอ' },
-  { key: 'drift', label: 'ล่องลอย' },
-  { key: 'tumble', label: 'ตีลังกา' },
-  { key: 'breathe', label: 'หายใจ' },
-  { key: 'bounce', label: 'เด้ง' },
-];
-
-export function AnimatePanel() {
-  const selected = useSelected();
-  const pageElements = useEditor((s) => currentPage(s).elements);
-  const targets = selected.length > 0 ? selected : pageElements;
-  const ids = targets.filter((el) => !el.locked).map((el) => el.id);
-  const current = targets.length > 0 && targets.every((el) => (el.animation ?? null) === (targets[0].animation ?? null)) ? (targets[0].animation ?? null) : undefined;
-
-  const apply = (key: AnimationKind | null) => {
-    if (ids.length === 0) return;
-
-    patch(ids, { animation: key });
-    if (key) useEditorUi.getState().playPreview(ids);
-  };
-
-  return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <PanelHeader title="แอนิเมต" onClose={close} />
-      <Scroll>
-        <p className="mb-4 text-csmju-caption text-muted">
-          {selected.length > 0 ? 'แอนิเมชันขององค์ประกอบที่เลือก — เล่นตอนพรีเซนต์' : 'ยังไม่ได้เลือกชิ้นงาน: แอนิเมชันจะใช้กับทุกชิ้นในหน้านี้'}
-        </p>
-        {targets.length === 0 ? (
-          <p className="text-csmju-caption text-muted">หน้านี้ยังว่าง</p>
-        ) : (
-          <>
-            <div className="grid grid-cols-3 gap-3">
-              {ANIMATIONS.map((item) => (
-                <PresetTile key={item.label} label={item.label} selected={current === item.key} onClick={() => apply(item.key)}>
-                  <span className={cx('flex size-10 items-center justify-center rounded-lg bg-primary text-csmju-caption font-bold text-on-inverse', item.key && 'csmju-pop')}>
-                    {item.key ? 'Aa' : '—'}
-                  </span>
-                </PresetTile>
-              ))}
-            </div>
-            <button
-              type="button"
-              disabled={!current}
-              onClick={() => useEditorUi.getState().playPreview(ids)}
-              className="mt-5 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-line-strong text-csmju-caption font-semibold text-ink hover:bg-surface-muted disabled:opacity-40"
-            >
-              <Play aria-hidden className="size-4" /> เล่นตัวอย่าง
-            </button>
-          </>
-        )}
-      </Scroll>
-    </div>
   );
 }
 

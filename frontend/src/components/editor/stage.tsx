@@ -39,13 +39,15 @@ import {
   visibleFraction,
   type PagesLayout,
 } from '@/lib/editor/page-layout';
-import { brushStyle, drawFrameEditGhost, drawPage, getImage, strokeFreehand, subscribeImageReady } from '@/lib/editor/render';
+import { previewLength, previewMotion } from '@/lib/editor/animation';
+import { gifRedrawDelay, withGifClock } from '@/lib/editor/gif-player';
+import { brushStyle, drawFrameEditGhost, drawPage, getImage, pageGifSources, strokeFreehand, subscribeImageReady } from '@/lib/editor/render';
 import { snapRect, type Guide } from '@/lib/editor/snapping';
 import { tableCellAt, tableCellCorners } from '@/lib/editor/table-render';
 import { activeCell, useTableUi } from '@/lib/editor/table-ui';
 import { brushWidth, canEditDoc, cloneElements, currentPage, selectionBox, useEditor, type DrawBrush } from '@/lib/editor/store';
 import { pageSizeOf, type CanvasElement, type ImageElement, type Page, type PathElement, type TextElement } from '@/lib/editor/types';
-import { PREVIEW_MS, useEditorUi } from '@/lib/editor/ui-store';
+import { useEditorUi } from '@/lib/editor/ui-store';
 import { animateViewport, cancelViewportAnimation, clampZoom, fitRect, setStageSize, stageSize, wheelPixels, wheelZoomFactor, zoomBy } from '@/lib/editor/viewport';
 import { FileDropOverlay, dragHasFiles, imageUrlFrom, originFrom, useFileImport } from './file-import';
 import { TableCellEditor } from './table-editor';
@@ -173,6 +175,7 @@ export function Stage() {
   const hover = useRef<Point | null>(null);
   /// ใช้วาดเฟรมถัดไประหว่างเล่นตัวอย่างแอนิเมชัน (อ้างถึง draw ล่าสุดโดยไม่ต้องอ้างตัวเอง)
   const drawLoop = useRef<() => void>(() => undefined);
+  const gifTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /// กรอบ/ช่องที่จะรับรูปถ้าปล่อยตอนนี้ (ลากรูปจากแผง หรือลากรูปบนหน้าไปทับกรอบ)
   const dropTarget = useRef<{ id: string; cell: number } | null>(null);
   /// รวมการซูมด้วยล้อเมาส์ในโหมดจัดตำแหน่งรูปเป็น undo ขั้นเดียว
@@ -319,10 +322,12 @@ export function Stage() {
       drawConnectors(ctx, layout.rects, (w) => ({ x: pan.x + (w.x - origin.x) * zoom, y: pan.y + (w.y - origin.y) * zoom }), ink);
     }
 
-    // ตัวอย่างแอนิเมชันจากแผงแอนิเมต — เล่นจนครบแล้วหยุดเอง
+    // ตัวอย่างแอนิเมชันจากแผงแอนิเมต (เข้า → เส้นทาง/เน้น → ออก) — เล่นจนครบแล้วหยุดเอง
     const preview = ui.preview;
     const elapsed = preview ? performance.now() - preview.start : Infinity;
-    const playing = preview && elapsed < PREVIEW_MS;
+    const previewEls = preview ? page.elements.filter((el) => preview.ids.includes(el.id)) : [];
+    const playing = preview && elapsed < previewLength(previewEls) + 50;
+    const gifs: string[] = [];
 
     for (const i of visible) {
       const pg = state.doc.pages[i];
@@ -345,17 +350,21 @@ export function Stage() {
       ctx.beginPath();
       ctx.rect(0, 0, r.width, r.height);
       ctx.clip();
-      drawPage(
-        ctx,
-        pg,
-        { width: r.width, height: r.height },
-        isActive
-          ? {
-              skipIds: state.editingTextId ? new Set([state.editingTextId]) : undefined,
-              progress: playing ? (el) => (preview.ids.includes(el.id) ? elapsed / PREVIEW_MS : undefined) : undefined,
-            }
-          : {},
+      // ปิดการเล่น GIF = ค้างเฟรมแรก
+      withGifClock(ui.gifPlaying ? null : 0, () =>
+        drawPage(
+          ctx,
+          pg,
+          { width: r.width, height: r.height },
+          isActive
+            ? {
+                skipIds: state.editingTextId ? new Set([state.editingTextId]) : undefined,
+                motion: playing ? (el: CanvasElement) => (preview.ids.includes(el.id) ? previewMotion(el, elapsed) : undefined) : undefined,
+              }
+            : {},
+        ),
       );
+      gifs.push(...pageGifSources(pg));
 
       // เส้นที่กำลังวาด (ยังไม่เป็น element จนกว่าจะปล่อย)
       if (isActive && g.kind === 'draw' && state.tool.brush !== 'eraser') {
@@ -380,6 +389,14 @@ export function Stage() {
     }
 
     if (playing) frame.current = requestAnimationFrame(() => drawLoop.current());
+
+    // GIF เคลื่อนไหวในจอ: วาดใหม่ตามจังหวะเฟรมที่สั้นที่สุด (ไม่วาดทุกเฟรมจอโดยไม่จำเป็น)
+    if (gifTimer.current) clearTimeout(gifTimer.current);
+    gifTimer.current = null;
+
+    const gifDelay = ui.gifPlaying && !playing ? gifRedrawDelay(gifs) : null;
+
+    if (gifDelay !== null) gifTimer.current = setTimeout(() => drawLoop.current(), Math.max(20, gifDelay));
 
     // ป้ายชื่อหน้า · กรอบหน้าที่เปิด · หน้าที่จะรับชิ้นงานที่ลากมา (พิกัดจอ)
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -429,6 +446,37 @@ export function Stage() {
 
     for (const el of selected) {
       outline(ctx, corners(el).map(toScreen), primary, el.locked ? [4, 4] : []);
+    }
+
+    // เส้นทางเคลื่อนที่ของชิ้นที่เลือก: เส้นประจากกึ่งกลาง + จุดปลายทาง (ระหว่างเล่นตัวอย่างไม่แสดง)
+    if (!playing) {
+      for (const el of selected) {
+        const pts = el.motionPath?.points;
+
+        if (!pts || pts.length < 4) continue;
+
+        const c = { x: el.x + el.width / 2, y: el.y + el.height / 2 };
+        const end = toScreen({ x: c.x + pts[pts.length - 2], y: c.y + pts[pts.length - 1] });
+
+        ctx.save();
+        ctx.beginPath();
+        for (let k = 0; k < pts.length; k += 2) {
+          const p = toScreen({ x: c.x + pts[k], y: c.y + pts[k + 1] });
+
+          if (k === 0) ctx.moveTo(p.x, p.y);
+          else ctx.lineTo(p.x, p.y);
+        }
+        ctx.strokeStyle = primary;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 5]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = primary;
+        ctx.beginPath();
+        ctx.arc(end.x, end.y, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
     }
 
     // ช่องที่เลือกของตาราง — พื้นจางและกรอบสีหลัก
@@ -536,6 +584,13 @@ export function Stage() {
   useEffect(() => {
     drawLoop.current = draw;
   }, [draw]);
+
+  useEffect(
+    () => () => {
+      if (gifTimer.current) clearTimeout(gifTimer.current);
+    },
+    [],
+  );
 
   const requestDraw = useCallback(() => {
     if (frame.current === null) frame.current = requestAnimationFrame(draw);
@@ -649,7 +704,7 @@ export function Stage() {
         requestDraw();
       }
 
-      if (ui.preview !== prev.preview || ui.imageErase !== prev.imageErase || ui.frameCell !== prev.frameCell || ui.frameEdit !== prev.frameEdit) requestDraw();
+      if (ui.preview !== prev.preview || ui.imageErase !== prev.imageErase || ui.frameCell !== prev.frameCell || ui.frameEdit !== prev.frameEdit || ui.gifPlaying !== prev.gifPlaying) requestDraw();
     });
     // เลือกช่อง/เริ่มหรือเลิกพิมพ์ในตาราง
     const unsubscribeTable = useTableUi.subscribe(requestDraw);

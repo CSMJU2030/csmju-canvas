@@ -1,4 +1,6 @@
+import { applyMotion, textForMotion, type MotionState } from './animation';
 import { drawChart } from './chart';
+import { gifAnimation, gifFrame, maybeGif, onGifReady, preloadGifs } from './gif-player';
 import { DEFAULT_FONT, cssFamily, ensureFont, isFontReady } from './fonts';
 import {
   PLACEHOLDER_FILL, PLACEHOLDER_HINT, PLACEHOLDER_ICON, PLACEHOLDER_INK, cellArea, cellImages, coverRect, frameArea, frameDecor, frameMaskPath, gridCellRects,
@@ -43,6 +45,14 @@ function onImageReady() {
   for (const listener of imageListeners) listener();
 }
 
+// GIF ถอดเฟรมเสร็จ = วาดใหม่เหมือนรูปโหลดเสร็จ
+onGifReady(onImageReady);
+
+/// GIF เคลื่อนไหวที่มองเห็นในหน้า (ใช้ตัดสินว่าผืนที่แสดงต้องวาดใหม่ต่อเนื่องไหม)
+export function pageGifSources(page: Page): string[] {
+  return page.elements.filter((el): el is ImageElement => el.type === 'image' && !el.hidden && maybeGif(el.src, el.animated)).map((el) => el.src);
+}
+
 export function subscribeImageReady(listener: () => void): () => void {
   imageListeners.add(listener);
 
@@ -66,7 +76,7 @@ export function getImage(src: string): HTMLImageElement | null {
 
 /// รอจนรูปทุกรูปในหน้าโหลดเสร็จ (ก่อนส่งออก) — รูปที่โหลดไม่ได้ข้ามไป
 export async function preloadPage(page: Page): Promise<void> {
-  const jobs: Promise<unknown>[] = [];
+  const jobs: Promise<unknown>[] = [preloadGifs(pageGifSources(page))];
 
   for (const el of page.elements) {
     if (el.type === 'image' || el.type === 'svg') {
@@ -993,6 +1003,28 @@ function styledImage(el: ImageElement, base: ImageSource): ImageSource & { padX:
   return { source: canvas, sx: 0, sy: 0, sw: canvas.width, sh: canvas.height, key, padX: pad / inner.w, padY: pad / inner.h };
 }
 
+/// เฟรมปัจจุบันของ GIF เคลื่อนไหว — เฉพาะรูปที่ไม่ต้องประมวลผลพิกเซล (ฟิลเตอร์/ลบพื้นหลัง/สไตล์เลเยอร์ใช้เฟรมแรกที่แคชไว้)
+function animatedSource(el: ImageElement): (ImageSource & { padX: number; padY: number }) | null {
+  if (!maybeGif(el.src, el.animated) || needsPixels(el) || (el.erase?.length ?? 0) > 0 || hasLayerStyle(el.layerStyle)) return null;
+
+  const anim = gifAnimation(el.src);
+
+  if (!anim) return null;
+
+  const crop = el.crop ?? { x: 0, y: 0, width: 1, height: 1 };
+
+  return {
+    source: gifFrame(anim),
+    sx: crop.x * anim.width,
+    sy: crop.y * anim.height,
+    sw: Math.max(1, crop.width * anim.width),
+    sh: Math.max(1, crop.height * anim.height),
+    key: '',
+    padX: 0,
+    padY: 0,
+  };
+}
+
 function drawImage(ctx: CanvasRenderingContext2D, el: ImageElement) {
   const img = getImage(el.src);
 
@@ -1003,7 +1035,7 @@ function drawImage(ctx: CanvasRenderingContext2D, el: ImageElement) {
     return;
   }
 
-  const { source, sx, sy, sw, sh, padX, padY } = styledImage(el, processedImage(el, img));
+  const { source, sx, sy, sw, sh, padX, padY } = animatedSource(el) ?? styledImage(el, processedImage(el, img));
   const blur = el.adjust?.blur ?? 0;
   // กล่องที่วาดจริง: ขยายออกเมื่อมีเส้นขอบสติกเกอร์/แสงเรือง
   const box = { x: el.x - padX * el.width, y: el.y - padY * el.height, width: el.width * (1 + 2 * padX), height: el.height * (1 + 2 * padY) };
@@ -1290,13 +1322,13 @@ function watchFont(family: string, weight: 400 | 700) {
 
 // ── element และหน้า ─────────────────────────────────────────────────
 
-export function drawElement(ctx: CanvasRenderingContext2D, el: CanvasElement, progress?: number, videoFrame?: VideoFrameSource) {
+export function drawElement(ctx: CanvasRenderingContext2D, el: CanvasElement, motion?: MotionState, videoFrame?: VideoFrameSource) {
   if (el.hidden || el.opacity <= 0) return;
 
   const mode = compositeOperation(el.blendMode);
 
   if (mode === 'source-over') {
-    drawElementBody(ctx, el, progress, videoFrame);
+    drawElementBody(ctx, el, motion, videoFrame);
     return;
   }
 
@@ -1307,14 +1339,14 @@ export function drawElement(ctx: CanvasRenderingContext2D, el: CanvasElement, pr
   ctx.save();
 
   if (layer) {
-    drawElementBody(layer, el, progress, videoFrame);
+    drawElementBody(layer, el, motion, videoFrame);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = mode;
     ctx.drawImage(layer.canvas, 0, 0);
   } else {
     ctx.globalCompositeOperation = mode;
-    drawElementBody(ctx, el, progress, videoFrame);
+    drawElementBody(ctx, el, motion, videoFrame);
   }
 
   ctx.restore();
@@ -1350,11 +1382,11 @@ function blendLayer(target: CanvasRenderingContext2D): CanvasRenderingContext2D 
   return c;
 }
 
-function drawElementBody(ctx: CanvasRenderingContext2D, el: CanvasElement, progress?: number, videoFrame?: VideoFrameSource) {
+function drawElementBody(ctx: CanvasRenderingContext2D, el: CanvasElement, motion?: MotionState, videoFrame?: VideoFrameSource) {
   ctx.save();
   ctx.globalAlpha = el.opacity;
 
-  if (progress !== undefined && el.animation) applyAnimation(ctx, el, progress);
+  if (motion) applyMotion(ctx, el, motion);
 
   if (el.rotation) {
     const cx = el.x + el.width / 2;
@@ -1374,7 +1406,7 @@ function drawElementBody(ctx: CanvasRenderingContext2D, el: CanvasElement, progr
 
   switch (el.type) {
     case 'text':
-      drawText(ctx, el);
+      drawText(ctx, textForMotion(el, motion));
       break;
     case 'shape':
       drawShape(ctx, el);
@@ -1395,7 +1427,7 @@ function drawElementBody(ctx: CanvasRenderingContext2D, el: CanvasElement, progr
       watchFont(el.fontFamily, 400);
       watchFont(el.fontFamily, 700);
       // แท่ง/เส้น/ชิ้นงอกขึ้นเฉพาะตอนเล่นแอนิเมชันเข้า
-      drawChart(ctx, el, el.animation ? progress : undefined);
+      drawChart(ctx, el, el.animation ? motion?.entry : undefined);
       break;
     case 'frame':
       drawFrame(ctx, el);
@@ -1411,72 +1443,6 @@ function drawElementBody(ctx: CanvasRenderingContext2D, el: CanvasElement, progr
   ctx.restore();
 }
 
-/// แอนิเมชันตอนเข้า (พรีเซนต์ และตัวอย่างในแผงแอนิเมต) — ปรับ transform/ความทึบตามความคืบหน้า 0–1
-function applyAnimation(ctx: CanvasRenderingContext2D, el: CanvasElement, t: number) {
-  const p = Math.max(0, Math.min(1, t));
-  const ease = 1 - Math.pow(1 - p, 3);
-  const cx = el.x + el.width / 2;
-  const cy = el.y + el.height / 2;
-
-  switch (el.animation) {
-    case 'rise':
-      ctx.globalAlpha *= ease;
-      ctx.translate(0, (1 - ease) * el.height * 0.5);
-      break;
-    case 'pan':
-      ctx.globalAlpha *= ease;
-      ctx.translate(-(1 - ease) * el.width * 0.4, 0);
-      break;
-    case 'fade':
-      ctx.globalAlpha *= ease;
-      break;
-    case 'pop': {
-      const s = p < 0.7 ? (p / 0.7) * 1.1 : 1.1 - ((p - 0.7) / 0.3) * 0.1;
-
-      ctx.globalAlpha *= Math.min(1, p * 2);
-      ctx.translate(cx, cy);
-      ctx.scale(Math.max(0.01, s), Math.max(0.01, s));
-      ctx.translate(-cx, -cy);
-      break;
-    }
-    case 'wipe':
-      ctx.beginPath();
-      ctx.rect(el.x - el.width, el.y - el.height, el.width * (1 + 2 * ease), el.height * 3);
-      ctx.clip();
-      break;
-    case 'blur':
-      ctx.globalAlpha *= ease;
-      ctx.filter = `blur(${(1 - ease) * 12}px)`;
-      break;
-    case 'drift':
-      ctx.globalAlpha *= ease;
-      ctx.translate((1 - ease) * el.width * 0.15, (1 - ease) * el.height * 0.15);
-      break;
-    case 'tumble':
-      ctx.globalAlpha *= ease;
-      ctx.translate(cx, cy);
-      ctx.rotate((1 - ease) * -0.6);
-      ctx.translate(-cx, -cy);
-      break;
-    case 'breathe': {
-      const s = 0.85 + 0.15 * ease;
-
-      ctx.globalAlpha *= ease;
-      ctx.translate(cx, cy);
-      ctx.scale(s, s);
-      ctx.translate(-cx, -cy);
-      break;
-    }
-    case 'bounce': {
-      const b = Math.abs(Math.sin(p * Math.PI * 2.5)) * (1 - p);
-
-      ctx.globalAlpha *= Math.min(1, p * 3);
-      ctx.translate(0, -b * el.height * 0.4);
-      break;
-    }
-  }
-}
-
 export function drawPage(
   ctx: CanvasRenderingContext2D,
   page: Page,
@@ -1484,7 +1450,7 @@ export function drawPage(
   options: {
     transparent?: boolean;
     skipIds?: ReadonlySet<string>;
-    progress?: (el: CanvasElement) => number | undefined;
+    motion?: (el: CanvasElement) => MotionState | undefined;
     /// เฟรมสดของวิดีโอ (พรีเซนต์/ส่งออกวิดีโอ) — ไม่ใส่ = วาดภาพปก
     videoFrame?: VideoFrameSource;
   } = {},
@@ -1497,7 +1463,7 @@ export function drawPage(
   for (const el of page.elements) {
     if (options.skipIds?.has(el.id)) continue;
 
-    drawElement(ctx, el, options.progress?.(el), options.videoFrame);
+    drawElement(ctx, el, options.motion?.(el), options.videoFrame);
   }
 }
 

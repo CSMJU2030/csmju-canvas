@@ -36,6 +36,8 @@ interface EditorUi {
   /// ภาพย่อหน้าที่ชิ้นงานกำลังถูกลากมาทับ (ปล่อยแล้วย้ายชิ้นงานไปหน้านั้น) — แถบภาพย่อใช้เน้นกรอบ
   pageDropTarget: number | null;
   rulers: boolean;
+  /// เล่น GIF เคลื่อนไหวบนผืนผ้าใบ (ปิด = แสดงเฟรมแรก) · เริ่มต้นปิดเมื่อระบบตั้งให้ลดการเคลื่อนไหว
+  gifPlaying: boolean;
   /// เส้นไกด์ที่ลากออกจากไม้บรรทัด (พิกัดหน้า) — ไม่บันทึกลงงาน
   guideLines: { axis: 'x' | 'y'; at: number }[];
   margins: boolean;
@@ -65,7 +67,7 @@ interface EditorUi {
   toggleRulers(): void;
   addGuide(guide: { axis: 'x' | 'y'; at: number }): void;
   moveGuide(index: number, at: number | null): void;
-  set(patch: Partial<Pick<EditorUi, 'margins' | 'bleed' | 'commentsOpen' | 'commentPins' | 'overlay' | 'stripOpen' | 'imageErase' | 'frameCell' | 'frameEdit' | 'pageDropTarget'>>): void;
+  set(patch: Partial<Pick<EditorUi, 'margins' | 'bleed' | 'commentsOpen' | 'commentPins' | 'overlay' | 'stripOpen' | 'imageErase' | 'frameCell' | 'frameEdit' | 'pageDropTarget' | 'gifPlaying'>>): void;
 }
 
 export const useEditorUi = create<EditorUi>((set, get) => ({
@@ -78,6 +80,7 @@ export const useEditorUi = create<EditorUi>((set, get) => ({
   pagesView: 'strip',
   pagesLayout: 'single',
   pageDropTarget: null,
+  gifPlaying: typeof window === 'undefined' || typeof window.matchMedia !== 'function' || !window.matchMedia('(prefers-reduced-motion: reduce)').matches,
   rulers: false,
   guideLines: [],
   margins: false,

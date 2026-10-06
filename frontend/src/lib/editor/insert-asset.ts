@@ -19,7 +19,7 @@ function loadImage(src: string): Promise<{ width: number; height: number }> {
 /// ใส่ภาพที่นำเข้าลงหน้า (หรือลงกรอบที่เลือกอยู่) · คืน id ของชิ้นรูปใหม่ (ใส่ลงกรอบ = null)
 export async function insertImported(asset: Asset): Promise<string | null> {
   const size = await loadImage(asset.contentUrl);
-  const source = { src: asset.contentUrl, assetId: asset.id, naturalWidth: size.width, naturalHeight: size.height, name: asset.fileName, origin: originOfAsset(asset) };
+  const source = { src: asset.contentUrl, assetId: asset.id, naturalWidth: size.width, naturalHeight: size.height, name: asset.fileName, origin: originOfAsset(asset), mimeType: asset.mimeType };
 
   if (fillSelectedFrame(source)) return null;
 

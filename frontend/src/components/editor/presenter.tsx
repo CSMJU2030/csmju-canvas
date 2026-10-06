@@ -10,11 +10,11 @@ import { create } from 'zustand';
 import { FloatingPanel, useAnchoredMenu } from '@/components/csmju/floating';
 import { cx } from '@/components/csmju/primitives';
 import { mirrorFonts } from '@/lib/editor/fonts';
-import { entryLength, entryProgress } from '@/lib/editor/motion-export';
+import { drawTransition, exitLength, pageLoops, pageMotion, settleLength, transitionLength, type MotionState } from '@/lib/editor/animation';
 import { PagePlayback, pageHasMedia } from '@/lib/editor/playback';
-import { drawPage, preloadPage, strokeFreehand, subscribeImageReady } from '@/lib/editor/render';
+import { drawPage, pageGifSources, preloadPage, strokeFreehand, subscribeImageReady } from '@/lib/editor/render';
 import { useEditor } from '@/lib/editor/store';
-import { pageSizeOf, type Page } from '@/lib/editor/types';
+import { pageSizeOf, type CanvasElement, type Page, type PageTransition } from '@/lib/editor/types';
 import { formatClock, useTimerStore } from './timer';
 
 /// โหมดพรีเซนต์ (ภาพบรีฟ "พรีเซนต์") — เต็มหน้าจอ · มุมมองผู้พรีเซนต์ (หน้าต่างแยก) · เล่นอัตโนมัติ
@@ -32,7 +32,10 @@ interface PresentState {
   mode: PresentMode | null;
   /// ตำแหน่งในรายการหน้าที่แสดงได้ (ไม่ใช่ index ในงาน)
   slide: number;
+  /// เวลาที่หน้าปัจจุบันเริ่มเล่นแอนิเมชันเข้า (อาจอยู่ในอนาคต ระหว่างหน้าก่อนเล่นแอนิเมชันออกและเปลี่ยนหน้า)
   enteredAt: number;
+  /// หน้าที่เพิ่งออก: เล่นแอนิเมชันออกของหน้านั้น แล้วเปลี่ยนหน้าตามที่ตั้งไว้ ก่อนหน้าใหม่เริ่ม
+  leaving: Leaving | null;
   playing: boolean;
   ink: Record<string, Ink[]>;
   tool: 'none' | 'pen' | 'highlighter' | 'eraser';
@@ -56,12 +59,23 @@ interface PresentState {
   setPlaying(playing: boolean): void;
 }
 
+interface Leaving {
+  page: Page;
+  at: number;
+  /// เวลาที่หน้านั้นแสดงอยู่ก่อนกดเปลี่ยน (ต่อเนื่องจังหวะแอนิเมชันวน)
+  shownFor: number;
+  exit: number;
+  transition: PageTransition | null;
+  transitionMs: number;
+}
+
 export type MagicKind = 'blur' | 'quiet' | 'bubbles' | 'confetti' | 'drumroll' | 'curtain' | 'mic' | 'clear';
 
 export const usePresent = create<PresentState>((set, get) => ({
   mode: null,
   slide: 0,
   enteredAt: 0,
+  leaving: null,
   playing: false,
   ink: {},
   tool: 'none',
@@ -89,7 +103,7 @@ export const usePresent = create<PresentState>((set, get) => ({
       container = null;
     }
 
-    set({ mode, slide, popup, container, enteredAt: performance.now(), playing: mode === 'autoplay', ink: {}, tool: 'none', effect: null, blurred: false, quiet: false, startedAt: Date.now() });
+    set({ mode, slide, popup, container, enteredAt: performance.now(), leaving: null, playing: mode === 'autoplay', ink: {}, tool: 'none', effect: null, blurred: false, quiet: false, startedAt: Date.now() });
   },
   stop() {
     const popup = get().popup;
@@ -98,7 +112,29 @@ export const usePresent = create<PresentState>((set, get) => ({
     set({ mode: null, effect: null, tool: 'none', popup: null, container: null });
   },
   go(slide) {
-    set({ slide, enteredAt: performance.now(), effect: null });
+    const now = performance.now();
+    const current = get();
+    const pages = visiblePages(useEditor.getState().doc.pages);
+    const from = pages[current.slide];
+    const to = pages[slide];
+
+    if (!from || !to || from === to || current.enteredAt > now) {
+      // กดเปลี่ยนซ้ำระหว่างเปลี่ยนหน้า = ข้ามไปหน้าที่ขอทันที
+      set({ slide, enteredAt: now, leaving: null, effect: null });
+      return;
+    }
+
+    // ไปข้างหน้าใช้การเปลี่ยนหน้าของหน้าปลายทาง · ย้อนกลับใช้ของหน้าที่กำลังออก (ท่าเดียวกับขาไป)
+    const transition = (slide > current.slide ? to.transition : from.transition) ?? null;
+    const transitionMs = transition ? transitionLength({ ...to, transition }) : 0;
+    const exit = exitLength(from);
+
+    set({
+      slide,
+      enteredAt: now + exit + transitionMs,
+      leaving: exit + transitionMs > 0 ? { page: from, at: now, shownFor: Math.max(0, now - current.enteredAt), exit, transition, transitionMs } : null,
+      effect: null,
+    });
   },
   setTool(tool) {
     set({ tool });
@@ -117,7 +153,7 @@ export const usePresent = create<PresentState>((set, get) => ({
     set({ effect: { kind, at: performance.now() } });
   },
   setPlaying(playing) {
-    set({ playing, enteredAt: performance.now() });
+    set({ playing, enteredAt: performance.now(), leaving: null });
   },
 }));
 
@@ -280,7 +316,8 @@ function PresenterInner({ mode }: { mode: PresentMode }) {
       const p = usePresent.getState();
 
       p.go(p.slide < pages.length - 1 ? p.slide + 1 : 0);
-    }, (page.duration ?? 5) * 1000);
+      // แอนิเมชันออกเล่นก่อนหมดเวลาของหน้า
+    }, Math.max(500, enteredAt - performance.now() + (page.duration ?? 5) * 1000 - exitLength(page)));
 
     return () => window.clearTimeout(id);
   }, [playing, page, enteredAt, pages.length]);
@@ -312,6 +349,8 @@ function SlideView({ page, interactive = false, className }: { page: Page; inter
   const size = useMemo(() => pageSizeOf(page, { width: baseWidth, height: baseHeight }), [page, baseWidth, baseHeight]);
   const [box, setBox] = useState({ width: 0, height: 0 });
   const enteredAt = usePresent((s) => s.enteredAt);
+  // แอนิเมชันออก/เปลี่ยนหน้าแสดงเฉพาะสไลด์หลัก (ภาพย่อในหน้าต่างผู้พรีเซนต์แสดงหน้าใหม่ทันที)
+  const leaving = usePresent((s) => (interactive ? s.leaving : null));
   const ink = usePresent((s) => s.ink[page.id]);
   const tool = usePresent((s) => s.tool);
   const effect = usePresent((s) => s.effect);
@@ -354,14 +393,38 @@ function SlideView({ page, interactive = false, className }: { page: Page; inter
     const ctx = canvas.getContext('2d')!;
     const now = performance.now();
     const elapsed = now - enteredAt;
-    const progressOf = entryProgress(page, elapsed);
+    // หน้าเต็ม (พื้นขาวเมื่อหน้าโปร่งใส) — หน้าที่ขนาดต่างจากสไลด์นี้วาดย่อให้พอดีกึ่งกลาง
+    const drawWhole = (target: Page, motion: (el: CanvasElement) => MotionState | undefined) => {
+      const own = pageSizeOf(target, { width: baseWidth, height: baseHeight });
+      const fit = Math.min(size.width / own.width, size.height / own.height);
+
+      ctx.save();
+      ctx.fillStyle = 'rgb(255 255 255)';
+      ctx.fillRect(0, 0, size.width, size.height);
+      ctx.translate((size.width - own.width * fit) / 2, (size.height - own.height * fit) / 2);
+      ctx.scale(fit, fit);
+      drawPage(ctx, target, own, { motion, videoFrame: target === page ? playbackRef.current?.frame : undefined });
+      ctx.restore();
+    };
 
     canvas.width = Math.round(size.width * scale * dpr);
     canvas.height = Math.round(size.height * scale * dpr);
     ctx.setTransform(dpr * scale, 0, 0, dpr * scale, 0, 0);
-    ctx.fillStyle = 'rgb(255 255 255)';
-    if (!page.background) ctx.fillRect(0, 0, size.width, size.height);
-    drawPage(ctx, page, size, { progress: progressOf, videoFrame: playbackRef.current?.frame });
+
+    if (leaving && elapsed < 0) {
+      const since = now - leaving.at;
+      const prevMotion = pageMotion(leaving.page, leaving.shownFor + since, leaving.shownFor);
+
+      if (since < leaving.exit || !leaving.transition) {
+        drawWhole(leaving.page, prevMotion);
+      } else {
+        const p = (since - leaving.exit) / Math.max(1, leaving.transitionMs);
+
+        drawTransition(ctx, leaving.transition, p, size, () => drawWhole(leaving.page, prevMotion), () => drawWhole(page, pageMotion(page, 0)));
+      }
+    } else {
+      drawWhole(page, pageMotion(page, Math.max(0, elapsed)));
+    }
 
     for (const stroke of [...(ink ?? []), ...(drawing.current ? [drawing.current] : [])]) {
       ctx.save();
@@ -375,8 +438,10 @@ function SlideView({ page, interactive = false, className }: { page: Page; inter
 
     const effectRunning = effect && drawMagic(ctx, effect.kind, now - effect.at, size);
 
-    if (elapsed < entryLength(page) + 100 || effectRunning || playbackRef.current?.animating) raf.current = win.requestAnimationFrame(() => paintRef.current());
-  }, [page, size, scale, enteredAt, ink, effect]);
+    const moving = elapsed < settleLength(page) + 100 || pageLoops(page) || pageGifSources(page).length > 0;
+
+    if (moving || effectRunning || playbackRef.current?.animating) raf.current = win.requestAnimationFrame(() => paintRef.current());
+  }, [page, size, scale, enteredAt, leaving, ink, effect, baseWidth, baseHeight]);
 
   // เข้าหน้า: เริ่มคลิปวิดีโอและเสียงประกอบจากต้น · ออกจากหน้า/จบการพรีเซนต์: หยุดและคืนตัวเล่น
   useEffect(() => {

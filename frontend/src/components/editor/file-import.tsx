@@ -246,7 +246,7 @@ export function useFileImport() {
         if (asset.mimeType.startsWith('image/')) {
           const size = await loadSize(asset.contentUrl);
           const origin = originOfAsset(asset);
-          const source: ImageSource = { src: asset.contentUrl, assetId: asset.id, naturalWidth: size.width, naturalHeight: size.height, name: asset.fileName, origin };
+          const source: ImageSource = { src: asset.contentUrl, assetId: asset.id, naturalWidth: size.width, naturalHeight: size.height, name: asset.fileName, origin, mimeType: asset.mimeType };
           const now = useEditor.getState();
 
           if (cell) {
