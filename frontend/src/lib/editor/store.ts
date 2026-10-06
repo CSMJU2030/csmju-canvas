@@ -373,6 +373,8 @@ export const useEditor = create<EditorState>((set, get) => {
       const snapshot = gestureSnapshot;
 
       gestureSnapshot = null;
+      // ยกเลิกการลาก (Esc) ต้องกลับไปวาดรูปความละเอียดเต็มเหมือนตอนปล่อยตามปกติ
+      setDraftMode(false);
 
       const state = get();
 
