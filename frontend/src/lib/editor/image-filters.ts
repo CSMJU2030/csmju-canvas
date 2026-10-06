@@ -22,45 +22,192 @@ export const ADJUST_ZERO: ImageAdjust = {
   blur: 0,
 };
 
+export type FilterGroup = 'basic' | 'natural' | 'warm' | 'cool' | 'vintage' | 'mono' | 'duotone' | 'cinema' | 'neon';
+
+type Rgb = [number, number, number];
+
 export interface FilterPreset {
   key: string;
   label: string;
-  group: 'basic' | 'natural' | 'warm' | 'cool' | 'vintage';
+  group: FilterGroup;
   adjust: Partial<ImageAdjust>;
   /// แปลงเป็นขาวดำก่อนปรับ
   mono?: boolean;
+  /// น้ำหนักสี [แดง, เขียว, น้ำเงิน] ตอนแปลงขาวดำ (แบบใส่ฟิลเตอร์สีหน้าเลนส์) · ไม่มี = ความสว่างมาตรฐาน
+  monoMix?: Rgb;
   /// ลดจำนวนระดับสี (โปสเตอร์)
   posterize?: number;
   /// ทับสีโทนเดียว (duotone) — [เงา, แสง]
-  duotone?: [[number, number, number], [number, number, number]];
+  duotone?: [Rgb, Rgb];
+  /// ย้อมสีแยกโทน (split toning): เงาเอียงไปทาง `shadows` ส่วนสว่างเอียงไปทาง `highlights` · strength 0–1
+  splitTone?: { shadows: Rgb; highlights: Rgb; strength: number };
 }
 
-export const FILTER_GROUPS: { key: FilterPreset['group']; label: string }[] = [
+export const FILTER_GROUPS: { key: FilterGroup; label: string }[] = [
   { key: 'basic', label: 'พื้นฐาน' },
   { key: 'natural', label: 'ธรรมชาติ' },
-  { key: 'warm', label: 'โทนร้อน' },
-  { key: 'cool', label: 'โทนเย็น' },
-  { key: 'vintage', label: 'ย้อนยุค' },
+  { key: 'warm', label: 'อบอุ่น' },
+  { key: 'cool', label: 'เย็น' },
+  { key: 'vintage', label: 'วินเทจ/ฟิล์ม' },
+  { key: 'mono', label: 'ขาวดำ' },
+  { key: 'duotone', label: 'ดูโอโทน' },
+  { key: 'cinema', label: 'ภาพยนตร์' },
+  { key: 'neon', label: 'นีออน/ป๊อป' },
 ];
 
+/// key ของฟิลเตอร์ถูกเก็บในงานของผู้ใช้ — ห้ามเปลี่ยนหรือลบ key เดิม (เพิ่มใหม่ได้)
 export const FILTER_PRESETS: FilterPreset[] = [
-  { key: 'mono', label: 'ขาวดำ', group: 'basic', adjust: { contrast: 10 }, mono: true },
+  { key: 'mono', label: 'ขาวดำ', group: 'mono', adjust: { contrast: 10 }, mono: true },
   { key: 'pop', label: 'สีโดด', group: 'basic', adjust: { saturation: 45, contrast: 20, vibrance: 30 } },
-  { key: 'duo-violet', label: 'ม่วงทูโทน', group: 'basic', adjust: {}, duotone: [[40, 10, 90], [255, 170, 120]] },
+  { key: 'vivid', label: 'สดจัด', group: 'basic', adjust: { saturation: 30, vibrance: 40, contrast: 15, clarity: 10 } },
+  { key: 'crisp', label: 'คมชัด', group: 'basic', adjust: { clarity: 35, sharpness: 25, contrast: 10 } },
+  { key: 'soft', label: 'นุ่มนวล', group: 'basic', adjust: { contrast: -20, highlights: -15, shadows: 15, clarity: -20 } },
   { key: 'poster', label: 'โปสเตอร์', group: 'basic', adjust: { saturation: 20 }, posterize: 5 },
   { key: 'fresh', label: 'สดใส', group: 'natural', adjust: { brightness: 8, vibrance: 25, clarity: 15 } },
   { key: 'meadow', label: 'ทุ่งหญ้า', group: 'natural', adjust: { tint: -12, saturation: 12, shadows: 15 } },
+  { key: 'forest', label: 'ป่าเขียว', group: 'natural', adjust: { tint: -20, temperature: -5, saturation: 15, shadows: 10, contrast: 10 } },
+  { key: 'bloom', label: 'ดอกไม้บาน', group: 'natural', adjust: { brightness: 10, vibrance: 30, tint: 10, highlights: -10 } },
+  { key: 'sky', label: 'ฟ้าใส', group: 'natural', adjust: { temperature: -15, vibrance: 25, highlights: -20, contrast: 10 } },
   { key: 'mist', label: 'หมอก', group: 'natural', adjust: { contrast: -25, brightness: 10, saturation: -20, blacks: 25 } },
   { key: 'stone', label: 'หินผา', group: 'natural', adjust: { saturation: -35, contrast: 15, clarity: 20 } },
   { key: 'sunset', label: 'ยามเย็น', group: 'warm', adjust: { temperature: 35, saturation: 15, highlights: -10 } },
+  { key: 'golden', label: 'แสงทอง', group: 'warm', adjust: { temperature: 40, highlights: 10, saturation: 15, vignette: 15 } },
+  { key: 'honey', label: 'น้ำผึ้ง', group: 'warm', adjust: { temperature: 30, tint: 10, contrast: -10, blacks: 15, saturation: 10 } },
+  {
+    key: 'autumn',
+    label: 'ใบไม้ร่วง',
+    group: 'warm',
+    adjust: { temperature: 25, tint: 10, saturation: 25, contrast: 15 },
+    splitTone: { shadows: [90, 40, 20], highlights: [255, 190, 90], strength: 0.2 },
+  },
   { key: 'latte', label: 'ลาเต้', group: 'warm', adjust: { temperature: 20, saturation: -20, contrast: -10, blacks: 15 } },
   { key: 'peach', label: 'พีช', group: 'warm', adjust: { temperature: 15, tint: 15, brightness: 8 } },
   { key: 'ocean', label: 'มหาสมุทร', group: 'cool', adjust: { temperature: -35, saturation: 10, contrast: 10 } },
   { key: 'frost', label: 'น้ำแข็ง', group: 'cool', adjust: { temperature: -25, brightness: 12, saturation: -15 } },
+  { key: 'mint', label: 'มิ้นต์', group: 'cool', adjust: { temperature: -15, tint: -15, brightness: 10, saturation: -10 } },
+  { key: 'arctic', label: 'ขั้วโลก', group: 'cool', adjust: { temperature: -40, brightness: 15, contrast: 15, saturation: -25 } },
+  { key: 'rain', label: 'ฝนพรำ', group: 'cool', adjust: { temperature: -20, saturation: -35, contrast: -10, blacks: 15, vignette: 20 } },
   { key: 'night', label: 'ราตรี', group: 'cool', adjust: { temperature: -20, brightness: -15, contrast: 20, vignette: 40 } },
   { key: 'film', label: 'ฟิล์ม', group: 'vintage', adjust: { temperature: 15, contrast: -15, blacks: 30, saturation: -15, vignette: 30 } },
+  {
+    key: 'polaroid',
+    label: 'โพลารอยด์',
+    group: 'vintage',
+    adjust: { temperature: 10, tint: 8, contrast: -10, blacks: 25, saturation: -10, vignette: 20 },
+    splitTone: { shadows: [40, 60, 90], highlights: [255, 235, 200], strength: 0.25 },
+  },
+  {
+    key: 'kodak',
+    label: 'ฟิล์มอบอุ่น',
+    group: 'vintage',
+    adjust: { temperature: 20, saturation: 10, contrast: 10, blacks: 15 },
+    splitTone: { shadows: [60, 40, 30], highlights: [255, 220, 170], strength: 0.3 },
+  },
+  {
+    key: 'seventies',
+    label: 'ยุค 70',
+    group: 'vintage',
+    adjust: { temperature: 25, saturation: -25, blacks: 40, contrast: -20 },
+    splitTone: { shadows: [90, 60, 40], highlights: [255, 200, 120], strength: 0.3 },
+  },
+  {
+    key: 'cross',
+    label: 'ครอสโปรเซส',
+    group: 'vintage',
+    adjust: { contrast: 25, saturation: 20 },
+    splitTone: { shadows: [0, 60, 120], highlights: [255, 240, 140], strength: 0.45 },
+  },
+  {
+    key: 'retro-green',
+    label: 'ฟิล์มเขียว',
+    group: 'vintage',
+    adjust: { tint: -20, blacks: 25, contrast: -10 },
+    splitTone: { shadows: [30, 70, 50], highlights: [240, 230, 190], strength: 0.35 },
+  },
   { key: 'sepia', label: 'ซีเปีย', group: 'vintage', adjust: {}, duotone: [[50, 30, 15], [245, 225, 190]] },
   { key: 'fade', label: 'ซีดจาง', group: 'vintage', adjust: { contrast: -30, blacks: 40, saturation: -30 } },
+  { key: 'noir', label: 'นัวร์', group: 'mono', adjust: { contrast: 50, clarity: 20, vignette: 45 }, mono: true },
+  { key: 'silver', label: 'เงินยวง', group: 'mono', adjust: { contrast: -10, brightness: 10, highlights: 10, blacks: 15 }, mono: true },
+  { key: 'red-filter', label: 'ฟิลเตอร์แดง', group: 'mono', adjust: { contrast: 25 }, mono: true, monoMix: [0.8, 0.2, 0] },
+  { key: 'soft-mono', label: 'ขาวดำนุ่ม', group: 'mono', adjust: { contrast: -25, blacks: 25, brightness: 5 }, mono: true },
+  { key: 'high-key', label: 'ไฮคีย์', group: 'mono', adjust: { brightness: 25, contrast: -15, shadows: 30 }, mono: true },
+  { key: 'duo-violet', label: 'ม่วงทูโทน', group: 'duotone', adjust: {}, duotone: [[40, 10, 90], [255, 170, 120]] },
+  { key: 'duo-ocean', label: 'ทะเลลึก', group: 'duotone', adjust: { contrast: 10 }, duotone: [[10, 30, 80], [120, 230, 220]] },
+  { key: 'duo-pink', label: 'ชมพูคราม', group: 'duotone', adjust: { contrast: 10 }, duotone: [[40, 20, 110], [255, 120, 170]] },
+  { key: 'duo-lime', label: 'มะนาว', group: 'duotone', adjust: { contrast: 10 }, duotone: [[20, 60, 40], [210, 255, 90]] },
+  { key: 'duo-fire', label: 'เพลิง', group: 'duotone', adjust: { contrast: 15 }, duotone: [[90, 10, 20], [255, 200, 60]] },
+  { key: 'selenium', label: 'ซีลีเนียม', group: 'duotone', adjust: { contrast: 15 }, duotone: [[30, 25, 45], [235, 228, 238]] },
+  {
+    key: 'teal-orange',
+    label: 'ฟ้าส้มฮอลลีวูด',
+    group: 'cinema',
+    adjust: { contrast: 15, saturation: 10 },
+    splitTone: { shadows: [0, 128, 140], highlights: [255, 160, 80], strength: 0.5 },
+  },
+  {
+    key: 'blockbuster',
+    label: 'บล็อกบัสเตอร์',
+    group: 'cinema',
+    adjust: { contrast: 25, vibrance: 15, vignette: 25 },
+    splitTone: { shadows: [20, 90, 140], highlights: [255, 190, 120], strength: 0.4 },
+  },
+  {
+    key: 'matrix',
+    label: 'เมทริกซ์',
+    group: 'cinema',
+    adjust: { tint: -40, saturation: -30, contrast: 20 },
+    splitTone: { shadows: [10, 80, 40], highlights: [170, 255, 170], strength: 0.4 },
+  },
+  {
+    key: 'moody',
+    label: 'มู้ดดี้',
+    group: 'cinema',
+    adjust: { saturation: -35, contrast: 20, vignette: 35 },
+    splitTone: { shadows: [30, 40, 70], highlights: [200, 180, 150], strength: 0.3 },
+  },
+  { key: 'bleach', label: 'บลีชบายพาส', group: 'cinema', adjust: { saturation: -55, contrast: 40, clarity: 25 } },
+  {
+    key: 'dune',
+    label: 'ทะเลทราย',
+    group: 'cinema',
+    adjust: { temperature: 30, saturation: -10, contrast: 10 },
+    splitTone: { shadows: [120, 70, 30], highlights: [255, 210, 150], strength: 0.35 },
+  },
+  {
+    key: 'neon',
+    label: 'นีออน',
+    group: 'neon',
+    adjust: { saturation: 60, contrast: 25 },
+    splitTone: { shadows: [80, 0, 160], highlights: [0, 255, 230], strength: 0.45 },
+  },
+  {
+    key: 'cyberpunk',
+    label: 'ไซเบอร์พังก์',
+    group: 'neon',
+    adjust: { contrast: 25, saturation: 30, tint: 20 },
+    splitTone: { shadows: [40, 0, 120], highlights: [255, 40, 200], strength: 0.5 },
+  },
+  {
+    key: 'vaporwave',
+    label: 'เวเปอร์เวฟ',
+    group: 'neon',
+    adjust: { contrast: -10, blacks: 20, saturation: 20 },
+    splitTone: { shadows: [60, 40, 180], highlights: [255, 140, 220], strength: 0.5 },
+  },
+  {
+    key: 'candy',
+    label: 'ลูกกวาด',
+    group: 'neon',
+    adjust: { saturation: 35, brightness: 10, contrast: -10, tint: 15 },
+    splitTone: { shadows: [140, 100, 255], highlights: [255, 200, 220], strength: 0.25 },
+  },
+  {
+    key: 'acid',
+    label: 'แอซิด',
+    group: 'neon',
+    adjust: { saturation: 80, contrast: 30 },
+    splitTone: { shadows: [0, 160, 60], highlights: [255, 240, 0], strength: 0.4 },
+  },
 ];
 
 export function findFilter(key: string | null | undefined): FilterPreset | null {
@@ -86,10 +233,18 @@ export function isNeutral(adjust: ImageAdjust, filter: FilterPreset | null): boo
   return !filter && Object.values(adjust).every((v) => v === 0);
 }
 
+/// ImageData หรือบัฟเฟอร์ที่หน้าตาเหมือนกัน (เทสต์ใช้ได้โดยไม่ต้องมี canvas)
+export interface PixelBuffer {
+  data: Uint8ClampedArray;
+  width: number;
+  height: number;
+}
+
 const clamp = (v: number) => (v < 0 ? 0 : v > 255 ? 255 : v);
+const MONO_WEIGHTS: Rgb = [0.299, 0.587, 0.114];
 
 /// ประมวลผลพิกเซลในที่ (ImageData ขนาดใดก็ได้)
-export function applyAdjust(data: ImageData, a: ImageAdjust, filter: FilterPreset | null, intensity: number) {
+export function applyAdjust(data: PixelBuffer, a: ImageAdjust, filter: FilterPreset | null, intensity: number) {
   const px = data.data;
   const w = data.width;
   const h = data.height;
@@ -113,7 +268,8 @@ export function applyAdjust(data: ImageData, a: ImageAdjust, filter: FilterPrese
       let b = px[i + 2];
 
       if (filter?.mono) {
-        const l = 0.299 * r + 0.587 * g + 0.114 * b;
+        const mix = filter.monoMix ?? MONO_WEIGHTS;
+        const l = mix[0] * r + mix[1] * g + mix[2] * b;
 
         r = r + (l - r) * k;
         g = g + (l - g) * k;
@@ -163,6 +319,17 @@ export function applyAdjust(data: ImageData, a: ImageAdjust, filter: FilterPrese
         b = gray + (b - gray) * s;
       }
 
+      if (filter?.splitTone) {
+        const { shadows: dark, highlights: light, strength } = filter.splitTone;
+        const t = clamp(0.299 * r + 0.587 * g + 0.114 * b) / 255;
+        const ws = (1 - t) * (1 - t) * strength * k;
+        const wh = t * t * strength * k;
+
+        r += (dark[0] - 128) * ws + (light[0] - 128) * wh;
+        g += (dark[1] - 128) * ws + (light[1] - 128) * wh;
+        b += (dark[2] - 128) * ws + (light[2] - 128) * wh;
+      }
+
       if (filter?.duotone) {
         const t = clamp(0.299 * r + 0.587 * g + 0.114 * b) / 255;
         const [dark, light] = filter.duotone;
@@ -201,7 +368,7 @@ export function applyAdjust(data: ImageData, a: ImageAdjust, filter: FilterPrese
 }
 
 /// ความคมชัด: unsharp mask แบบ 3×3 (ค่าติดลบ = นุ่มลง)
-function convolveSharpen(data: ImageData, amount: number) {
+function convolveSharpen(data: PixelBuffer, amount: number) {
   const { width: w, height: h } = data;
   const src = new Uint8ClampedArray(data.data);
   const px = data.data;
@@ -307,7 +474,7 @@ function parseRgb(color: string): [number, number, number] | null {
 const HUE_RANGE = 35;
 
 /// ปรับเฉพาะพิกเซลที่เฉดสีใกล้สีที่เลือก (ห่างไม่เกิน ±35° ค่อยๆ จางลง) · สีเทาแทบไม่ถูกแตะ
-export function applyColorEdits(data: ImageData, edits: ColorEdit[]) {
+export function applyColorEdits(data: PixelBuffer, edits: ColorEdit[]) {
   const targets = edits
     .filter((e) => e.hue || e.saturation || e.lightness)
     .map((e) => {

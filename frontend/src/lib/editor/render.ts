@@ -4,7 +4,9 @@ import {
   PLACEHOLDER_FILL, PLACEHOLDER_HINT, PLACEHOLDER_ICON, PLACEHOLDER_INK, cellArea, cellImages, coverRect, frameArea, frameDecor, frameMaskPath, gridCellRects,
   roundRectPath, type Box,
 } from './frames';
-import { applyAdjust, applyColorEdits, effectiveAdjust, findFilter, isNeutral } from './image-filters';
+import { compositeOperation } from './blend';
+import { needsPixels, pipelineKey, runPipeline } from './image-pipeline';
+import { applyLayerStyle, hasLayerStyle } from './layer-style';
 import { coverRect as videoCoverCrop, trimRange } from './media';
 import { canvasPaint } from './paint';
 import { drawTable, tableFonts } from './table-render';
@@ -771,14 +773,97 @@ function drawPath(ctx: CanvasRenderingContext2D, el: PathElement) {
 
 // ── รูปภาพ ──────────────────────────────────────────────────────────
 
-/// รูปที่ผ่านการปรับแสงสี/ฟิลเตอร์แล้ว — ประมวลผลครั้งเดียวต่อชุดค่า แล้วเก็บไว้ใช้ซ้ำ
+/// รูปที่ผ่านการปรับแสงสี/ฟิลเตอร์/เอฟเฟกต์แล้ว — ประมวลผลครั้งเดียวต่อชุดค่า แล้วเก็บไว้ใช้ซ้ำ
 const processed = new Map<string, HTMLCanvasElement>();
 const PROCESS_LIMIT = 1600;
 
-/// ค่าของรูปที่ตัวประมวลผลพิกเซลใช้ — รูปเดี่ยว (ImageElement) และรูปในกรอบ/กริด (FrameImage)
-type ProcessSpec = Pick<ImageElement, 'src' | 'crop' | 'adjust' | 'filter' | 'filterIntensity' | 'colorEdits' | 'erase'>;
+/// ระหว่างลากแถบเลื่อน/จุดเส้นโค้ง (store.beginGesture → endGesture) ประมวลผลบนภาพย่อก่อน แล้วทำความละเอียดเต็ม
+/// เมื่อปล่อย หรือเมื่อหยุดนิ่ง ~250ms — เอฟเฟกต์หนักจึงไม่ทำให้จอค้างตอนลาก
+/// ขนาดทุกค่าเป็นสัดส่วนของรูป ภาพย่อจึงหน้าตาเหมือนกัน · นอกช่วงลาก (รวมการส่งออกทุกแบบ) ใช้ความละเอียดเต็มเสมอ
+const drafts = new Map<string, HTMLCanvasElement>();
+const DRAFT_LIMIT = 640;
+const STYLE_LIMIT = 1200;
+const DRAFT_SETTLE = 250;
+/// งานความละเอียดเต็มที่ค้างอยู่ — เก็บเฉพาะค่าล่าสุดของแต่ละรูป
+const pendingFull = new Map<string, () => void>();
+let settleTimer: ReturnType<typeof setTimeout> | null = null;
+let draftMode = false;
 
-function sourceRect(el: ProcessSpec, img: HTMLImageElement) {
+function settle() {
+  if (settleTimer) clearTimeout(settleTimer);
+  settleTimer = null;
+
+  const jobs = [...pendingFull.values()];
+
+  pendingFull.clear();
+  for (const job of jobs) job();
+  drafts.clear();
+  if (jobs.length) onImageReady();
+}
+
+/// เปิดเมื่อเริ่มลากตัวควบคุม · ปิดเมื่อปล่อย (แล้วทำความละเอียดเต็มของค่าสุดท้ายทันทีถัดไป)
+export function setDraftMode(on: boolean) {
+  draftMode = on;
+
+  if (!on && pendingFull.size > 0) {
+    if (settleTimer) clearTimeout(settleTimer);
+    settleTimer = setTimeout(settle, 0);
+  }
+}
+
+/// งานแคชตามคีย์ · `group` = รูป/ชั้นที่งานนี้เป็นของ (ค่าล่าสุดของ group เท่านั้นที่ทำความละเอียดเต็มภายหลัง)
+function qualityCached(key: string, group: string, size: number, compute: (limit: number) => HTMLCanvasElement): HTMLCanvasElement {
+  const full = processed.get(key);
+
+  if (full) return full;
+
+  if (draftMode && size > DRAFT_LIMIT * 1.25) {
+    let draft = drafts.get(key);
+
+    if (!draft) {
+      draft = compute(DRAFT_LIMIT);
+      if (drafts.size > 8) drafts.delete(drafts.keys().next().value!);
+      drafts.set(key, draft);
+    }
+
+    // ทำความละเอียดเต็มเฉพาะค่าล่าสุดของรูปนี้ เมื่อหยุดลาก
+    pendingFull.set(group, () => {
+      if (!processed.has(key)) remember(key, compute(PROCESS_LIMIT));
+    });
+    if (settleTimer) clearTimeout(settleTimer);
+    settleTimer = setTimeout(settle, DRAFT_SETTLE);
+
+    return draft;
+  }
+
+  pendingFull.delete(group);
+
+  const canvas = compute(PROCESS_LIMIT);
+
+  remember(key, canvas);
+
+  return canvas;
+}
+
+function remember(key: string, canvas: HTMLCanvasElement) {
+  if (processed.size > 24) processed.delete(processed.keys().next().value!);
+  processed.set(key, canvas);
+}
+
+/// ค่าของรูปที่ตัวประมวลผลพิกเซลใช้ — รูปเดี่ยว (ImageElement) และรูปในกรอบ/กริด (FrameImage)
+type ProcessSpec = Pick<ImageElement, 'src' | 'crop' | 'adjust' | 'filter' | 'filterIntensity' | 'colorEdits' | 'erase' | 'levels' | 'curves' | 'effects'>;
+
+interface ImageSource {
+  source: CanvasImageSource;
+  sx: number;
+  sy: number;
+  sw: number;
+  sh: number;
+  /// คีย์แคชของผลลัพธ์ (ใช้ต่อยอดสไตล์เลเยอร์)
+  key: string;
+}
+
+function sourceRect(el: Pick<ProcessSpec, 'crop'>, img: HTMLImageElement) {
   const crop = el.crop ?? { x: 0, y: 0, width: 1, height: 1 };
 
   return {
@@ -805,38 +890,31 @@ function eraseHash(strokes: EraseStroke[]): string {
   return `${strokes.length}:${(h >>> 0).toString(36)}`;
 }
 
-function processedImage(el: ProcessSpec, img: HTMLImageElement): { source: CanvasImageSource; sx: number; sy: number; sw: number; sh: number } {
+function processedImage(el: ProcessSpec, img: HTMLImageElement): ImageSource {
   const rect = sourceRect(el, img);
-  const filter = findFilter(el.filter);
-  const intensity = el.filterIntensity ?? 100;
-  const adjust = effectiveAdjust(el.adjust, filter, intensity);
-  const pixelWork = { ...adjust, blur: 0 };
-  const colorEdits = (el.colorEdits ?? []).filter((e) => e.hue || e.saturation || e.lightness);
   const erase = el.erase ?? [];
-  const pixels = !isNeutral(pixelWork, filter) || colorEdits.length > 0;
+  const pixels = needsPixels(el);
+  const cropKey = `${el.src}|${JSON.stringify(el.crop ?? null)}`;
 
-  if ((!pixels && erase.length === 0) || typeof document === 'undefined') return { source: img, ...rect };
+  if ((!pixels && erase.length === 0) || typeof document === 'undefined') return { source: img, ...rect, key: cropKey };
 
-  const key = `${el.src}|${JSON.stringify(el.crop ?? null)}|${JSON.stringify(pixelWork)}|${el.filter ?? ''}|${intensity}|${JSON.stringify(colorEdits)}|${eraseHash(erase)}`;
-  let canvas = processed.get(key);
+  const key = `${cropKey}|${pixels ? pipelineKey(el) : ''}|${eraseHash(erase)}`;
+  const canvas = qualityCached(key, el.src, Math.max(rect.sw, rect.sh), (limit) => {
+    const scale = Math.min(1, limit / Math.max(rect.sw, rect.sh));
+    const out = document.createElement('canvas');
 
-  if (!canvas) {
-    const scale = Math.min(1, PROCESS_LIMIT / Math.max(rect.sw, rect.sh));
+    out.width = Math.max(1, Math.round(rect.sw * scale));
+    out.height = Math.max(1, Math.round(rect.sh * scale));
 
-    canvas = document.createElement('canvas');
-    canvas.width = Math.max(1, Math.round(rect.sw * scale));
-    canvas.height = Math.max(1, Math.round(rect.sh * scale));
+    const c = out.getContext('2d', { willReadFrequently: true })!;
 
-    const c = canvas.getContext('2d', { willReadFrequently: true })!;
-
-    c.drawImage(img, rect.sx, rect.sy, rect.sw, rect.sh, 0, 0, canvas.width, canvas.height);
+    c.drawImage(img, rect.sx, rect.sy, rect.sw, rect.sh, 0, 0, out.width, out.height);
 
     if (pixels) {
       try {
-        const data = c.getImageData(0, 0, canvas.width, canvas.height);
+        const data = c.getImageData(0, 0, out.width, out.height);
 
-        if (!isNeutral(pixelWork, filter)) applyAdjust(data, pixelWork, filter, intensity);
-        if (colorEdits.length) applyColorEdits(data, colorEdits);
+        runPipeline(data, el);
         c.putImageData(data, 0, 0);
       } catch {
         // อ่านพิกเซลไม่ได้ (รูปข้ามโดเมน) — แสดงรูปเดิม
@@ -866,11 +944,53 @@ function processedImage(el: ProcessSpec, img: HTMLImageElement): { source: Canva
       c.restore();
     }
 
-    if (processed.size > 24) processed.delete(processed.keys().next().value!);
-    processed.set(key, canvas);
-  }
+    return out;
+  });
 
-  return { source: canvas, sx: 0, sy: 0, sw: canvas.width, sh: canvas.height };
+  return { source: canvas, sx: 0, sy: 0, sw: canvas.width, sh: canvas.height, key };
+}
+
+/// เส้นขอบสติกเกอร์ แสงเรือง และเงาด้านใน (ImageElement.layerStyle) — ผลใหญ่กว่ารูปข้างละ `pad`
+/// คืนสัดส่วนที่ยื่นออก (`padX` `padY` เทียบความกว้าง/สูงของรูป) ให้ผู้วาดขยายกล่องตาม
+function styledImage(el: ImageElement, base: ImageSource): ImageSource & { padX: number; padY: number } {
+  const style = el.layerStyle;
+
+  if (!hasLayerStyle(style) || typeof document === 'undefined') return { ...base, padX: 0, padY: 0 };
+
+  const key = `${base.key}|style:${JSON.stringify(style)}`;
+  const canvas = qualityCached(key, `${el.src}|style`, Math.max(base.sw, base.sh), (limit) => {
+    // สไตล์เลเยอร์ (distance transform สองรอบ + เบลอ) ทำที่ไม่เกิน 1200px — เส้นขอบ/แสงนุ่มอยู่แล้ว ต่างจาก 1600px แทบไม่เห็น
+    const scale = Math.min(1, Math.min(limit, STYLE_LIMIT) / Math.max(base.sw, base.sh));
+    const w = Math.max(1, Math.round(base.sw * scale));
+    const h = Math.max(1, Math.round(base.sh * scale));
+    const work = document.createElement('canvas');
+
+    work.width = w;
+    work.height = h;
+
+    const c = work.getContext('2d', { willReadFrequently: true })!;
+
+    c.drawImage(base.source, base.sx, base.sy, base.sw, base.sh, 0, 0, w, h);
+
+    try {
+      const result = applyLayerStyle(c.getImageData(0, 0, w, h), style!);
+      const out = document.createElement('canvas');
+
+      out.width = result.pixels.width;
+      out.height = result.pixels.height;
+      out.getContext('2d')!.putImageData(new ImageData(result.pixels.data as Uint8ClampedArray<ArrayBuffer>, result.pixels.width, result.pixels.height), 0, 0);
+      out.dataset.pad = String(result.pad);
+
+      return out;
+    } catch {
+      return work;
+    }
+  });
+
+  const pad = Number(canvas.dataset.pad ?? 0);
+  const inner = { w: Math.max(1, canvas.width - pad * 2), h: Math.max(1, canvas.height - pad * 2) };
+
+  return { source: canvas, sx: 0, sy: 0, sw: canvas.width, sh: canvas.height, key, padX: pad / inner.w, padY: pad / inner.h };
 }
 
 function drawImage(ctx: CanvasRenderingContext2D, el: ImageElement) {
@@ -883,33 +1003,36 @@ function drawImage(ctx: CanvasRenderingContext2D, el: ImageElement) {
     return;
   }
 
-  const { source, sx, sy, sw, sh } = processedImage(el, img);
+  const { source, sx, sy, sw, sh, padX, padY } = styledImage(el, processedImage(el, img));
   const blur = el.adjust?.blur ?? 0;
+  // กล่องที่วาดจริง: ขยายออกเมื่อมีเส้นขอบสติกเกอร์/แสงเรือง
+  const box = { x: el.x - padX * el.width, y: el.y - padY * el.height, width: el.width * (1 + 2 * padX), height: el.height * (1 + 2 * padY) };
+  const radius = el.cornerRadius > 0 ? el.cornerRadius + Math.max(padX * el.width, padY * el.height) : 0;
 
   // เงาของรูปต้องตามรูปร่างของรูป: ถ้ามีขอบมนต้องวาดรูปที่ตัดขอบแล้วลงผืนแยกก่อน
-  if (el.shadow && el.cornerRadius > 0 && typeof document !== 'undefined') {
+  if (el.shadow && radius > 0 && typeof document !== 'undefined') {
     const off = document.createElement('canvas');
-    const scale = Math.min(2, Math.max(1, sw / el.width));
+    const scale = Math.min(2, Math.max(1, sw / box.width));
 
-    off.width = Math.max(1, Math.round(el.width * scale));
-    off.height = Math.max(1, Math.round(el.height * scale));
+    off.width = Math.max(1, Math.round(box.width * scale));
+    off.height = Math.max(1, Math.round(box.height * scale));
 
     const o = off.getContext('2d')!;
 
     o.scale(scale, scale);
-    roundedRect(o, 0, 0, el.width, el.height, el.cornerRadius);
+    roundedRect(o, 0, 0, box.width, box.height, radius);
     o.clip();
-    paintImage(o, source, sx, sy, sw, sh, { ...el, x: 0, y: 0 }, blur);
-    ctx.drawImage(off, el.x, el.y, el.width, el.height);
+    paintImage(o, source, sx, sy, sw, sh, { ...box, x: 0, y: 0, flipX: el.flipX, flipY: el.flipY }, blur);
+    ctx.drawImage(off, box.x, box.y, box.width, box.height);
   } else {
     ctx.save();
 
-    if (el.cornerRadius > 0) {
-      roundedRect(ctx, el.x, el.y, el.width, el.height, el.cornerRadius);
+    if (radius > 0) {
+      roundedRect(ctx, box.x, box.y, box.width, box.height, radius);
       ctx.clip();
     }
 
-    paintImage(ctx, source, sx, sy, sw, sh, el, blur);
+    paintImage(ctx, source, sx, sy, sw, sh, { ...box, flipX: el.flipX, flipY: el.flipY }, blur);
     ctx.restore();
   }
 
@@ -926,6 +1049,13 @@ function drawImage(ctx: CanvasRenderingContext2D, el: ImageElement) {
     ctx.stroke();
     ctx.setLineDash([]);
   }
+}
+
+/// ภาพก่อนและหลังแก้ไข (ภาพเทียบในแผงแก้ไขรูป) — ใช้ตัวประมวลผลชุดเดียวกับบนผืนผ้าใบ
+export function imageCompareSources(el: ProcessSpec, img: HTMLImageElement): { before: ImageSource; after: ImageSource } {
+  const before = { source: img as CanvasImageSource, ...sourceRect(el, img), key: '' };
+
+  return { before, after: processedImage(el, img) };
 }
 
 function paintImage(
@@ -1163,6 +1293,64 @@ function watchFont(family: string, weight: 400 | 700) {
 export function drawElement(ctx: CanvasRenderingContext2D, el: CanvasElement, progress?: number, videoFrame?: VideoFrameSource) {
   if (el.hidden || el.opacity <= 0) return;
 
+  const mode = compositeOperation(el.blendMode);
+
+  if (mode === 'source-over') {
+    drawElementBody(ctx, el, progress, videoFrame);
+    return;
+  }
+
+  // โหมดผสมสี: วาดทั้งชิ้นลงชั้นแยกก่อน แล้วผสมกับของข้างล่างทีเดียว
+  // (ไม่งั้นส่วนที่ชิ้นงานทับตัวเอง เช่น เส้นขอบบนสีพื้น จะถูกผสมซ้ำ)
+  const layer = blendLayer(ctx);
+
+  ctx.save();
+
+  if (layer) {
+    drawElementBody(layer, el, progress, videoFrame);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = mode;
+    ctx.drawImage(layer.canvas, 0, 0);
+  } else {
+    ctx.globalCompositeOperation = mode;
+    drawElementBody(ctx, el, progress, videoFrame);
+  }
+
+  ctx.restore();
+}
+
+let blendCanvas: HTMLCanvasElement | null = null;
+
+/// ชั้นวาดชั่วคราวขนาดเท่าผืนปลายทาง (ใช้ซ้ำ) ตั้ง transform ให้ตรงกัน · null = สร้างไม่ได้ (เช่นในเทสต์)
+function blendLayer(target: CanvasRenderingContext2D): CanvasRenderingContext2D | null {
+  if (typeof document === 'undefined' || !target.canvas || typeof target.getTransform !== 'function') return null;
+
+  const { width, height } = target.canvas;
+
+  blendCanvas ??= document.createElement('canvas');
+
+  if (blendCanvas.width !== width) blendCanvas.width = width;
+  if (blendCanvas.height !== height) blendCanvas.height = height;
+
+  let c: CanvasRenderingContext2D | null = null;
+
+  try {
+    c = blendCanvas.getContext('2d');
+  } catch {
+    return null;
+  }
+
+  if (!c || c === target) return null;
+
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  c.clearRect(0, 0, width, height);
+  c.setTransform(target.getTransform());
+
+  return c;
+}
+
+function drawElementBody(ctx: CanvasRenderingContext2D, el: CanvasElement, progress?: number, videoFrame?: VideoFrameSource) {
   ctx.save();
   ctx.globalAlpha = el.opacity;
 

@@ -19,6 +19,7 @@ import {
   type ShapeElement, type StrokeStyle, type TableElement, type TextElement, type VideoElement,
 } from '@/lib/editor/types';
 import { useEditorUi, type ColorTarget } from '@/lib/editor/ui-store';
+import { BlendModeField } from './blend-mode-field';
 import { ChartTools } from './chart-panel';
 import { PopoverButton, RangeField, ToolbarButton, ToolbarDivider } from './controls';
 import { FrameShapeGlyph, GridLayoutGlyph } from './frame-glyphs';
@@ -159,6 +160,7 @@ function TransparencyButton({ els }: { els: CanvasElement[] }) {
   return (
     <PopoverButton label="ความโปร่งใส" trigger={<TransparencyIcon />}>
       <RangeField label="ความโปร่งใส" value={value} min={0} max={100} onChange={(v) => patch(ids, { opacity: v / 100 })} />
+      <BlendModeField els={els} />
     </PopoverButton>
   );
 }

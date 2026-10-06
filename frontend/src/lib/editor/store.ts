@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { announceInternalCopy } from './clipboard-bridge';
 import { fitTemplate } from './fit-template';
 import { boundingBox, unionBox, type Rect } from './geometry';
-import { measureTextHeight } from './render';
+import { measureTextHeight, setDraftMode } from './render';
 import { mapTableColors } from './table';
 import { fitTableBox } from './table-render';
 import type { Guide } from './snapping';
@@ -258,6 +258,7 @@ export const useEditor = create<EditorState>((set, get) => {
 
     load(meta, doc) {
       gestureSnapshot = null;
+      setDraftMode(false);
       set({
         ...meta,
         baseWidth: meta.width,
@@ -343,12 +344,15 @@ export const useEditor = create<EditorState>((set, get) => {
 
     beginGesture() {
       gestureSnapshot = get().doc;
+      // รูปที่ค่าเปลี่ยนระหว่างลากประมวลผลบนภาพย่อก่อน (render.ts)
+      setDraftMode(true);
     },
 
     endGesture() {
       const snapshot = gestureSnapshot;
 
       gestureSnapshot = null;
+      setDraftMode(false);
 
       const state = get();
 
@@ -792,7 +796,7 @@ export interface StyleSnapshot {
 const STYLE_KEYS: Record<CanvasElement['type'], string[]> = {
   text: ['fontFamily', 'fontSize', 'fontWeight', 'italic', 'underline', 'strike', 'uppercase', 'align', 'lineHeight', 'letterSpacing', 'color', 'effect', 'list', 'curve'],
   shape: ['fill', 'stroke', 'strokeWidth', 'strokeStyle', 'cornerRadius'],
-  image: ['cornerRadius', 'adjust', 'filter', 'filterIntensity', 'border'],
+  image: ['cornerRadius', 'adjust', 'filter', 'filterIntensity', 'border', 'colorEdits', 'levels', 'curves', 'effects', 'layerStyle'],
   svg: ['color'],
   path: ['color', 'strokeWidth'],
   table: ['fontFamily', 'fontSize', 'color', 'align', 'header', 'headerFill', 'headerColor', 'stripeFill', 'borderColor', 'borderWidth', 'lines'],
@@ -814,7 +818,7 @@ export function styleOf(el: CanvasElement): StyleSnapshot {
   return {
     type: el.type,
     color: color && !color.includes('gradient') ? color : null,
-    common: pick(el, ['opacity', 'shadow', 'animation']),
+    common: pick(el, ['opacity', 'shadow', 'animation', 'blendMode']),
     specific: pick(el, STYLE_KEYS[el.type]),
   };
 }

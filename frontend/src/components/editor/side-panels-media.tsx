@@ -1,22 +1,23 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, ChevronRight, Search, SlidersHorizontal, Upload } from 'lucide-react';
+import { Check, ChevronRight, Search, SlidersHorizontal, Sparkles, SunMedium, Upload } from 'lucide-react';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { ErrorState, Spinner, cx, errorMessage, useToast } from '@/components/csmju/primitives';
 import { api, qs } from '@/lib/csmju/api';
 import { FONT_SETS } from '@/lib/editor/factory';
 import { FONT_FAMILIES, cssFamily, ensureFont, type FontFamily } from '@/lib/editor/fonts';
-import { ADJUST_ZERO, FILTER_GROUPS, FILTER_PRESETS, applyAdjust, dominantColors, effectiveAdjust, type FilterPreset } from '@/lib/editor/image-filters';
+import { ADJUST_ZERO, FILTER_GROUPS, FILTER_PRESETS, applyAdjust, dominantColors, effectiveAdjust, findFilter, type FilterPreset } from '@/lib/editor/image-filters';
 import { fillCell, isFrameLike, loadImageSource, patchCellImage } from '@/lib/editor/frame-actions';
 import { cellImages } from '@/lib/editor/frames';
 import { getImage } from '@/lib/editor/render';
 import { currentPage, useEditor } from '@/lib/editor/store';
-import type { CanvasElement, Crop, ImageAdjust, ImageElement, TextElement } from '@/lib/editor/types';
+import type { CanvasElement, Crop, FrameImage, ImageAdjust, ImageElement, TextElement } from '@/lib/editor/types';
 import { useEditorUi } from '@/lib/editor/ui-store';
 import type { Asset } from '@/lib/types';
 import { PanelHeader, PresetTile, RangeField, UnderlineTabs } from './controls';
 import { FontName } from './font-picker';
+import { ComparePreview, EffectsView, LayerStyleControls, StyleStrip, StylesView, TonesView, canReset, resetAllValues, type PhotoImage, type PhotoValues } from './photo-tools';
 import { ShadowControls } from './side-panels';
 
 function close() {
@@ -35,8 +36,8 @@ function patch(ids: string[], values: Partial<CanvasElement> | ((el: CanvasEleme
 }
 
 /// ค่าของรูปที่แผงแก้ไขรูปเปลี่ยน — ใช้ได้ทั้งรูปเดี่ยวและรูปในกรอบ/กริด
-type ImageValues = Partial<Pick<ImageElement, 'adjust' | 'filter' | 'filterIntensity' | 'colorEdits'>>;
-type ImageLike = Pick<ImageElement, 'src' | 'adjust' | 'filter' | 'filterIntensity' | 'colorEdits'>;
+type ImageValues = PhotoValues;
+type ImageLike = PhotoImage;
 
 interface ImageTarget {
   /// element ที่ถือรูป (เงาใส่ที่นี่)
@@ -62,7 +63,18 @@ function useImageTarget(): ImageTarget | null {
   const cell = frameCell?.id === holder.id ? frameCell.cell : 0;
   const fill = cellImages(holder)[cell];
 
-  return fill ? { owner: holder, image: fill, cell, apply: (values) => patchCellImage(holder.id, cell, values) } : null;
+  // รูปในกรอบ/กริด: ไม่มีสไตล์เลเยอร์ เส้นขอบ หรือเงาของตัวเอง (เงาอยู่ที่กรอบ)
+  const cellApply = (values: ImageValues) => {
+    const rest: Partial<FrameImage> = {};
+
+    for (const key of ['adjust', 'filter', 'filterIntensity', 'colorEdits', 'effects', 'levels', 'curves'] as const) {
+      if (key in values) Object.assign(rest, { [key]: values[key] });
+    }
+
+    patchCellImage(holder.id, cell, rest);
+  };
+
+  return fill ? { owner: holder, image: fill, cell, apply: cellApply } : null;
 }
 
 // ── ฟอนต์ ──────────────────────────────────────────────────────────
@@ -406,7 +418,7 @@ function SelectiveColor({ el, colors, apply }: { el: ImageLike; colors: string[]
 export function ImageEditPanel() {
   const target = useImageTarget();
   const el = target?.image;
-  const [view, setView] = useState<'main' | 'adjust' | 'filters'>('main');
+  const [view, setView] = useState<'main' | 'adjust' | 'filters' | 'effects' | 'tones' | 'styles'>('main');
   const thumbs = useFilterThumbs(el);
   const colors = useMemo(() => {
     const img = el ? getImage(el.src) : null;
@@ -471,6 +483,19 @@ export function ImageEditPanel() {
     );
   }
 
+  const standalone = target.cell === null && target.owner.type === 'image' ? target.owner : null;
+  const ownerSize = standalone ? { width: standalone.width, height: standalone.height } : null;
+  const subView = (title: string, body: React.ReactNode) => (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <PanelHeader title={title} onBack={() => setView('main')} onClose={close} />
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-2 pb-6">{body}</div>
+    </div>
+  );
+
+  if (view === 'effects') return subView('เอฟเฟกต์ภาพ', <EffectsView image={el} apply={apply} />);
+  if (view === 'tones') return subView('ระดับสีและเส้นโค้ง', <TonesView image={el} apply={apply} />);
+  if (view === 'styles') return subView('สไตล์ภาพ', <StylesView image={el} apply={apply} owner={ownerSize} />);
+
   if (view === 'filters') {
     return (
       <div className="flex min-h-0 flex-1 flex-col">
@@ -497,12 +522,29 @@ export function ImageEditPanel() {
     <div className="flex min-h-0 flex-1 flex-col">
       <PanelHeader title="แก้ไขรูปภาพ" onClose={close} />
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-2 pb-6">
-        <button type="button" onClick={() => setView('adjust')} className="mb-6 flex min-h-14 w-full items-center gap-3 rounded-2xl border border-line-strong px-4 text-left text-csmju-body text-ink hover:bg-surface-muted">
-          <SlidersHorizontal aria-hidden className="size-5" />
-          <span className="flex-1 font-semibold">ปรับ</span>
-          <span className="text-csmju-caption text-muted">แสง สี พื้นผิว</span>
-          <ChevronRight aria-hidden className="size-5" />
-        </button>
+        <ComparePreview image={el} />
+        <div className="mb-6 flex flex-col gap-2">
+          {(
+            [
+              ['adjust', SlidersHorizontal, 'ปรับ', 'แสง สี พื้นผิว'],
+              ['tones', SunMedium, 'ระดับสีและเส้นโค้ง', 'Levels · Curves'],
+              ['effects', Sparkles, 'เอฟเฟกต์ภาพ', el.effects?.length ? `ใช้อยู่ ${el.effects.length}` : 'เบลอ ฮาล์ฟโทน กลิตช์ …'],
+            ] as const
+          ).map(([key, Icon, label, hint]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setView(key)}
+              className="flex min-h-14 w-full items-center gap-3 rounded-2xl border border-line-strong px-4 text-left text-csmju-body text-ink hover:bg-surface-muted"
+            >
+              <Icon aria-hidden className="size-5" />
+              <span className="flex-1 font-semibold">{label}</span>
+              <span className="text-csmju-caption text-muted">{hint}</span>
+              <ChevronRight aria-hidden className="size-5" />
+            </button>
+          ))}
+        </div>
+        <StyleStrip image={el} apply={apply} owner={ownerSize} onSeeAll={() => setView('styles')} />
         <section className="mb-6">
           <div className="mb-3 flex items-center justify-between">
             <h3 className="text-csmju-body font-bold text-ink">ฟิลเตอร์</h3>
@@ -510,13 +552,14 @@ export function ImageEditPanel() {
               ดูทั้งหมด
             </button>
           </div>
-          <div className="grid grid-cols-3 gap-3">{[null, FILTER_PRESETS[0], FILTER_PRESETS[1]].map(filterThumb)}</div>
+          <div className="grid grid-cols-3 gap-3">{[null, findFilter('mono'), findFilter('teal-orange')].map(filterThumb)}</div>
           {el.filter && (
             <div className="mt-4">
               <RangeField label="ความแรงของฟิลเตอร์" value={el.filterIntensity ?? 100} min={0} max={100} onChange={(v) => apply({ filterIntensity: v })} />
             </div>
           )}
         </section>
+        {standalone && <LayerStyleControls el={standalone} apply={apply} />}
         <section className="mb-6">
           <h3 className="mb-3 text-csmju-body font-bold text-ink">เงา</h3>
           <ShadowControls els={[target.owner]} />
@@ -540,6 +583,16 @@ export function ImageEditPanel() {
             </div>
           </section>
         )}
+      </div>
+      <div className="shrink-0 border-t border-line p-3">
+        <button
+          type="button"
+          disabled={!canReset(el)}
+          onClick={() => apply(resetAllValues(standalone !== null))}
+          className="min-h-11 w-full rounded-xl border border-line-strong text-csmju-caption font-semibold text-ink hover:bg-surface-muted disabled:opacity-50"
+        >
+          รีเซ็ตทั้งหมด
+        </button>
       </div>
     </div>
   );

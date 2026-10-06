@@ -31,7 +31,27 @@ export interface BaseElement {
   animation?: AnimationKind | null;
   /// ลิงก์เมื่อกดในโหมดพรีเซนต์/เว็บไซต์
   link?: string | null;
+  /// โหมดผสมสีกับชิ้นที่อยู่ข้างล่าง (ชื่อเดียวกับ CSS `mix-blend-mode`) · ไม่มี/null/`normal` = ทับปกติ
+  blendMode?: BlendMode | null;
 }
+
+export type BlendMode =
+  | 'normal'
+  | 'multiply'
+  | 'screen'
+  | 'overlay'
+  | 'darken'
+  | 'lighten'
+  | 'color-dodge'
+  | 'color-burn'
+  | 'hard-light'
+  | 'soft-light'
+  | 'difference'
+  | 'exclusion'
+  | 'hue'
+  | 'saturation'
+  | 'color'
+  | 'luminosity';
 
 export interface Shadow {
   x: number;
@@ -156,6 +176,78 @@ export interface ColorEdit {
 }
 
 /// รอยยางลบพิกเซล: `points` = [x0, y0, x1, y1, …] สัดส่วน 0–1 ของรูปเต็มก่อนครอป · `size` = เส้นผ่านศูนย์กลางเป็นสัดส่วนของความกว้างรูป
+/// ชนิดเอฟเฟกต์ภาพ (แผง "เอฟเฟกต์ภาพ") — สูตรและช่วงค่าของแต่ละชนิดอยู่ใน lib/editor/image-effects.ts
+export type ImageEffectKind =
+  | 'duotone'
+  | 'gradient-map'
+  | 'halftone'
+  | 'pixelate'
+  | 'glitch'
+  | 'grain'
+  | 'posterize'
+  | 'threshold'
+  | 'sketch'
+  | 'edges'
+  | 'emboss'
+  | 'oil'
+  | 'blur'
+  | 'motion-blur'
+  | 'zoom-blur'
+  | 'tilt-shift'
+  | 'chromatic'
+  | 'light-leak'
+  | 'color-overlay'
+  | 'invert';
+
+/// เอฟเฟกต์หนึ่งชั้น · ทำตามลำดับใน `effects` (ตัวแรกทำก่อน) หลังการปรับแสงสี ฟิลเตอร์ ระดับสี และเส้นโค้ง
+export interface ImageEffect {
+  kind: ImageEffectKind;
+  /// ค่าตัวเลขตามชนิด (ตาราง EFFECT_DEFS) · key ที่ขาด = ค่าเริ่มต้น · ขนาดเป็น % ของด้านสั้นของรูป
+  params?: Record<string, number>;
+  /// สีที่ใช้ (ดูโอโทน [เงา, แสง] · แผนที่ไล่สี 2–5 สีจากมืดไปสว่าง · ฮาล์ฟโทน [หมึก, กระดาษ] · ทับสี/แสงรั่ว [สี])
+  colors?: string[];
+  /// ปิดไว้ชั่วคราว (ค่ายังอยู่)
+  off?: boolean;
+}
+
+/// ระดับสีของช่องหนึ่ง: อินพุตจุดดำ/จุดขาว 0–255 · แกมมา 0.1–9.99 (1 = เดิม) · เอาต์พุตจุดดำ/จุดขาว 0–255
+export interface LevelsChannel {
+  black: number;
+  white: number;
+  gamma: number;
+  outBlack: number;
+  outWhite: number;
+}
+
+/// ระดับสี (Levels) · `master` ใช้กับทุกช่องหลังจากปรับรายช่องแล้ว · ช่องที่ไม่มี = ไม่ปรับ
+export interface ImageLevels {
+  master?: LevelsChannel | null;
+  red?: LevelsChannel | null;
+  green?: LevelsChannel | null;
+  blue?: LevelsChannel | null;
+}
+
+/// จุดบนเส้นโค้ง [อินพุต, เอาต์พุต] 0–255
+export type CurvePoint = [number, number];
+
+/// เส้นโค้ง (Curves) — ต่อจุดด้วยเส้นโค้งแบบไม่พุ่งเกิน (monotone cubic) · ช่องที่ไม่มี = เส้นตรง
+export interface ImageCurves {
+  master?: CurvePoint[] | null;
+  red?: CurvePoint[] | null;
+  green?: CurvePoint[] | null;
+  blue?: CurvePoint[] | null;
+}
+
+/// สไตล์เลเยอร์ของรูป (เหมาะกับรูปที่ลบพื้นหลังแล้ว) — ตามรูปร่างส่วนที่ทึบของรูป · ขนาดเป็น % ของด้านสั้นของรูป
+export interface ImageLayerStyle {
+  /// เส้นขอบสติกเกอร์รอบส่วนที่ทึบ
+  outline?: { size: number; color: string } | null;
+  /// แสงเรืองรอบรูป · opacity 0–100
+  glow?: { size: number; color: string; opacity: number } | null;
+  /// ขอบด้านในมืดลง (เงาด้านใน) · opacity 0–100
+  innerShadow?: { size: number; color: string; opacity: number } | null;
+}
+
 export interface EraseStroke {
   points: number[];
   size: number;
@@ -177,6 +269,12 @@ export interface ImageElement extends BaseElement {
   border?: Border | null;
   colorEdits?: ColorEdit[] | null;
   erase?: EraseStroke[] | null;
+  /// ระดับสี เส้นโค้ง และเอฟเฟกต์ภาพ (แผง "แก้ไขรูปภาพ")
+  levels?: ImageLevels | null;
+  curves?: ImageCurves | null;
+  effects?: ImageEffect[] | null;
+  /// เส้นขอบสติกเกอร์ แสงเรือง และเงาด้านใน
+  layerStyle?: ImageLayerStyle | null;
   /// ลบพื้นหลังแล้ว: `src` เป็นรูป PNG โปร่งใสที่สร้างใหม่ · เก็บรูปเดิมและค่าที่ใช้ไว้ให้คืนหรือลบใหม่ได้
   bgRemoved?: BgRemoved | null;
   /// ภาพที่นำเข้าจากเว็บอื่น (แผง "แหล่งภาพ"): แหล่งและหน้าต้นฉบับ — ใช้ใส่เครดิตและให้ CMS แสดงที่มา
@@ -301,6 +399,9 @@ export interface FrameImage {
   filterIntensity?: number;
   colorEdits?: ColorEdit[] | null;
   erase?: EraseStroke[] | null;
+  levels?: ImageLevels | null;
+  curves?: ImageCurves | null;
+  effects?: ImageEffect[] | null;
 }
 
 export type FrameShape = 'circle' | 'rounded' | 'square' | 'heart' | 'star' | 'blob' | 'arch' | 'polaroid' | 'phone' | 'laptop';
