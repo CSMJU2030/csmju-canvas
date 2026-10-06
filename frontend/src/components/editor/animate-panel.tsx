@@ -43,7 +43,9 @@ function same<T>(items: CanvasElement[], pick: (el: CanvasElement) => T): T | un
 }
 
 export function AnimatePanel() {
-  const [tab, setTab] = useState<Tab>('entry');
+  // แท็บอยู่ใน ui-store เพื่อให้เครื่องมืออื่นเปิดแผงนี้ที่แท็บที่ต้องการได้ (เช่น "การเปลี่ยนหน้า")
+  const tab = useEditorUi((s) => s.animateTab);
+  const setTab = (next: Tab) => useEditorUi.getState().set({ animateTab: next });
   const selection = useEditor((s) => s.selection);
   const pageElements = useEditor((s) => currentPage(s).elements);
   const selected = useMemo(() => pageElements.filter((el) => selection.includes(el.id)), [pageElements, selection]);

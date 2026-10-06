@@ -43,6 +43,13 @@ export function useShortcuts() {
         return;
       }
 
+      // / = ศูนย์รวมเครื่องมือ (แบบปุ่มลัด / ของ Canva)
+      if (!mod && !event.altKey && !event.shiftKey && event.key === '/') {
+        event.preventDefault();
+        ui.set({ overlay: ui.overlay === 'tools-hub' ? null : 'tools-hub' });
+        return;
+      }
+
       if (mod && !event.altKey && (event.key === '=' || event.key === '+')) {
         event.preventDefault();
         zoomBy(ZOOM_STEP);

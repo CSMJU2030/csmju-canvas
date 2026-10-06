@@ -197,6 +197,7 @@ export function Stage() {
   const editingTextId = useEditor((s) => s.editingTextId);
   const editingTable = useTableUi((s) => s.editing);
   const pagesLayout = useEditorUi((s) => s.pagesLayout);
+  const visionSim = useEditorUi((s) => s.visionSim);
 
   // ── การจัดวางหน้า และการแปลงพิกัด ─────────────────────────────────
 
@@ -1887,7 +1888,7 @@ export function Stage() {
             : 'ผืนผ้าใบ แสดงทุกหน้า — คลิกหน้าเพื่อเปิด ลากชิ้นงานไปวางบนหน้าอื่นเพื่อย้าย · ใช้แผงเลเยอร์เพื่อเลือกชิ้นงานด้วยคีย์บอร์ด'
         }
         tabIndex={0}
-        style={{ width: size.width, height: size.height, cursor }}
+        style={{ width: size.width, height: size.height, cursor, filter: visionSim ? `url(#csc-vision-${visionSim})` : undefined }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}

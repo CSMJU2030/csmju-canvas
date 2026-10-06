@@ -34,6 +34,8 @@ import { ColorPicker, RainbowSwatch, Swatch } from './color-picker';
 import { matchFonts, usePreloadFonts } from './font-picker';
 import { CreateFolderDialog, ProjectsPanel } from './project-panel';
 import { AnimatePanel } from './animate-panel';
+import { BrandPanel, StylesPanel } from './brand-panels';
+import { GeneratorsPanel, QrPanel } from './generator-panels';
 import { ColorPanel, EffectsPanel, PositionPanel } from './side-panels';
 import { ChartDataPanel } from './chart-panel';
 import { PanelHeader, UnderlineTabs } from './controls';
@@ -89,6 +91,10 @@ export const PANEL_LABELS: Record<PanelKey, string> = {
   'bg-remove': 'ลบพื้นหลัง',
   replace: 'แทนที่รูป',
   'chart-data': 'แก้ไขข้อมูลชาร์ต',
+  brand: 'ชุดแบรนด์',
+  styles: 'สไตล์',
+  qr: 'QR Code',
+  generators: 'ตัวสร้าง',
 };
 
 export function PanelContent({
@@ -134,6 +140,14 @@ export function PanelContent({
       );
     case 'notes':
       return <NotesPanel onClose={onClose} />;
+    case 'brand':
+      return <BrandPanel />;
+    case 'styles':
+      return <StylesPanel />;
+    case 'qr':
+      return <QrPanel />;
+    case 'generators':
+      return <GeneratorsPanel />;
     case 'background':
       return <BackgroundPanel />;
     case 'position':

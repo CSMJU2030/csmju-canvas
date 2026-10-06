@@ -47,6 +47,18 @@ export interface Template extends TemplateSummary {
   document: DesignDocument;
 }
 
+/// ชุดแบรนด์ (GET /api/v1/brand-kits)
+export interface BrandKit {
+  id: string;
+  name: string;
+  colors: string[];
+  headingFont: string | null;
+  bodyFont: string | null;
+  logos: { id: string; fileName: string; mimeType: string; contentUrl: string }[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Asset {
   id: string;
   fileName: string;

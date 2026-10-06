@@ -31,6 +31,7 @@ import { usePasteAndDropImport } from './file-import';
 import { ImportHintBar } from './image-sources-panel';
 import { useShortcuts } from './use-shortcuts';
 import { ActionToasts, ShortcutSheet } from './action-toasts';
+import { ToolsHub, VisionFilters } from './tools-hub';
 import { SourcesLayer } from './sources-window';
 
 export function EditorScreen({ id }: { id: string }) {
@@ -202,6 +203,8 @@ function EditorLayout({ needsThumbnail }: { needsThumbnail: boolean }) {
       <EditorDialogs />
       <VersionHistory />
       <ShortcutSheet />
+      <ToolsHub />
+      <VisionFilters />
       <ActionToasts />
       <ContextMenu />
       <SourcesLayer />

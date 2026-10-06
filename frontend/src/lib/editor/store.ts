@@ -141,6 +141,8 @@ export interface EditorState extends EditorMeta {
   setBackground(color: string | null): void;
   /// แทนทั้งงานด้วยเอกสารใหม่ (ใช้เทมเพลตจากแผง "ออกแบบ") — ย้อนกลับได้ด้วย undo
   replaceDocument(doc: DesignDocument): void;
+  /// แทนเนื้องานทั้งก้อนแต่คงหน้าที่เปิดและการเลือกเดิม (สไตล์ทั้งงาน ชุดแบรนด์) — undo ขั้นเดียว
+  updateDocument(doc: DesignDocument): void;
   addPage(): void;
   duplicatePage(index: number): void;
   deletePage(index: number): void;
@@ -745,6 +747,10 @@ export const useEditor = create<EditorState>((set, get) => {
 
     replaceDocument(doc) {
       commit(doc, { pageIndex: 0, selection: [], editingTextId: null });
+    },
+
+    updateDocument(doc) {
+      commit(doc);
     },
 
     addPage() {

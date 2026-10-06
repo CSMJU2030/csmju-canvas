@@ -94,6 +94,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { keys: 'L', label: 'เพิ่มเส้น' },
       { keys: 'D', label: 'ปากกาวาด' },
       { keys: 'V', label: 'เครื่องมือเลือก' },
+      { keys: '/', label: 'เปิดศูนย์รวมเครื่องมือ (ค้นหาได้)' },
       { keys: 'Mod+/ / ?', label: 'เปิดหน้ารวมคีย์ลัด' },
     ],
   },

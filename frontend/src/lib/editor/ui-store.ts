@@ -7,7 +7,13 @@ import type { PagesLayout } from './page-layout';
 
 export type RailPanel = 'templates' | 'elements' | 'text' | 'uploads' | 'projects' | 'starred' | 'background';
 export type ContextPanel = 'position' | 'color' | 'effects' | 'animate' | 'font' | 'image-edit' | 'crop' | 'replace' | 'chart-data' | 'bg-remove';
-export type UtilityPanel = 'signature' | 'layers' | 'pages' | 'notes';
+export type UtilityPanel = 'signature' | 'layers' | 'pages' | 'notes' | 'brand' | 'styles' | 'qr' | 'generators';
+
+/// จำลองการมองเห็นสีของผู้ที่ตาบอดสี (กรองเฉพาะภาพบนจอ ไม่เปลี่ยนงาน)
+export type VisionSim = 'protanopia' | 'deuteranopia' | 'tritanopia' | 'achromatopsia';
+
+/// แท็บที่แผงแอนิเมตเปิดเมื่อเรียกจากเครื่องมืออื่น
+export type AnimateTab = 'entry' | 'emphasis' | 'exit' | 'path' | 'page';
 export type PanelKey = RailPanel | ContextPanel | UtilityPanel;
 
 /// สีที่แผง "สี" จะเปลี่ยน
@@ -47,7 +53,9 @@ interface EditorUi {
   /// แถบภาพย่อหน้าด้านล่าง
   stripOpen: boolean;
   /// หน้าต่าง/มุมมองเต็มจอที่เปิดอยู่
-  overlay: 'versions' | 'find' | 'accessibility' | 'analytics' | 'resize' | 'move' | 'shortcuts' | null;
+  overlay: 'versions' | 'find' | 'accessibility' | 'analytics' | 'resize' | 'move' | 'shortcuts' | 'tools-hub' | null;
+  visionSim: VisionSim | null;
+  animateTab: AnimateTab;
   /// โหมดยางลบพิกเซลของรูป · size = เส้นผ่านศูนย์กลางแปรงเป็นพิกเซลของหน้า
   imageErase: { id: string; size: number } | null;
   /// ช่องของกรอบ/กริดที่เลือกอยู่ (กรอบมีช่องเดียว = 0) — ปุ่มแทนที่/ลบรูป และการเลือกรูปจากแผงอัปโหลดทำกับช่องนี้
@@ -67,7 +75,7 @@ interface EditorUi {
   toggleRulers(): void;
   addGuide(guide: { axis: 'x' | 'y'; at: number }): void;
   moveGuide(index: number, at: number | null): void;
-  set(patch: Partial<Pick<EditorUi, 'margins' | 'bleed' | 'commentsOpen' | 'commentPins' | 'overlay' | 'stripOpen' | 'imageErase' | 'frameCell' | 'frameEdit' | 'pageDropTarget' | 'gifPlaying'>>): void;
+  set(patch: Partial<Pick<EditorUi, 'margins' | 'bleed' | 'commentsOpen' | 'commentPins' | 'overlay' | 'stripOpen' | 'imageErase' | 'frameCell' | 'frameEdit' | 'pageDropTarget' | 'gifPlaying' | 'visionSim' | 'animateTab'>>): void;
 }
 
 export const useEditorUi = create<EditorUi>((set, get) => ({
@@ -80,6 +88,8 @@ export const useEditorUi = create<EditorUi>((set, get) => ({
   pagesView: 'strip',
   pagesLayout: 'single',
   pageDropTarget: null,
+  visionSim: null,
+  animateTab: 'entry',
   gifPlaying: typeof window === 'undefined' || typeof window.matchMedia !== 'function' || !window.matchMedia('(prefers-reduced-motion: reduce)').matches,
   rulers: false,
   guideLines: [],
