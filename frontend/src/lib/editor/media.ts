@@ -17,8 +17,8 @@ const EXTENSIONS: Record<string, MediaKind> = {
   mp3: 'audio', m4a: 'audio', ogg: 'audio', oga: 'audio', wav: 'audio',
 };
 
-/// รูปไม่เกิน 10 MB · วิดีโอ/เสียงไม่เกิน 50 MB (ตรงกับหลังบ้าน)
-export const MAX_BYTES: Record<MediaKind, number> = { image: 10 * 1024 * 1024, video: 50 * 1024 * 1024, audio: 50 * 1024 * 1024 };
+/// ไฟล์ละไม่เกิน 10 MB ทุกชนิด (ตรงกับหลังบ้าน · ไฟล์เก็บในฐานข้อมูลของระบบตาม standards deployment.md ข้อ 4.3)
+export const MAX_BYTES: Record<MediaKind, number> = { image: 10 * 1024 * 1024, video: 10 * 1024 * 1024, audio: 10 * 1024 * 1024 };
 
 export const ACCEPT: Record<MediaKind, string> = {
   image: IMAGE_TYPES.join(','),

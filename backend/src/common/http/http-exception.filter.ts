@@ -58,6 +58,19 @@ export class HttpExceptionFilter implements ExceptionFilter {
     body: unknown;
     retryAfterSec: number | null;
   } {
+    // ไฟล์ใหญ่เกินที่ตัวรับ multipart ตัดตั้งแต่ตอนรับ (413) — สัญญาไม่มี 413 จึงตอบ 400 VALIDATION_ERROR
+    // ตาม standards deployment.md ข้อ 4.3
+    if (exception instanceof HttpException && exception.getStatus() === HttpStatus.PAYLOAD_TOO_LARGE) {
+      return {
+        status: HttpStatus.BAD_REQUEST,
+        body: {
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message: 'ไฟล์ใหญ่เกิน 10 MB', details: ['file: ไฟล์ต้องไม่เกิน 10 MB'] },
+        },
+        retryAfterSec: null,
+      };
+    }
+
     if (exception instanceof HttpException) {
       const status = exception.getStatus();
       const raw = exception.getResponse();

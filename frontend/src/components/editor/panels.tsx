@@ -946,7 +946,7 @@ function UploadsPanel() {
     >
       {tab === 'images' ? (
         <>
-          <p className="mb-3 text-csmju-caption text-muted">รูป PNG, JPEG, WebP, GIF, SVG ไม่เกิน 10 MB · วิดีโอและเสียงไม่เกิน 50 MB · ไฟล์ของคุณเห็นได้เฉพาะคุณ · ลากรูปไปวางบนกรอบหรือกริดเพื่อใส่รูปในช่อง</p>
+          <p className="mb-3 text-csmju-caption text-muted">รูป PNG, JPEG, WebP, GIF, SVG ไม่เกิน 10 MB · วิดีโอและเสียงไม่เกิน 10 MB · ไฟล์ของคุณเห็นได้เฉพาะคุณ · ลากรูปไปวางบนกรอบหรือกริดเพื่อใส่รูปในช่อง</p>
           <AssetGrid q={q.trim()} folders={folders.data?.items ?? []} onInsert={insert} emptyText={q.trim() ? 'ไม่พบรูปที่ค้นหา' : null} />
         </>
       ) : tab === 'videos' ? (

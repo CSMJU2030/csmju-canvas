@@ -876,4 +876,26 @@ describe('CS Canvas API (e2e)', () => {
 
     expect(actions).toEqual(expect.arrayContaining(['design.delete', 'design.restore_by_admin', 'design.purge']));
   });
+
+  it('ไฟล์อัปโหลดเก็บในฐานข้อมูล: เกิน 10 MB ได้ 400 VALIDATION_ERROR · ETag เดิมได้ 304 · ไบต์ตรงกับที่ส่ง', async () => {
+    const big = Buffer.concat([PNG, Buffer.alloc(10 * 1024 * 1024 + 10, 0)]);
+    const tooBig = await http().post('/api/v1/assets').set('Authorization', bearer(student, 'student')).attach('file', big, 'big.png').expect(400);
+
+    expect(tooBig.body.error.code).toBe('VALIDATION_ERROR');
+
+    const up = await http().post('/api/v1/assets').set('Authorization', bearer(student, 'student')).attach('file', PNG, 'db.png').expect(201);
+    const url = up.body.data.contentUrl as string;
+    const first = await http().get(url).set('Authorization', bearer(student, 'student')).buffer(true).parse((res, cb) => {
+      const chunks: Buffer[] = [];
+
+      res.on('data', (c: Buffer) => chunks.push(c));
+      res.on('end', () => cb(null, Buffer.concat(chunks)));
+    }).expect(200);
+
+    expect(Buffer.compare(first.body as Buffer, PNG)).toBe(0);
+    expect(first.headers['cache-control']).toBe('private, no-cache');
+    expect(first.headers.etag).toMatch(/^"[0-9a-f]{64}"$/);
+    await http().get(url).set('Authorization', bearer(student, 'student')).set('If-None-Match', first.headers.etag as string).expect(304);
+    await http().get(url).set('Authorization', bearer(other, 'student')).expect(404);
+  });
 });

@@ -91,7 +91,7 @@ export class UpdateAssetDto {
 }
 
 export class UploadAssetDto {
-  @ApiProperty({ type: 'string', format: 'binary', description: 'รูป PNG · JPEG · WebP · GIF · SVG ไม่เกิน 10 MB · วิดีโอ MP4 · WebM และเสียง MP3 · M4A · OGG · WAV ไม่เกิน 50 MB · ฟอนต์ TTF · OTF · WOFF · WOFF2 ไม่เกิน 5 MB' })
+  @ApiProperty({ type: 'string', format: 'binary', description: 'รูป PNG · JPEG · WebP · GIF · SVG ไม่เกิน 10 MB · วิดีโอ MP4 · WebM และเสียง MP3 · M4A · OGG · WAV ไม่เกิน 10 MB · ฟอนต์ TTF · OTF · WOFF · WOFF2 ไม่เกิน 5 MB' })
   @IsOptional()
   file!: unknown;
 

@@ -5,9 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
-import { mkdir, rm, stat, writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { createHash, randomUUID } from 'node:crypto';
 import type { Asset } from '../../generated/prisma/client.js';
 import { Paginated } from '../../common/http/envelope.js';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
@@ -17,11 +15,12 @@ import { IMAGE_EXTENSIONS, sniffImage } from './image-type.js';
 import { MEDIA_EXTENSIONS, sniffMedia } from './media-type.js';
 import { resolveSource, type SourceSite } from './source-site.js';
 
-/// รูปไม่เกิน 10 MB · วิดีโอและเสียงไม่เกิน 50 MB (คลิปสั้นสำหรับสไลด์/โพสต์)
+/// ไฟล์ละไม่เกิน 10 MB ทุกชนิด (ฟอนต์ 5 MB) — standards deployment.md ข้อ 4.3: ไฟล์เก็บในฐานข้อมูลของระบบ
+/// ที่ใช้ร่วมกันหลายระบบบน server จึงจำกัดเท่ากันทุกชนิด
 export const MAX_ASSET_BYTES = 10 * 1024 * 1024;
-export const MAX_MEDIA_BYTES = 50 * 1024 * 1024;
-/// ขนาดใหญ่สุดที่ตัวรับไฟล์ยอมอ่าน (แยกตามชนิดอีกทีหลังตรวจไบต์หัวไฟล์)
-export const MAX_UPLOAD_BYTES = Math.max(MAX_ASSET_BYTES, MAX_MEDIA_BYTES);
+export const MAX_MEDIA_BYTES = MAX_ASSET_BYTES;
+/// ขนาดใหญ่สุดที่ตัวรับไฟล์ยอมอ่าน — multer ตัดตั้งแต่ตอนรับ ไม่ต้องรอรับครบ
+export const MAX_UPLOAD_BYTES = MAX_ASSET_BYTES;
 /// พื้นที่ต่อคน — นับรวมรูปในถังขยะด้วย จนกว่าจะลบถาวร
 export const QUOTA_BYTES_PER_USER = 500 * 1024 * 1024;
 /// เพดานโควตาที่ผู้ดูแลตั้งให้คนหนึ่งได้ (5 GB) — กันพิมพ์ศูนย์เกินจนคนเดียวจองดิสก์ทั้งเครื่อง
@@ -33,12 +32,11 @@ export function effectiveQuota(override: bigint | null): number {
 }
 export const ASSET_TRASH_RETENTION_DAYS = 30;
 
-/// เก็บรูปบนดิสก์ของ backend แล้วเสิร์ฟผ่าน API ที่ต้องมี session เท่านั้น
-/// (ใช้แทน S3/MinIO ซึ่งไม่อยู่ใน whitelist) — ไฟล์ไม่เคยเปิดเป็นสาธารณะ
+/// เก็บไฟล์ในฐานข้อมูลของระบบ (ตาราง asset_contents) แล้วเสิร์ฟผ่าน API ที่ตรวจสิทธิ์ทุกครั้ง — ไฟล์ไม่เคยเปิดเป็นสาธารณะ
+/// (container บน server อ่านอย่างเดียว เขียนดิสก์ไม่ได้ · standards deployment.md ข้อ 3.4 และ 4.3)
 @Injectable()
 export class AssetsService {
   private readonly logger = new Logger(AssetsService.name);
-  private readonly root = resolve(process.env.LOCAL_STORAGE_DIR ?? './storage-dev');
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -84,20 +82,17 @@ export class AssetsService {
     const media = image || font ? null : sniffMedia(file.buffer);
     const mimeType = image ?? font ?? media;
 
+    // ชนิดหรือขนาดไม่ตรงตอบ 400 VALIDATION_ERROR (มี details) ตาม deployment.md ข้อ 4.3
     if (!mimeType) {
-      throw new BadRequestException('รองรับเฉพาะรูป PNG, JPEG, WebP, GIF, SVG · วิดีโอ MP4, WebM · เสียง MP3, M4A, OGG, WAV · ฟอนต์ TTF, OTF, WOFF, WOFF2');
-    }
-
-    if (image && file.size > MAX_ASSET_BYTES) {
-      throw new BadRequestException('ไฟล์รูปใหญ่เกิน 10 MB');
+      throw invalidFile('รองรับเฉพาะรูป PNG, JPEG, WebP, GIF, SVG · วิดีโอ MP4, WebM · เสียง MP3, M4A, OGG, WAV · ฟอนต์ TTF, OTF, WOFF, WOFF2');
     }
 
     if (font && file.size > MAX_FONT_BYTES) {
-      throw new BadRequestException('ไฟล์ฟอนต์ใหญ่เกิน 5 MB');
+      throw invalidFile('ไฟล์ฟอนต์ใหญ่เกิน 5 MB');
     }
 
-    if (media && file.size > MAX_MEDIA_BYTES) {
-      throw new BadRequestException('ไฟล์วิดีโอหรือเสียงใหญ่เกิน 50 MB');
+    if (file.size > MAX_ASSET_BYTES) {
+      throw invalidFile('ไฟล์ใหญ่เกิน 10 MB');
     }
 
     const [used, quota] = await Promise.all([this.usedBytes(coreUserId), this.quotaBytes(coreUserId)]);
@@ -109,31 +104,37 @@ export class AssetsService {
     // แหล่งที่มาเก็บเป็นข้อความเท่านั้น — ไม่ดึง URL ฝั่งเซิร์ฟเวอร์เด็ดขาด · ฟอนต์ไม่มีแหล่งที่มา
     const source = font ? { sourceUrl: null, sourceSite: null } : resolveSource(origin.sourceUrl, origin.sourceSite);
     const id = randomUUID();
+    // ชื่อไฟล์ที่ไม่มีนามสกุลได้นามสกุลตามชนิดที่ตรวจจากไบต์
     const extension = image ? IMAGE_EXTENSIONS[image] : font ? FONT_EXTENSIONS[font] : MEDIA_EXTENSIONS[media!];
-    const storagePath = `${id}.${extension}`;
+    const fileName = withExtension(cleanFileName(file.originalname), extension);
+    const sha256 = createHash('sha256').update(file.buffer).digest('hex');
 
-    await mkdir(this.root, { recursive: true });
-    await writeFile(join(this.root, storagePath), file.buffer);
-
-    const row = await this.prisma.asset.create({
-      data: {
-        id,
-        coreUserId,
-        fileName: cleanFileName(file.originalname),
-        mimeType,
-        sizeBytes: file.size,
-        storagePath,
-        sourceUrl: source.sourceUrl,
-        sourceSite: source.sourceSite,
-      },
-    });
+    // แถวข้อมูลกับไบต์ของไฟล์ต้องเกิดพร้อมกัน — ไม่มีแถวที่ชี้ไฟล์ที่ไม่มีอยู่
+    const [row] = await this.prisma.$transaction([
+      this.prisma.asset.create({
+        data: {
+          id,
+          coreUserId,
+          fileName,
+          mimeType,
+          sizeBytes: file.size,
+          storagePath: null,
+          sha256,
+          sourceUrl: source.sourceUrl,
+          sourceSite: source.sourceSite,
+        },
+      }),
+      // ส่ง Buffer ตรง ๆ — แปลงเป็น Uint8Array ใหม่ทำให้ adapter เข้ารหัสช้ามาก (10 MB ใช้ ~30 วินาที)
+      this.prisma.assetContent.create({ data: { assetId: id, content: file.buffer as Uint8Array<ArrayBuffer> } }),
+    ]);
 
     return toDto(row);
   }
 
   /// เจ้าของเปิดไฟล์ได้เสมอ · คนอื่นเปิดได้เมื่อไฟล์นั้นอยู่ในงานของเจ้าของที่เปิดแชร์ด้วยลิงก์
   /// (ไม่งั้นคนที่ได้ลิงก์จะเห็นงานแต่รูปหายหมด) · ฟอนต์ที่อัปโหลดเองใช้กติกาเดียวกัน: งานอ้างฟอนต์ด้วย
-  /// `fontFamily: "asset:<uuid>"` จึงพบ id ของฟอนต์ในเอกสารของงานเหมือนรูป · คืนที่อยู่ไฟล์ให้ controller ส่งเป็นช่วงไบต์ได้ (วิดีโอ/เสียง)
+  /// `fontFamily: "asset:<uuid>"` จึงพบ id ของฟอนต์ในเอกสารของงานเหมือนรูป · ตรวจสิทธิ์ทุกครั้ง แล้วคืนไบต์ให้ controller
+  /// ส่งทั้งไฟล์หรือเป็นช่วงไบต์ (วิดีโอ/เสียง)
   async content(coreUserId: string, id: string) {
     const row = await this.prisma.asset.findUnique({ where: { id } });
 
@@ -143,15 +144,11 @@ export class AssetsService {
       throw new NotFoundException('ไม่พบรูปนี้ อาจถูกลบไปแล้ว');
     }
 
-    const path = join(this.root, row.storagePath);
+    const file = await this.prisma.assetContent.findUnique({ where: { assetId: id }, select: { content: true } });
 
-    try {
-      const info = await stat(path);
+    if (!file) throw new NotFoundException('ไม่พบไฟล์นี้ในที่เก็บ');
 
-      return { row, path, size: info.size };
-    } catch {
-      throw new NotFoundException('ไม่พบไฟล์นี้ในที่เก็บ');
-    }
+    return { row, bytes: Buffer.from(file.content) };
   }
 
   async update(coreUserId: string, id: string, patch: { trashed?: boolean; fileName?: string; folderId?: string | null }) {
@@ -235,12 +232,20 @@ export class AssetsService {
     for (const row of expired) await this.deleteRow(row);
   }
 
+  /// ไบต์ของไฟล์ถูกลบตาม (asset_contents ON DELETE CASCADE)
   private async deleteRow(row: Asset) {
     await this.prisma.asset.delete({ where: { id: row.id } });
-    await rm(join(this.root, row.storagePath), { force: true }).catch((error: unknown) => {
-      this.logger.warn(JSON.stringify({ event: 'asset.file_remove_failed', id: row.id, error: String(error) }));
-    });
+    this.logger.debug(JSON.stringify({ event: 'asset.deleted', id: row.id }));
   }
+}
+
+/// 400 VALIDATION_ERROR — exception filter ถือว่า message แบบ array คือการตรวจข้อมูลไม่ผ่าน (มี details)
+function invalidFile(message: string): BadRequestException {
+  return new BadRequestException([message]);
+}
+
+function withExtension(name: string, extension: string): string {
+  return /\.[A-Za-z0-9]{1,5}$/.test(name) ? name : `${name}.${extension}`.slice(0, 200);
 }
 
 /// ตัด path และอักขระควบคุมออกจากชื่อไฟล์ที่ client ส่งมา

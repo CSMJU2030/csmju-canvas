@@ -172,7 +172,7 @@ export function VideoLibrary({ q = '', showUpload = true }: { q?: string; showUp
     <div className="flex flex-col gap-3">
       {upload.input}
       {showUpload && !readOnly && uploadButton}
-      <p className="text-csmju-caption text-muted">MP4 หรือ WebM ไม่เกิน 50 MB · เล่นตอนพรีเซนต์และในไฟล์วิดีโอที่ดาวน์โหลด · ไฟล์ของคุณเห็นได้เฉพาะคุณ</p>
+      <p className="text-csmju-caption text-muted">MP4 หรือ WebM ไม่เกิน 10 MB (คลิปสั้น) · เล่นตอนพรีเซนต์และในไฟล์วิดีโอที่ดาวน์โหลด · ไฟล์ของคุณเห็นได้เฉพาะคุณ</p>
       {assets.isLoading ? (
         <Spinner label="กำลังโหลดวิดีโอ…" />
       ) : assets.isError ? (
@@ -317,7 +317,7 @@ export function AudioLibrary({ q = '', showUpload = true }: { q?: string; showUp
     <div className="flex flex-col gap-3">
       {upload.input}
       {showUpload && !readOnly && uploadButton}
-      <p className="text-csmju-caption text-muted">MP3 · M4A · OGG · WAV ไม่เกิน 50 MB · เสียงเล่นตอนพรีเซนต์หน้านั้นและอยู่ในไฟล์วิดีโอที่ดาวน์โหลด</p>
+      <p className="text-csmju-caption text-muted">MP3 · M4A · OGG · WAV ไม่เกิน 10 MB · เสียงเล่นตอนพรีเซนต์หน้านั้นและอยู่ในไฟล์วิดีโอที่ดาวน์โหลด</p>
       {assets.isLoading ? (
         <Spinner label="กำลังโหลดเสียง…" />
       ) : assets.isError ? (

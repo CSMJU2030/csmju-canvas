@@ -21,7 +21,8 @@ describe('ชนิดไฟล์', () => {
     expect(uploadProblem({ type: 'video/mp4', name: 'a.mp4', size: 1000 }, ['video'])).toBeNull();
     expect(uploadProblem({ type: 'video/mp4', name: 'a.mp4', size: 1000 }, ['audio'])).toContain('ไม่ใช่ไฟล์ที่รองรับ');
     expect(uploadProblem({ type: 'image/png', name: 'a.png', size: 11 * 1024 * 1024 }, ['image'])).toContain('10 MB');
-    expect(uploadProblem({ type: 'audio/mpeg', name: 'a.mp3', size: 49 * 1024 * 1024 }, ['audio'])).toBeNull();
+    expect(uploadProblem({ type: 'audio/mpeg', name: 'a.mp3', size: 9 * 1024 * 1024 }, ['audio'])).toBeNull();
+    expect(uploadProblem({ type: 'audio/mpeg', name: 'a.mp3', size: 11 * 1024 * 1024 }, ['audio'])).toContain('10 MB');
   });
 });
 

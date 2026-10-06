@@ -17,8 +17,6 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBody, ApiConsumes, ApiOperation, ApiProduces, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
-import { createReadStream } from 'node:fs';
-import { pipeline } from 'node:stream/promises';
 import { CurrentUser, type CoreHubUser } from '../../common/auth/core-user.js';
 import { ApiEnvelope, ApiEnvelopeList } from '../../common/http/api-envelope.decorator.js';
 import { DeletedDto } from '../designs/dto/design.dto.js';
@@ -67,17 +65,29 @@ export class AssetsController {
     @CurrentUser() user: CoreHubUser,
     @Param('id', UUID) id: string,
     @Headers('range') range: string | undefined,
+    @Headers('if-none-match') ifNoneMatch: string | undefined,
     @Res() response: Response,
   ) {
-    const { row, path, size } = await this.assets.content(user.coreUserId, id);
+    const { row, bytes } = await this.assets.content(user.coreUserId, id);
+    const size = bytes.length;
     const part = parseByteRange(range, size);
+    const etag = row.sha256 ? `"${row.sha256}"` : null;
 
     response.setHeader('Content-Type', row.mimeType);
-    response.setHeader('Cache-Control', 'private, max-age=86400');
+    // ตรวจสิทธิ์ทุกครั้ง (deployment.md ข้อ 4.3) — no-cache ให้เบราว์เซอร์ถามใหม่ทุกครั้ง แต่ได้ 304 เมื่อไฟล์ไม่เปลี่ยน
+    response.setHeader('Cache-Control', 'private, no-cache');
+    if (etag) response.setHeader('ETag', etag);
+    // ชื่อไฟล์ตอนบันทึก — รูปใน <img>/<video> ไม่สนหัวนี้ แต่เปิดลิงก์ตรง ๆ จะดาวน์โหลดแทนการแสดงในหน้า
+    response.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(row.fileName)}`);
     response.setHeader('X-Content-Type-Options', 'nosniff');
     response.setHeader('Accept-Ranges', 'bytes');
     // SVG มีสคริปต์ได้ — ถ้าใครเปิดไฟล์ตรง ๆ ก็รันอะไรไม่ได้
     response.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox");
+
+    if (etag && !part && ifNoneMatch === etag) {
+      response.status(304).end();
+      return;
+    }
 
     if (part === 'unsatisfiable') {
       response.status(416).setHeader('Content-Range', `bytes */${size}`);
@@ -93,16 +103,7 @@ export class AssetsController {
 
     response.setHeader('Content-Length', String(Math.max(0, end - start + 1)));
 
-    if (size === 0) {
-      response.end();
-      return;
-    }
-
-    await pipeline(createReadStream(path, { start, end }), response).catch(() => {
-      // ผู้ชมเลื่อนวิดีโอหรือปิดหน้าไประหว่างส่ง — ไม่ใช่ข้อผิดพลาดของระบบ
-      if (!response.headersSent) response.status(404);
-      response.end();
-    });
+    response.end(size === 0 ? undefined : bytes.subarray(start, end + 1));
   }
 
   @Patch(':id')
