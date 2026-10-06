@@ -360,7 +360,7 @@ function FileMenu({ onPublish }: { onPublish: () => void }) {
       icon: <HelpCircle aria-hidden className="size-4" />,
       submenu: [
         { label: 'คู่มือการใช้งาน', icon: <BookOpen aria-hidden className="size-4" />, onSelect: () => window.open('/help', '_blank') },
-        { label: 'คีย์ลัด', icon: <Keyboard aria-hidden className="size-4" />, onSelect: () => window.open('/help/shortcuts', '_blank') },
+        { label: 'คีย์ลัด', icon: <Keyboard aria-hidden className="size-4" />, shortcut: 'Ctrl+/', onSelect: () => useEditorUi.getState().set({ overlay: 'shortcuts' }) },
         { label: 'แนะนำการปรับปรุง', icon: <Lightbulb aria-hidden className="size-4" />, onSelect: () => setFeedback('SUGGESTION') },
         // รายงานได้เฉพาะงานที่คนอื่นแชร์มา (งานของตัวเองไม่ต้องรายงาน)
         ...(!owner && designId ? [{ label: 'รายงานดีไซน์', icon: <Flag aria-hidden className="size-4" />, onSelect: () => setFeedback('REPORT') }] : []),

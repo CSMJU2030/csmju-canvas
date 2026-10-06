@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { ErrorState, Spinner, cx, errorMessage } from '@/components/csmju/primitives';
 import { api, ApiError } from '@/lib/csmju/api';
 import { canEditDoc, useEditor } from '@/lib/editor/store';
+import { notifyAction } from '@/lib/editor/action-toast';
 import { useEditorUi } from '@/lib/editor/ui-store';
 import { normalizeDocument } from '@/lib/editor/types';
 import type { Design } from '@/lib/types';
@@ -29,6 +30,7 @@ import { useAutosave } from './use-autosave';
 import { usePasteAndDropImport } from './file-import';
 import { ImportHintBar } from './image-sources-panel';
 import { useShortcuts } from './use-shortcuts';
+import { ActionToasts, ShortcutSheet } from './action-toasts';
 import { SourcesLayer } from './sources-window';
 
 export function EditorScreen({ id }: { id: string }) {
@@ -102,6 +104,7 @@ function EditorLayout({ needsThumbnail }: { needsThumbnail: boolean }) {
       if ((event.ctrlKey || event.metaKey) && event.altKey && event.key.toLowerCase() === 'p') {
         event.preventDefault();
         presentFromCurrent();
+        notifyAction('พรีเซนต์จากหน้านี้', 'Mod+Alt+P');
       }
     };
 
@@ -198,6 +201,8 @@ function EditorLayout({ needsThumbnail }: { needsThumbnail: boolean }) {
       {publishing && <PublishTemplateDialog open onClose={() => setPublishing(false)} />}
       <EditorDialogs />
       <VersionHistory />
+      <ShortcutSheet />
+      <ActionToasts />
       <ContextMenu />
       <SourcesLayer />
       <Presenter />

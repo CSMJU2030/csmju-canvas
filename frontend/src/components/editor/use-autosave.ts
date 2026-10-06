@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/csmju/api';
+import { notifyAction } from '@/lib/editor/action-toast';
 import { thumbnailOf } from '@/lib/editor/export';
 import { useEditor } from '@/lib/editor/store';
 
@@ -76,6 +77,21 @@ export function useAutosave(needsThumbnail = false) {
 
     window.addEventListener('beforeunload', beforeUnload);
 
+    // Ctrl+S = บันทึกทันทีไม่ต้องรอ debounce (use-shortcuts.ts)
+    const saveNow = async () => {
+      if (timer.current) clearTimeout(timer.current);
+      if (saving.current) return notifyAction('กำลังบันทึก…', 'Mod+S');
+
+      await save();
+
+      const saved = useEditor.getState().revision === savedRevision.current;
+
+      notifyAction(saved ? 'บันทึกแล้ว' : 'บันทึกไม่สำเร็จ — ลองอีกครั้ง', 'Mod+S', !saved);
+    };
+    const onSaveNow = () => void saveNow();
+
+    window.addEventListener('csc-save-now', onSaveNow);
+
     // งานที่สร้างจากเทมเพลตตั้งต้นยังไม่มีภาพย่อ — บันทึกหนึ่งครั้งเพื่อสร้างภาพย่อให้การ์ดในหน้าแรก
     if (needsThumbnail) {
       savedRevision.current = -1;
@@ -85,6 +101,7 @@ export function useAutosave(needsThumbnail = false) {
     return () => {
       unsubscribe();
       window.removeEventListener('beforeunload', beforeUnload);
+      window.removeEventListener('csc-save-now', onSaveNow);
       if (timer.current) clearTimeout(timer.current);
     };
   }, [needsThumbnail]);

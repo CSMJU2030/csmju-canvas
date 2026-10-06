@@ -45,7 +45,7 @@ interface EditorUi {
   /// แถบภาพย่อหน้าด้านล่าง
   stripOpen: boolean;
   /// หน้าต่าง/มุมมองเต็มจอที่เปิดอยู่
-  overlay: 'versions' | 'find' | 'accessibility' | 'analytics' | 'resize' | 'move' | null;
+  overlay: 'versions' | 'find' | 'accessibility' | 'analytics' | 'resize' | 'move' | 'shortcuts' | null;
   /// โหมดยางลบพิกเซลของรูป · size = เส้นผ่านศูนย์กลางแปรงเป็นพิกเซลของหน้า
   imageErase: { id: string; size: number } | null;
   /// ช่องของกรอบ/กริดที่เลือกอยู่ (กรอบมีช่องเดียว = 0) — ปุ่มแทนที่/ลบรูป และการเลือกรูปจากแผงอัปโหลดทำกับช่องนี้

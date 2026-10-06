@@ -127,7 +127,11 @@ export interface EditorState extends EditorMeta {
   removeSelected(): void;
   duplicateSelected(): void;
   copySelected(): void;
+  /// คัดลอกแล้วลบชิ้นที่ไม่ล็อก (Ctrl+X) — undo ขั้นเดียว
+  cutSelected(): void;
   paste(): void;
+  /// วางที่ตำแหน่งเดิม (Ctrl+Shift+V)
+  pasteInPlace(): void;
   reorderSelected(direction: 'forward' | 'backward' | 'front' | 'back'): void;
   moveLayer(id: string, toIndex: number): void;
   groupSelected(): void;
@@ -621,10 +625,21 @@ export const useEditor = create<EditorState>((set, get) => {
       if (clipboard.length > 0) announceInternalCopy(clipboard.length);
     },
 
+    cutSelected() {
+      get().copySelected();
+      get().removeSelected();
+    },
+
     paste() {
       const { clipboard } = get();
 
       if (clipboard.length > 0) get().addElements(cloneElements(clipboard, 20));
+    },
+
+    pasteInPlace() {
+      const { clipboard } = get();
+
+      if (clipboard.length > 0) get().addElements(cloneElements(clipboard, 0));
     },
 
     reorderSelected(direction) {

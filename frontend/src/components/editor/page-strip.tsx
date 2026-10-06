@@ -645,9 +645,15 @@ export function BottomBar({ onPresent, readOnly = false }: { onPresent: () => vo
           <IconButton label="เต็มหน้าจอ (Ctrl+Alt+P)" onClick={onPresent}>
             <Maximize aria-hidden className="size-4" />
           </IconButton>
-          <a href="/help/shortcuts" target="_blank" rel="noreferrer" aria-label="คีย์ลัดและความช่วยเหลือ" title="คีย์ลัดและความช่วยเหลือ" className="hidden size-10 items-center justify-center rounded-xl text-ink hover:bg-surface/70 sm:inline-flex">
+          <button
+            type="button"
+            onClick={() => useEditorUi.getState().set({ overlay: 'shortcuts' })}
+            aria-label="คีย์ลัด (Ctrl+/)"
+            title="คีย์ลัด (Ctrl+/)"
+            className="hidden size-10 items-center justify-center rounded-xl text-ink hover:bg-surface/70 sm:inline-flex"
+          >
             <HelpCircle aria-hidden className="size-4" />
-          </a>
+          </button>
         </div>
       </div>
     </>
