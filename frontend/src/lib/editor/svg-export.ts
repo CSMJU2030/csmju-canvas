@@ -1,5 +1,7 @@
+import { cssBlendMode } from './blend';
 import { chartSvg } from './chart';
 import { assetFontUrl, assetIdOfFont, cssFamily, fontFaceName } from './fonts';
+import { layerStylePad } from './layer-style';
 import { isGradient, parseGradient } from './paint';
 import { HIGHLIGHTER_ALPHA, dashFor, drawElement, layoutLines, preloadPage, svgDataUrl } from './render';
 import { tableSvg } from './table-render';
@@ -106,6 +108,7 @@ export async function pageToSvg(page: Page, size: { width: number; height: numbe
     const attrs = [
       el.rotation ? `transform="rotate(${n(el.rotation)} ${n(cx)} ${n(cy)})"` : '',
       el.opacity < 1 ? `opacity="${n(el.opacity)}"` : '',
+      cssBlendMode(el.blendMode) ? `style="mix-blend-mode:${cssBlendMode(el.blendMode)}"` : '',
     ]
       .filter(Boolean)
       .join(' ');
@@ -256,17 +259,21 @@ function pathSvg(el: PathElement): string {
 
 /// รูปภาพ กรอบ กริด และวิดีโอ (ภาพปก): วาดด้วยตัววาดเดียวกับหน้าจอ (ครอป ปรับสี ขอบมน เส้นขอบ หน้ากากของกรอบ) แล้วฝังเป็น PNG
 function imageSvg(el: ImageElement | FrameElement | GridElement | VideoElement): string {
-  const scale = Math.min(2, 4096 / Math.max(el.width, el.height));
+  // เส้นขอบสติกเกอร์/แสงเรืองยื่นออกนอกกล่อง → เผื่อขอบภาพที่ฝัง
+  const bleed = el.type === 'image' ? layerStylePad(el.layerStyle, Math.min(el.width, el.height) / 100) + 2 : 0;
+  const box = { x: el.x - bleed, y: el.y - bleed, width: el.width + bleed * 2, height: el.height + bleed * 2 };
+  const scale = Math.min(2, 4096 / Math.max(box.width, box.height));
   const canvas = document.createElement('canvas');
 
-  canvas.width = Math.max(1, Math.round(el.width * scale));
-  canvas.height = Math.max(1, Math.round(el.height * scale));
+  canvas.width = Math.max(1, Math.round(box.width * scale));
+  canvas.height = Math.max(1, Math.round(box.height * scale));
 
   const ctx = canvas.getContext('2d')!;
 
   ctx.scale(scale, scale);
-  ctx.translate(-el.x, -el.y);
-  drawElement(ctx, { ...el, rotation: 0, opacity: 1, shadow: null });
+  ctx.translate(-box.x, -box.y);
+  // โหมดผสมสีใส่ที่ <g> แทน (mix-blend-mode)
+  drawElement(ctx, { ...el, rotation: 0, opacity: 1, shadow: null, blendMode: null });
 
   let href = '';
 
@@ -278,5 +285,5 @@ function imageSvg(el: ImageElement | FrameElement | GridElement | VideoElement):
   }
 
 
-  return `<image x="${n(el.x)}" y="${n(el.y)}" width="${n(el.width)}" height="${n(el.height)}" href="${href}"/>`;
+  return `<image x="${n(box.x)}" y="${n(box.y)}" width="${n(box.width)}" height="${n(box.height)}" href="${href}"/>`;
 }

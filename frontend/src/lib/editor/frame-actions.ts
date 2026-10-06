@@ -85,6 +85,9 @@ export function frameImageFromElement(el: ImageElement): FrameImage {
     filter: el.filter ?? null,
     filterIntensity: el.filterIntensity,
     colorEdits: el.colorEdits ?? null,
+    levels: el.levels ?? null,
+    curves: el.curves ?? null,
+    effects: el.effects ?? null,
     erase: el.erase ?? null,
   };
 }
@@ -204,6 +207,9 @@ export function detachCell(id: string, cell: number): ImageElement | null {
     filter: image.filter ?? null,
     filterIntensity: image.filterIntensity,
     colorEdits: image.colorEdits ?? null,
+    levels: image.levels ?? null,
+    curves: image.curves ?? null,
+    effects: image.effects ?? null,
     erase: image.erase ?? null,
   };
 

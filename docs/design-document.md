@@ -30,6 +30,7 @@ CMS ของคณะดึงงานได้ที่ `GET /api/v1/designs/
 | `shadow` | ไม่มี/null = ไม่มีเงา · `{ x, y, blur, color }` (px) ใช้กับทุกชนิดยกเว้น text และ table |
 | `animation` | แอนิเมชันตอนเข้า: `rise` `pan` `fade` `pop` `wipe` `blur` `drift` `tumble` `breathe` `bounce` (CMS ไม่เล่นก็ได้) |
 | `link` | ลิงก์เมื่อกด (https:// หรือ mailto:) |
+| `blendMode` | โหมดผสมสีกับสิ่งที่อยู่ข้างล่าง · ไม่มี/null/`normal` = ทับปกติ · ค่า = `multiply` `screen` `overlay` `darken` `lighten` `color-dodge` `color-burn` `hard-light` `soft-light` `difference` `exclusion` `hue` `saturation` `color` `luminosity` (ชื่อเดียวกับ CSS `mix-blend-mode` · ใช้ได้ทุกชนิด) · ทั้งชิ้นผสมทีเดียว (CMS ใส่ `mix-blend-mode` ที่กล่องของชิ้นได้เลย) · ค่าที่ไม่รู้จักให้วาดปกติ |
 
 ## เฉพาะแต่ละชนิด
 
@@ -42,6 +43,7 @@ CMS ของคณะดึงงานได้ที่ `GET /api/v1/designs/
 - **image:** `src` (รูปของผู้ใช้เป็น `/api/v1/assets/{id}/content` ซึ่งต้องมี session ของเจ้าของ), `assetId`, `cornerRadius`, `flipX`, `flipY`
   - ค่าเสริม: `crop` `{x, y, width, height}` สัดส่วน 0–1 ของรูปต้นฉบับ · `border` `{style, width, color}` · `adjust` ค่าปรับ −100..100 (temperature tint brightness contrast highlights shadows whites blacks vibrance saturation sharpness clarity · vignette/blur 0..100) · `filter` + `filterIntensity` ฟิลเตอร์สำเร็จรูปใน `lib/editor/image-filters.ts`
   - `colorEdits` `[{ color, hue, saturation, lightness }]` แก้ไขสีเฉพาะช่วงสี (ค่า −100..100 · hue หมุน ±60°) · `erase` `[{ points, size }]` รอยยางลบพิกเซล (`points` = `[x0, y0, …]` สัดส่วน 0–1 ของรูปเต็มก่อนครอป · `size` สัดส่วนของความกว้างรูป) — ตัว render ต้องทำให้ส่วนนั้นโปร่งใส
+  - `levels` · `curves` · `effects` · `layerStyle` ระดับสี เส้นโค้ง เอฟเฟกต์ภาพ และสไตล์เลเยอร์ (ดูหัวข้อ "แต่งภาพ: ระดับสี เส้นโค้ง เอฟเฟกต์ และสไตล์เลเยอร์")
   - `bgRemoved` `{ originalSrc, originalAssetId, options }` เมื่อผู้ใช้ลบพื้นหลังแล้ว · `src` เป็นรูป PNG โปร่งใสที่สร้างใหม่อยู่แล้ว ตัว render ใช้ `src` ตามปกติ ไม่ต้องประมวลผลเพิ่ม (เก็บรูปเดิมไว้ให้คืนพื้นหลังได้)
 - **svg:** `svg` (markup ทั้งก้อน ใช้ `currentColor`), `color` (สีที่แทน `currentColor`)
 - **path:** เส้นวาดมือและลายเซ็น · `strokes` (อาร์เรย์ของเส้น แต่ละเส้นคือ `[x0, y0, x1, y1, …]` เป็นสัดส่วน 0–1 ของกล่อง), `color`, `strokeWidth` (px), `brush` (`pen` · `marker` · `highlighter` — ไฮไลท์วาดความทึบ 0.45) · ปลายและมุมเส้นกลม
@@ -65,7 +67,7 @@ CMS ของคณะดึงงานได้ที่ `GET /api/v1/designs/
 - **grid (กริด):** หลายช่องตามเค้าโครง แต่ละช่องมีรูปของตัวเอง · `layout` (`cols-2` · `rows-2` · `cols-3` · `grid-2x2` · `big-2` 1 ใหญ่ + 2 เล็ก · `big-3` 1 ใหญ่ + 3 เล็ก · `collage-5` · `collage-6`), `gap` (px ระยะห่างระหว่างช่อง), `cornerRadius` (px มุมโค้งของทุกช่อง), `cells` (อาร์เรย์ตามลำดับช่องของเค้าโครง แต่ละช่องเป็นรูปในกรอบหรือ `null` = ช่องว่าง)
   - ช่องเป็นสัดส่วน 0–1 ของกล่องตาม `GRID_LAYOUTS` ใน `lib/editor/frames.ts` · ระยะห่างแบ่งครึ่งให้ขอบด้านในของแต่ละช่อง ขอบนอกชิดกล่อง (`gridCellRects`)
 - **รูปในกรอบ/ช่อง** (`frame.image` และสมาชิกของ `grid.cells`): `src`, `assetId`, `naturalWidth`/`naturalHeight` (ขนาดจริงของรูป), `zoom` (1 = พอดีเต็มช่องแบบ cover · สูงสุด 5), `offsetX`/`offsetY` (0–1 แบบ CSS `object-position`: 0 = ชิดซ้าย/บน · 0.5 = กึ่งกลาง · 1 = ชิดขวา/ล่าง)
-  - ค่าเสริม: `name` · `flipX`/`flipY` (พลิกรูปในกรอบ) · `adjust` · `filter` + `filterIntensity` · `colorEdits` · `erase` (ความหมายเดียวกับของ **image**)
+  - ค่าเสริม: `name` · `flipX`/`flipY` (พลิกรูปในกรอบ) · `adjust` · `filter` + `filterIntensity` · `colorEdits` · `erase` · `levels` · `curves` · `effects` (ความหมายเดียวกับของ **image** · รูปในกรอบไม่มี `layerStyle`)
   - วางรูป: `scale = max(พื้นที่กว้าง / naturalWidth, พื้นที่สูง / naturalHeight) × zoom` · กล่องรูป `x = พื้นที่.x + (พื้นที่กว้าง − naturalWidth × scale) × offsetX` (แกน y เช่นเดียวกัน) แล้วตัดตามหน้ากาก (`coverRect`)
   - กรอบ/ช่องที่ว่าง editor วาดเป็นพื้นเทาพร้อมไอคอนรูปภาพและคำว่า "ลากรูปมาวางที่นี่" (รวมถึงตอนพรีเซนต์และดาวน์โหลด) · CMS จะไม่วาดช่องว่างก็ได้
 
@@ -82,6 +84,48 @@ CMS ของคณะดึงงานได้ที่ `GET /api/v1/designs/
   - ภาพครอปแบบ cover ให้เต็มกล่อง (ไม่บิด) · ไฟล์ MP4 หรือ WebM
   - ภาพนิ่ง (PNG/JPEG/PDF/SVG) และภาพย่อใช้ "ภาพปก" = เฟรมที่วินาที `trimStart` · ตอนพรีเซนต์และไฟล์วิดีโอที่ดาวน์โหลดเล่นจริงตั้งแต่เข้าหน้า
   - CMS ที่จะเล่นให้ใช้ `<video src="{src}#t={trimStart},{trimEnd}" muted?={muted} loop?={loop}>` วางตามกล่องเดียวกับ element อื่น
+
+## แต่งภาพ: ระดับสี เส้นโค้ง เอฟเฟกต์ และสไตล์เลเยอร์
+
+ใช้กับ **image** และรูปในกรอบ/ช่อง (ยกเว้น `layerStyle` ที่มีเฉพาะ image) · ทุกค่าเป็นค่าเสริม ไม่มี/null = ไม่ปรับ · ตัวประมวลผลอ้างอิงอยู่ใน `frontend/src/lib/editor/image-pipeline.ts` (ใช้ทั้งบนจอ ภาพย่อ และไฟล์ส่งออก) · CMS ที่ทำตามไม่ไหวให้ใช้ภาพที่ส่งออกจาก editor แทน
+
+**ลำดับการประมวลผล:** ครอป → `adjust` + `filter` → `colorEdits` → `levels` → `curves` → `effects` (เรียงตามอาร์เรย์) → `erase` → `layerStyle` · `adjust.blur` วาดเป็นเบลอตอนวาดรูปตามเดิม
+
+- `levels` `{ master?, red?, green?, blue? }` แต่ละช่อง `{ black, white, gamma, outBlack, outWhite }` (black/white/out* 0–255 · gamma 0.1–9.99 · 1 = เดิม) · ค่า = `outBlack + ((v − black) / (white − black))^(1/gamma) × (outWhite − outBlack)` (ตัดช่วง 0–1 ก่อนยกกำลัง) · ทำช่องสีของตัวเองก่อนแล้วจึง `master`
+- `curves` `{ master?, red?, green?, blue? }` แต่ละช่องเป็นจุด `[[อินพุต, เอาต์พุต], …]` 0–255 · เรียงตามอินพุต เติมปลาย 0 และ 255 ด้วยค่าเอาต์พุตของจุดปลาย · ต่อจุดด้วย monotone cubic Hermite (Fritsch–Carlson) · ทำช่องสีก่อนแล้วจึง `master`
+- `effects` `[{ kind, params?, colors?, off? }]` · `off: true` = ข้าม · `params` ที่ขาดใช้ค่าเริ่มต้นและบีบให้อยู่ในช่วง (ตาราง `EFFECT_DEFS` ใน `lib/editor/image-effects.ts`) · **ขนาดทุกค่า (size radius distance offset blur) เป็น % ของด้านสั้นของรูป**
+
+| kind | params (ค่าเริ่มต้น) | colors |
+|---|---|---|
+| `duotone` ดูโอโทน | amount 0–100 (100) | [เงา, แสง] |
+| `gradient-map` แผนที่ไล่สี | amount (100) | 2–5 สี จากมืดไปสว่าง แบ่งช่วงเท่ากันตามความสว่าง |
+| `posterize` โปสเตอร์ | levels 2–12 (4) | — |
+| `threshold` ขาวดำสองระดับ | level 1–254 (128) | [มืด, สว่าง] |
+| `invert` กลับสี | amount (100) | — |
+| `color-overlay` ทับสี | amount (35) · mode 0 ปกติ 1 คูณ 2 สกรีน 3 ซ้อนทับ 4 แสงนุ่ม 5 เผาสี 6 เร่งแสง | [สี] |
+| `halftone` ฮาล์ฟโทน | size 0.5–6 (1.5) · angle 0–90 (45) · amount (100) | [หมึก, กระดาษ] |
+| `pixelate` โมเสก | size 0.5–10 (2.5) | — |
+| `grain` เกรนฟิล์ม | amount (35) · size 1–5 (1) · seed 1–50 (1) — สุ่มแบบกำหนดได้จาก seed | — |
+| `glitch` กลิตช์ | offset 0–8 (1.5) แยกช่องแดง/น้ำเงิน · slices 0–30 (10) แถบเลื่อน · seed (7) | — |
+| `sketch` ภาพร่างดินสอ · `edges` ขอบเรืองแสง | amount (100) · detail 1–10 (5) — Sobel ของความสว่าง | — |
+| `emboss` นูนต่ำ | amount (100) · angle 0–360 (135) · depth 1–10 (4) | — |
+| `oil` ภาพสีน้ำมัน | radius 1–8 (3) — ฟิลเตอร์ Kuwahara (รัศมีจริง = radius × 0.25 % ของด้านสั้น) | — |
+| `blur` เบลอนุ่ม | radius 0–8 (1) = σ ของเกาส์ | — |
+| `motion-blur` เบลอเคลื่อนไหว | distance 0–20 (5) · angle 0–180 (0) | — |
+| `zoom-blur` เบลอซูม | amount (35) · x, y 0–100 (50) จุดศูนย์กลาง | — |
+| `tilt-shift` ทิลต์ชิฟต์ | position 0–100 (50) · band 5–90 (30) ความกว้างแถบชัดเป็น % ของความสูง · blur 0–8 (2) | — |
+| `chromatic` สีเหลื่อมเลนส์ | shift 0–5 (1.2) ช่องแดงย่อ/ช่องน้ำเงินขยายรอบกึ่งกลาง | — |
+| `light-leak` แสงรั่ว | amount (60) · angle 0–360 (315) ทิศจากกึ่งกลาง · size 10–100 (60) | [สีแสง] ผสมแบบ screen |
+
+- `layerStyle` (เฉพาะ image) `{ outline?, glow?, innerShadow? }` ตามรูปร่างส่วนที่ทึบของรูป (alpha ≥ 50%) — เหมาะกับรูปที่ลบพื้นหลังแล้ว · `size` เป็น % ของด้านสั้นของรูป
+  - `outline` `{ size, color }` เส้นขอบสติกเกอร์รอบส่วนทึบ (ยื่นออกนอกกล่องได้)
+  - `glow` `{ size, color, opacity 0–100 }` แสงเรืองด้านหลัง (เบลอเกาส์ σ = size/2)
+  - `innerShadow` `{ size, color, opacity 0–100 }` ขอบด้านในมืดลงตามระยะจากขอบ (`(1 − d/size)²`)
+  - ลำดับชั้นล่างขึ้นบน: แสงเรือง → เส้นขอบ → รูป · เงาของชิ้น (`shadow`) คิดจากผลรวมนี้
+
+`filter` มีฟิลเตอร์สำเร็จรูป 55 ตัวใน 9 กลุ่ม (พื้นฐาน ธรรมชาติ อบอุ่น เย็น วินเทจ/ฟิล์ม ขาวดำ ดูโอโทน ภาพยนตร์ นีออน/ป๊อป) · key เดิมไม่เปลี่ยน ตัวใหม่เพิ่มการย้อมสีแยกโทน (`splitTone`) และน้ำหนักสีตอนแปลงขาวดำ (`monoMix`)
+
+"สไตล์ภาพ" ในแผงแก้ไขรูปเป็นแค่ชุดค่าข้างต้นที่ใส่ทีเดียว (ไม่มีฟิลด์ใหม่ใน JSON) · สไตล์ที่ผู้ใช้บันทึกเองเก็บใน localStorage ของเบราว์เซอร์ ไม่อยู่ในงาน
 
 ## เสียงประกอบของหน้า (`audio`)
 
