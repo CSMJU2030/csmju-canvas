@@ -17,7 +17,8 @@ export class PrismaService
     }
 
     // Prisma 7 บังคับใช้ driver adapter สำหรับทุก SQL provider
-    super({ adapter: new PrismaPg({ connectionString }) });
+    // จำกัด connection ต่อระบบ — PostgreSQL กลางบน server ใช้ร่วมกันหลายสิบระบบ (deployment.md ข้อ 4.1)
+    super({ adapter: new PrismaPg({ connectionString, max: Number(process.env.DATABASE_POOL_MAX) || 5 }) });
   }
 
   async onModuleInit(): Promise<void> {

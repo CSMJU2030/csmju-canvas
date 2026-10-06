@@ -14,6 +14,11 @@ const BACKEND_URL = (process.env.BACKEND_URL ?? "http://127.0.0.1:4207").replace
 const nextConfig: NextConfig = {
   devIndicators: { position: "top-right" },
 
+  // deployment.md ข้อ 3 (DEP-04): image มีแค่ server ที่ trace แล้ว · pnpm เก็บ dependency ที่รากของ workspace
+  // จึงต้องเริ่มตามรอยจากรากของ repo ไม่งั้น standalone ขาดไฟล์
+  output: "standalone",
+  outputFileTracingRoot: WORKSPACE_ROOT,
+
   /// คืนเป็น array = afterFiles · ห้ามมี proxy.ts มาดัก /auth/* เพราะ proxy ทำงานก่อน rewrite
   async rewrites() {
     return [
