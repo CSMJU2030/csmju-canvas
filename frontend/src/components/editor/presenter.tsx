@@ -49,9 +49,10 @@ interface PresentState {
   container: HTMLElement | null;
   /// เพิ่มขึ้นเมื่อฟอนต์ในหน้าต่างผู้พรีเซนต์โหลดเสร็จ ให้สไลด์วาดใหม่
   fontTick: number;
-  /// fill = เต็มจอไม่มีขอบ (ขยายจนเต็ม ขอบที่เกินถูกตัด) · contain = เห็นทั้งหน้า ขอบว่างเป็นสีพื้นของหน้า
-  fit: 'fill' | 'contain';
-  setFit(fit: 'fill' | 'contain'): void;
+  /// auto = เต็มจอถ้าสัดส่วนใกล้จอ (ถูกตัดไม่เกิน 12%) ไม่งั้นเห็นทั้งหน้า · fill = เต็มจอเสมอ (ขอบที่เกินถูกตัด) ·
+  /// contain = เห็นทั้งหน้า ขอบว่างเป็นสีพื้นของหน้า (ดูต่อเนื่อง ไม่มีแถบดำ)
+  fit: SlideFit;
+  setFit(fit: SlideFit): void;
   start(mode: PresentMode, slide: number): void;
   stop(): void;
   go(slide: number): void;
@@ -89,7 +90,7 @@ export const usePresent = create<PresentState>((set, get) => ({
   popup: null,
   container: null,
   fontTick: 0,
-  fit: 'fill',
+  fit: 'auto',
   setFit(fit) {
     set({ fit });
   },
@@ -354,12 +355,13 @@ function PresenterInner({ mode }: { mode: PresentMode }) {
     <>
       <div
         ref={rootRef}
-        className="csmju-stage fixed inset-0 z-50 bg-inverse"
+        className="csmju-stage fixed inset-0 z-50 flex flex-col bg-inverse"
         onPointerMove={showChrome}
         style={{ cursor: chromeVisible ? undefined : 'none' }}
       >
         {/* สไลด์เต็มพื้นที่ทั้งจอ แถบควบคุมลอยทับและซ่อนเองเมื่อเมาส์นิ่ง — ไม่กินที่ ไม่มีช่องว่าง */}
-        <SlideView page={page} interactive fit={fit} className="absolute inset-0" />
+        {/* flex-1 ไม่ใช่ absolute — กล่องสไลด์มี relative ในตัว ถ้าใส่ absolute ชนกันแล้วสูง 0 (จอว่าง) */}
+        <SlideView page={page} interactive fit={fit} className="min-h-0 flex-1" />
         <div
           className={cx(
             'absolute inset-x-0 bottom-0 transition-opacity duration-300 focus-within:opacity-100',
@@ -379,8 +381,27 @@ function PresenterInner({ mode }: { mode: PresentMode }) {
   );
 }
 
+export type SlideFit = 'auto' | 'fill' | 'contain';
+
+/// เต็มจอได้โดยไม่ตัดเนื้อหาเกิน 12% ไหม — สไลด์ 16:9 บนจอ 16:10 ตัดราว 5% (เต็มจอได้) ·
+/// โปสเตอร์แนวตั้งบนจอแนวนอนตัดเกินครึ่ง (ต้องเห็นทั้งหน้า ไม่งั้นหัวเรื่องหาย)
+export function resolveFit(
+  wanted: SlideFit,
+  box: { width: number; height: number },
+  size: { width: number; height: number },
+): 'fill' | 'contain' {
+  if (wanted !== 'auto') return wanted;
+  if (!box.width || !box.height || !size.width || !size.height) return 'contain';
+
+  const screen = box.width / box.height;
+  const slide = size.width / size.height;
+  const cropped = 1 - Math.min(screen, slide) / Math.max(screen, slide);
+
+  return cropped <= 0.12 ? 'fill' : 'contain';
+}
+
 /// สไลด์หนึ่งหน้า: วาดเต็มพื้นที่แบบคงสัดส่วน + แอนิเมชันตอนเข้า + หมึกวาด + เอฟเฟกต์ Magic
-function SlideView({ page, interactive = false, className, fit = 'contain' }: { page: Page; interactive?: boolean; className?: string; fit?: 'fill' | 'contain' }) {
+function SlideView({ page, interactive = false, className, fit: wanted = 'contain' }: { page: Page; interactive?: boolean; className?: string; fit?: SlideFit }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const baseWidth = useEditor((s) => s.baseWidth);
@@ -418,6 +439,7 @@ function SlideView({ page, interactive = false, className, fit = 'contain' }: { 
     return () => observer.disconnect();
   }, []);
 
+  const fit = resolveFit(wanted, box, size);
   // fill = ขยายจนไม่มีช่องว่างรอบสไลด์ (ส่วนที่ล้นจอถูกตัดเท่ากันทุกด้าน) · contain = เห็นทั้งหน้า
   const scale = box.width && box.height ? (fit === 'fill' ? Math.max : Math.min)(box.width / size.width, box.height / size.height) : 0;
 
@@ -534,7 +556,7 @@ function SlideView({ page, interactive = false, className, fit = 'contain' }: { 
         role="img"
         aria-label={`สไลด์${page.name ? ` ${page.name}` : ''}`}
         style={{ width: size.width * scale, height: size.height * scale, filter: blurred ? 'blur(24px)' : undefined, cursor: interactive && tool !== 'none' ? 'crosshair' : 'default' }}
-        className="block shadow-csmju-lg"
+        className={cx('block', !interactive && 'shadow-csmju-lg')}
         onPointerDown={(event) => {
           if (!interactive || tool === 'none') return;
 
@@ -737,18 +759,27 @@ function PresentControls({ total, isFull }: { total: number; isFull: boolean }) 
           <button type="button" role="menuitem" onClick={() => { p().go(0); setMoreOpen(false); }} className="flex min-h-10 w-full items-center gap-2 px-3 text-left text-csmju-caption text-ink hover:bg-surface-muted">
             <RotateCcw aria-hidden className="size-4" /> กลับไปสไลด์แรก
           </button>
-          <button
-            type="button"
-            role="menuitemcheckbox"
-            aria-checked={fit === 'fill'}
-            onClick={() => {
-              p().setFit(fit === 'fill' ? 'contain' : 'fill');
-              setMoreOpen(false);
-            }}
-            className="flex min-h-10 w-full items-center gap-2 px-3 text-left text-csmju-caption text-ink hover:bg-surface-muted"
-          >
-            <Maximize aria-hidden className="size-4" /> {fit === 'fill' ? 'เห็นทั้งหน้า (มีขอบสีพื้นหลัง)' : 'เต็มจอไม่มีขอบ'}
-          </button>
+          {(
+            [
+              ['auto', 'พอดีจออัตโนมัติ'],
+              ['fill', 'เต็มจอไม่มีขอบ (ตัดขอบที่ล้น)'],
+              ['contain', 'เห็นทั้งหน้า (ขอบเป็นสีพื้นหลัง)'],
+            ] as [SlideFit, string][]
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              role="menuitemradio"
+              aria-checked={fit === key}
+              onClick={() => {
+                p().setFit(key);
+                setMoreOpen(false);
+              }}
+              className="flex min-h-10 w-full items-center gap-2 px-3 text-left text-csmju-caption text-ink hover:bg-surface-muted"
+            >
+              <Maximize aria-hidden className={cx('size-4', fit !== key && 'opacity-0')} /> {label}
+            </button>
+          ))}
         </FloatingPanel>
         {mode !== 'presenter' && (
           <DarkButton
