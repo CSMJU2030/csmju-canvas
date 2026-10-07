@@ -42,6 +42,7 @@ import { PanelHeader, UnderlineTabs } from './controls';
 import { CropPanel, FontPanel, ImageEditPanel, ReplacePanel } from './side-panels-media';
 import { SignaturePanel } from './signature-panel';
 import { BgRemovePanel } from './bg-remove-panel';
+import { MagicLayersPanel } from './magic-layers-panel';
 import { ElementsPanel } from './elements-panel';
 import { UploadDropZone } from './file-import';
 import { ImageSourcesBrowser, ImportedImagesBrowser } from './image-sources-panel';
@@ -89,6 +90,7 @@ export const PANEL_LABELS: Record<PanelKey, string> = {
   'image-edit': 'แก้ไขรูปภาพ',
   crop: 'ครอปภาพ',
   'bg-remove': 'ลบพื้นหลัง',
+  'magic-layers': 'แยกเลเยอร์',
   replace: 'แทนที่รูป',
   'chart-data': 'แก้ไขข้อมูลชาร์ต',
   brand: 'ชุดแบรนด์',
@@ -166,6 +168,8 @@ export function PanelContent({
       return <CropPanel />;
     case 'bg-remove':
       return <BgRemovePanel />;
+    case 'magic-layers':
+      return <MagicLayersPanel />;
     case 'replace':
       return <ReplacePanel />;
     case 'chart-data':

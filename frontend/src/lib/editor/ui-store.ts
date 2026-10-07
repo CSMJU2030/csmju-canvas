@@ -6,7 +6,7 @@ import type { PagesLayout } from './page-layout';
 /// แยกจาก store ของงานเพื่อไม่ให้การเปิด/ปิดแผงไปอยู่ในประวัติ undo หรือทำให้บันทึกอัตโนมัติ
 
 export type RailPanel = 'templates' | 'elements' | 'text' | 'uploads' | 'projects' | 'starred' | 'background';
-export type ContextPanel = 'position' | 'color' | 'effects' | 'animate' | 'font' | 'image-edit' | 'crop' | 'replace' | 'chart-data' | 'bg-remove';
+export type ContextPanel = 'position' | 'color' | 'effects' | 'animate' | 'font' | 'image-edit' | 'crop' | 'replace' | 'chart-data' | 'bg-remove' | 'magic-layers';
 export type UtilityPanel = 'signature' | 'layers' | 'pages' | 'notes' | 'brand' | 'styles' | 'qr' | 'generators';
 
 /// จำลองการมองเห็นสีของผู้ที่ตาบอดสี (กรองเฉพาะภาพบนจอ ไม่เปลี่ยนงาน)

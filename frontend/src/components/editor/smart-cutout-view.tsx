@@ -1,6 +1,6 @@
 'use client';
 
-import { Brush, Eraser, Loader2, MousePointerClick, RotateCcw, SquareDashed } from 'lucide-react';
+import { Brush, Eraser, Loader2, MousePointerClick, RotateCcw, SquareDashed, Type } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { cx } from '@/components/csmju/primitives';
 import {
@@ -26,7 +26,9 @@ import { RangeField } from './controls';
 ///
 /// ทุกครั้งที่ตีกรอบ/ทาแปรงเสร็จ ระบบคำนวณใหม่ทั้งภาพ (~0.5 วินาที) · ขอบละเอียดระดับพิกเซลของรูปจริงตอนกดใช้
 
-type Tool = 'select' | 'rect' | 'keep' | 'remove';
+type Tool = 'select' | 'rect' | 'keep' | 'remove' | 'text';
+
+export type TextBox = { x0: number; y0: number; x1: number; y1: number };
 
 /// สีเส้นรอบวัตถุแต่ละชิ้น (วนซ้ำเมื่อเกิน) — rgb แยกช่องสำหรับเขียนลง ImageData
 const OBJECT_COLORS: [number, number, number][] = [
@@ -43,6 +45,8 @@ const rgb = ([r, g, b]: [number, number, number], alpha = 1) => `rgb(${r} ${g} $
 export interface SmartCutoutHandle {
   /// สร้างรูปผลลัพธ์จากรูปขนาดจริง (คืน null ถ้ายังไม่พบวัตถุ)
   render: (full: CutoutPixels) => CutoutPixels | null;
+  /// สถานะปัจจุบันสำหรับ "แยกเลเยอร์" (วัตถุที่พบ · ชิ้นที่ตัดทิ้ง · กรอบข้อความ)
+  snapshot: () => { result: CutoutResult | null; excluded: ReadonlySet<number>; softness: number; texts: TextBox[] };
 }
 
 /// ย่อพิกเซลของรูปให้ด้านยาวไม่เกิน max
@@ -69,7 +73,10 @@ export function SmartCutoutView({
   onSoftness,
   handleRef,
   onStatus,
+  layers = false,
 }: {
+  /// โหมดแยกเลเยอร์ (Magic Layers): เพิ่มเครื่องมือ "กรอบข้อความ" และแสดงพื้นหลังเดิมจาง ๆ
+  layers?: boolean;
   image: HTMLImageElement;
   previewMax: number;
   softness: number;
@@ -88,7 +95,8 @@ export function SmartCutoutView({
   const [tool, setTool] = useState<Tool>('select');
   const [brush, setBrush] = useState(4);
   const [hover, setHover] = useState(-1);
-  const [draft, setDraft] = useState<{ rect?: CutoutHints['rect']; stroke?: CutoutStroke } | null>(null);
+  const [draft, setDraft] = useState<{ rect?: CutoutHints['rect']; stroke?: CutoutStroke; text?: TextBox } | null>(null);
+  const [texts, setTexts] = useState<TextBox[]>([]);
   const previewRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
 
@@ -148,8 +156,8 @@ export function SmartCutoutView({
   );
 
   useEffect(() => {
-    handleRef.current = { render };
-  }, [handleRef, render]);
+    handleRef.current = { render, snapshot: () => ({ result, excluded, softness, texts }) };
+  }, [handleRef, render, result, excluded, softness, texts]);
 
   // ตัวอย่างผลลัพธ์
   useEffect(() => {
@@ -160,10 +168,11 @@ export function SmartCutoutView({
     canvas.width = preview.width;
     canvas.height = preview.height;
 
-    const out = render(preview) ?? preview;
+    // แยกเลเยอร์: แสดงรูปเต็ม (พื้นหลังยังอยู่) ให้เห็นทั้งวัตถุและข้อความที่จะแยก
+    const out = layers ? preview : (render(preview) ?? preview);
 
     canvas.getContext('2d')!.putImageData(new ImageData(new Uint8ClampedArray(out.data), out.width, out.height), 0, 0);
-  }, [preview, render]);
+  }, [preview, render, layers]);
 
   // ชั้นบน: เส้นรอบวัตถุ · วัตถุที่ตัดทิ้ง (แดงจาง) · ชิ้นที่ชี้อยู่ · กรอบ/แปรงที่กำลังลาก
   useEffect(() => {
@@ -234,6 +243,21 @@ export function SmartCutoutView({
     hints.strokes.forEach(drawStroke);
     if (draft?.stroke) drawStroke(draft.stroke);
 
+    for (const box of [...texts, ...(draft?.text ? [draft.text] : [])]) {
+      ctx.setLineDash([4, 3]);
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = 'rgb(245 158 11)';
+      ctx.fillStyle = 'rgb(245 158 11 / 0.15)';
+      const x = Math.min(box.x0, box.x1) * canvas.width;
+      const y = Math.min(box.y0, box.y1) * canvas.height;
+      const w = Math.abs(box.x1 - box.x0) * canvas.width;
+      const h = Math.abs(box.y1 - box.y0) * canvas.height;
+
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeRect(x, y, w, h);
+      ctx.setLineDash([]);
+    }
+
     const rect = draft?.rect ?? hints.rect;
 
     if (rect) {
@@ -248,7 +272,7 @@ export function SmartCutoutView({
       );
       ctx.setLineDash([]);
     }
-  }, [preview, result, excluded, hover, hints, draft]);
+  }, [preview, result, excluded, hover, hints, draft, texts]);
 
   const point = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     const box = event.currentTarget.getBoundingClientRect();
@@ -281,6 +305,7 @@ export function SmartCutoutView({
     event.currentTarget.setPointerCapture(event.pointerId);
 
     if (tool === 'rect') setDraft({ rect: { x0: p.x, y0: p.y, x1: p.x, y1: p.y } });
+    else if (tool === 'text') setDraft({ text: { x0: p.x, y0: p.y, x1: p.x, y1: p.y } });
     else setDraft({ stroke: { mode: tool, radius: brush / 100, points: [p] } });
   };
 
@@ -295,6 +320,7 @@ export function SmartCutoutView({
     setDraft((current) => {
       if (!current) return current;
       if (current.rect) return { rect: { ...current.rect, x1: p.x, y1: p.y } };
+      if (current.text) return { text: { ...current.text, x1: p.x, y1: p.y } };
       if (current.stroke) return { stroke: { ...current.stroke, points: [...current.stroke.points, p] } };
 
       return current;
@@ -308,7 +334,12 @@ export function SmartCutoutView({
 
     if (!current) return;
 
-    if (current.rect) {
+    if (current.text) {
+      const t = current.text;
+
+      if (Math.abs(t.x1 - t.x0) < 0.02 || Math.abs(t.y1 - t.y0) < 0.01) return;
+      setTexts((list) => [...list, { x0: Math.min(t.x0, t.x1), y0: Math.min(t.y0, t.y1), x1: Math.max(t.x0, t.x1), y1: Math.max(t.y0, t.y1) }]);
+    } else if (current.rect) {
       const { x0, y0, x1, y1 } = current.rect;
 
       // กรอบเล็กมาก = คลิกพลาด ไม่ใช่ตั้งใจตีกรอบ
@@ -321,13 +352,16 @@ export function SmartCutoutView({
     }
   };
 
-  const edited = hints.rect !== null || hints.strokes.length > 0 || excludedPoints.length > 0;
+  const edited = hints.rect !== null || hints.strokes.length > 0 || excludedPoints.length > 0 || texts.length > 0;
 
   const TOOLS: { key: Tool; label: string; icon: React.ReactNode; hint: string }[] = [
     { key: 'select', label: 'เลือกวัตถุ', icon: <MousePointerClick aria-hidden className="size-4" />, hint: 'คลิกวัตถุที่มีเส้นรอบเพื่อสลับ เก็บ/ตัดทิ้ง (สีแดง = ตัดทิ้ง)' },
     { key: 'rect', label: 'ตีกรอบ', icon: <SquareDashed aria-hidden className="size-4" />, hint: 'ลากกรอบรอบวัตถุที่ต้องการ — นอกกรอบจะถูกลบทั้งหมด' },
     { key: 'keep', label: 'แปรงเก็บ', icon: <Brush aria-hidden className="size-4" />, hint: 'ทาส่วนของวัตถุที่หายไป ระบบจะคำนวณใหม่ให้ติดกับวัตถุ' },
     { key: 'remove', label: 'แปรงลบ', icon: <Eraser aria-hidden className="size-4" />, hint: 'ทาพื้นหลังที่ยังติดอยู่ ระบบจะตัดออกให้' },
+    ...(layers
+      ? [{ key: 'text' as const, label: 'ข้อความ', icon: <Type aria-hidden className="size-4" />, hint: 'ลากกรอบรอบข้อความในรูป — ระบบลบข้อความออกจากรูปแล้ววางกล่องข้อความที่แก้ได้แทน' }]
+      : []),
   ];
 
   return (
@@ -356,6 +390,9 @@ export function SmartCutoutView({
         )}
       </div>
 
+      {layers && texts.length > 0 && (
+        <p className="mt-2 text-csmju-caption text-muted">กรอบข้อความ {texts.length} กรอบ — จะกลายเป็นกล่องข้อความที่พิมพ์แก้ได้</p>
+      )}
       {result && !busy && (
         <p className="mt-2 text-csmju-caption text-muted">
           {result.objects.length === 0
@@ -403,7 +440,7 @@ export function SmartCutoutView({
       )}
 
       <p className="mt-4 mb-2 text-csmju-caption font-semibold text-ink">แก้ด้วยมือ</p>
-      <div role="radiogroup" aria-label="เครื่องมือแก้การลบพื้นหลัง" className="grid grid-cols-4 gap-1 rounded-xl bg-surface-muted p-1">
+      <div role="radiogroup" aria-label="เครื่องมือแก้การลบพื้นหลัง" className={cx('grid gap-1 rounded-xl bg-surface-muted p-1', layers ? 'grid-cols-5' : 'grid-cols-4')}>
         {TOOLS.map((item) => (
           <button
             key={item.key}
@@ -436,6 +473,7 @@ export function SmartCutoutView({
           onClick={() => {
             setHints({ rect: null, strokes: [] });
             setExcludedPoints([]);
+            setTexts([]);
           }}
           className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-lg px-2 text-csmju-caption font-semibold text-primary hover:bg-primary-soft"
         >

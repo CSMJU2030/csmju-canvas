@@ -73,7 +73,31 @@ export const DESIGN_TYPES: DesignType[] = [
   { key: 'resume', label: 'เรซูเม่ (A4)', width: 794, height: 1123, group: 'document' },
   { key: 'infographic', label: 'อินโฟกราฟิก (ดิจิทัล)', width: 800, height: 2000, group: 'document' },
   { key: 'whiteboard', label: 'ไวท์บอร์ด', width: 3200, height: 2000, group: 'whiteboard' },
+  // เพิ่ม 8 ต.ค. 2569 — ขนาดที่เมนู "ปรับขนาด" ของ Canva มี (หน้า "เพิ่มเติม")
+  { key: 'mind-map', label: 'Mind Map', width: 3200, height: 2000, group: 'whiteboard' },
+  { key: 'facebook-cover', label: 'ภาพปก Facebook', width: 1640, height: 624, group: 'social' },
+  { key: 'linkedin-post', label: 'โพสต์ LinkedIn', width: 1200, height: 1200, group: 'social' },
+  { key: 'x-post', label: 'โพสต์ X (Twitter)', width: 1600, height: 900, group: 'social' },
+  { key: 'pinterest-pin', label: 'Pin Pinterest', width: 1000, height: 1500, group: 'social' },
+  { key: 'youtube-banner', label: 'แบนเนอร์ช่อง YouTube', width: 2560, height: 1440, group: 'social' },
+  { key: 'tiktok-cover', label: 'ปกวิดีโอ TikTok', width: 1080, height: 1920, group: 'social' },
+  { key: 'desktop-wallpaper', label: 'วอลเปเปอร์สำหรับเดสก์ท็อป', width: 1920, height: 1080, group: 'photo' },
+  { key: 'phone-wallpaper', label: 'วอลเปเปอร์มือถือ', width: 1080, height: 2340, group: 'photo' },
+  { key: 'virtual-background', label: 'พื้นหลังประชุมออนไลน์', width: 1280, height: 720, group: 'photo' },
+  { key: 'photo-collage', label: 'คอลลาจภาพถ่าย (แนวนอน 25×20 ซม.)', width: 945, height: 756, group: 'photo' },
+  { key: 'logo', label: 'โลโก้', width: 500, height: 500, group: 'photo' },
+  { key: 'infographic-print', label: 'อินโฟกราฟิก (แนวตั้ง 9.9×21 ซม.)', width: 374, height: 794, group: 'print' },
+  { key: 'book-cover', label: 'หน้าปกหนังสือ', width: 1410, height: 2250, group: 'print' },
+  { key: 'magazine-cover', label: 'ปกนิตยสาร (A4 แนวตั้ง)', width: 794, height: 1123, group: 'print' },
+  { key: 'menu', label: 'เมนูอาหาร (A4)', width: 794, height: 1123, group: 'print' },
+  { key: 'postcard', label: 'โปสการ์ด (A6 แนวนอน)', width: 559, height: 397, group: 'print' },
+  { key: 'bookmark', label: 'ที่คั่นหนังสือ', width: 189, height: 567, group: 'print' },
+  { key: 'letter', label: 'จดหมาย (Letter)', width: 816, height: 1056, group: 'document' },
+  { key: 'graph', label: 'กราฟ', width: 1200, height: 900, group: 'document' },
 ];
+
+/// ชุด "แคมเปญ" ของเมนูปรับขนาด — สร้างงานชุดเดียวหลายขนาดพร้อมกัน
+export const CAMPAIGN_TYPES = ['presentation', 'instagram-post', 'story', 'flyer'] as const;
 
 export const CUSTOM_TYPE = 'custom';
 
