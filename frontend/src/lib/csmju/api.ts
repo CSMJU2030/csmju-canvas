@@ -12,6 +12,8 @@
 /// **same-origin เสมอ** — หน้าบ้านเป็นประตูเดียวของระบบ (connect-core-hub.md ข้อ 1)
 /// `next.config.ts` rewrite `/api/*` ไปที่หลังบ้าน คุกกี้ session ที่
 /// `/auth/callback` ตั้งไว้บน origin นี้จึงติดไปกับทุกคำขอโดยไม่ต้องพึ่ง CORS
+import { isSvgFile, rasterizeSvgFile } from '@/lib/svg-raster';
+
 const BASE_URL = '/api/v1';
 
 export interface PaginationMeta {
@@ -168,11 +170,14 @@ export const api = {
   },
 
   /// อัปโหลดไฟล์แบบ multipart (ช่องชื่อ file) · fields = ช่องข้อความเพิ่มเติม เช่น sourceUrl/sourceSite
+  ///
+  /// SVG แปลงเป็น PNG ก่อนส่ง เพราะหลังบ้านไม่รับ SVG (standards deployment.md ข้อ 4.3)
   async upload<T>(path: string, file: File, fields?: Record<string, string>): Promise<T> {
     const form = new FormData();
+    const body = isSvgFile(file) ? await rasterizeSvgFile(file) : file;
 
     for (const [key, value] of Object.entries(fields ?? {})) form.append(key, value);
-    form.append('file', file);
+    form.append('file', body);
 
     return (await request<T>('POST', path, form)).data;
   },

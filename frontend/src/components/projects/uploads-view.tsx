@@ -27,7 +27,6 @@ const TYPE_OPTIONS = [
   { value: 'image/jpeg', label: 'รูปภาพ JPEG' },
   { value: 'image/webp', label: 'รูปภาพ WebP' },
   { value: 'image/gif', label: 'รูปภาพ GIF' },
-  { value: 'image/svg+xml', label: 'กราฟิก SVG' },
   { value: 'video/mp4', label: 'วิดีโอ MP4' },
   { value: 'video/webm', label: 'วิดีโอ WebM' },
   { value: 'audio/mpeg', label: 'เสียง MP3' },

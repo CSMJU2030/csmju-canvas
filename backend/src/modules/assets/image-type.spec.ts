@@ -1,4 +1,4 @@
-import { sniffImage } from './image-type.js';
+import { looksLikeSvg, sniffImage } from './image-type.js';
 
 describe('sniffImage', () => {
   it('รู้จัก PNG จาก magic bytes', () => {
@@ -14,10 +14,12 @@ describe('sniffImage', () => {
     expect(sniffImage(Buffer.from('GIF89a....'))).toBe('image/gif');
   });
 
-  it('รู้จัก SVG แม้มี xml declaration นำหน้า', () => {
-    expect(sniffImage(Buffer.from('<?xml version="1.0"?>\n<svg xmlns="http://www.w3.org/2000/svg"/>'))).toBe(
-      'image/svg+xml',
-    );
+  it('ไม่รับ SVG (ฝังสคริปต์ได้ · deployment.md ข้อ 4.3) แต่จำได้ว่าเป็น SVG เพื่อบอกเหตุผล', () => {
+    const svg = Buffer.from('<?xml version="1.0"?>\n<svg xmlns="http://www.w3.org/2000/svg"/>');
+
+    expect(sniffImage(svg)).toBeNull();
+    expect(looksLikeSvg(svg)).toBe(true);
+    expect(looksLikeSvg(Buffer.from('<html><svg></svg></html>'))).toBe(false);
   });
 
   it('ปฏิเสธไฟล์ที่ไม่ใช่รูป แม้ตั้งชื่อเป็น .png', () => {

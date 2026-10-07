@@ -11,7 +11,7 @@ import { Paginated } from '../../common/http/envelope.js';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
 import type { ListAssetsQuery } from './dto/asset.dto.js';
 import { FONT_EXTENSIONS, MAX_FONT_BYTES, sniffFont } from './font-type.js';
-import { IMAGE_EXTENSIONS, sniffImage } from './image-type.js';
+import { IMAGE_EXTENSIONS, looksLikeSvg, sniffImage } from './image-type.js';
 import { MEDIA_EXTENSIONS, sniffMedia } from './media-type.js';
 import { resolveSource, type SourceSite } from './source-site.js';
 
@@ -83,8 +83,12 @@ export class AssetsService {
     const mimeType = image ?? font ?? media;
 
     // ชนิดหรือขนาดไม่ตรงตอบ 400 VALIDATION_ERROR (มี details) ตาม deployment.md ข้อ 4.3
+    if (!mimeType && looksLikeSvg(file.buffer)) {
+      throw invalidFile('ไม่รับไฟล์ SVG โดยตรง (อาจมีสคริปต์) — อัปโหลดผ่านหน้าแก้ไข ระบบจะแปลงเป็น PNG ให้');
+    }
+
     if (!mimeType) {
-      throw invalidFile('รองรับเฉพาะรูป PNG, JPEG, WebP, GIF, SVG · วิดีโอ MP4, WebM · เสียง MP3, M4A, OGG, WAV · ฟอนต์ TTF, OTF, WOFF, WOFF2');
+      throw invalidFile('รองรับเฉพาะรูป PNG, JPEG, WebP, GIF · วิดีโอ MP4, WebM · เสียง MP3, M4A, OGG, WAV · ฟอนต์ TTF, OTF, WOFF, WOFF2');
     }
 
     if (font && file.size > MAX_FONT_BYTES) {

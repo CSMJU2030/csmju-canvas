@@ -74,8 +74,9 @@ export class AssetsController {
     const etag = row.sha256 ? `"${row.sha256}"` : null;
 
     response.setHeader('Content-Type', row.mimeType);
-    // ตรวจสิทธิ์ทุกครั้ง (deployment.md ข้อ 4.3) — no-cache ให้เบราว์เซอร์ถามใหม่ทุกครั้ง แต่ได้ 304 เมื่อไฟล์ไม่เปลี่ยน
-    response.setHeader('Cache-Control', 'private, no-cache');
+    // deployment.md ข้อ 4.3: ไฟล์ของผู้ใช้ผ่านการตรวจสิทธิ์ทุกครั้ง ไม่ให้เบราว์เซอร์หรือ proxy เก็บไว้
+    // (ETag = sha256 ยังส่ง เพื่อพิสูจน์ว่าไฟล์ไม่ถูกแก้)
+    response.setHeader('Cache-Control', 'private, no-store');
     if (etag) response.setHeader('ETag', etag);
     // ชื่อไฟล์ตอนบันทึก — รูปใน <img>/<video> ไม่สนหัวนี้ แต่เปิดลิงก์ตรง ๆ จะดาวน์โหลดแทนการแสดงในหน้า
     response.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(row.fileName)}`);
