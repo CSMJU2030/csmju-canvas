@@ -302,7 +302,7 @@ model Preference {
   largeText          Boolean   @default(false) @map("large_text")
   notifyTemplateUsed Boolean   @default(true) @map("notify_template_used")
   notifyTrash        Boolean   @default(true) @map("notify_trash")
-  theme              ThemeMode @default(SYSTEM)
+  theme              ThemeMode @default(LIGHT)
   updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@map("preferences")

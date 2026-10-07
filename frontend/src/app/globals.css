@@ -12,33 +12,34 @@
 @import "tailwindcss";
 
 :root {
-  /* Brand — ม่วง-ฟ้าแบบ Canva ตามที่ PL ตัดสิน (4 ต.ค. 2569) เบี่ยงจากน้ำเงินองค์กร rgb(0 76 153)
-     ชื่อ token ยังเป็นชุดเดียวกับ design-system เพื่อสลับกลับได้ในไฟล์นี้ไฟล์เดียว */
-  --csmju-color-primary: rgb(125 42 232);
-  --csmju-color-primary-hover: rgb(106 31 206);
-  --csmju-color-primary-active: rgb(88 24 176);
-  --csmju-color-primary-soft: rgb(240 233 253);
-  --csmju-color-primary-soft-hover: rgb(228 216 252);
-  --csmju-color-focus-ring: rgb(167 139 250);
-  --csmju-color-accent: rgb(0 196 204);
-  --csmju-color-accent-soft: rgb(220 247 248);
+  /* Brand — น้ำเงินตามธีมของ Core Hub (PM ขอให้ทุกระบบหน้าตาเดียวกับ Core Hub · PL 8 ต.ค. 2569)
+     ค่ามาจาก globals.css ของ csmju-core-hub: primary rgb(0 60 180) / rgb(33 84 217) · ปุ่มไล่ rgb(33 84 217) → rgb(59 128 242)
+     แถบซ้ายไล่น้ำเงินเข้ม rgb(22 38 77) → rgb(13 79 168) ตัวอักษรขาว · ค่าเริ่มต้นเป็นโหมดสว่าง */
+  --csmju-color-primary: rgb(33 84 217);
+  --csmju-color-primary-hover: rgb(0 60 180);
+  --csmju-color-primary-active: rgb(0 48 150);
+  --csmju-color-primary-soft: rgb(220 225 255);
+  --csmju-color-primary-soft-hover: rgb(204 212 255);
+  --csmju-color-focus-ring: rgb(59 128 242);
+  --csmju-color-accent: rgb(59 128 242);
+  --csmju-color-accent-soft: rgb(219 234 254);
 
   /* พื้นผิว */
-  --csmju-color-canvas: rgb(246 243 253);
-  --csmju-color-stage: rgb(235 236 240);
+  --csmju-color-canvas: rgb(248 249 250);
+  --csmju-color-stage: rgb(237 238 239);
   --csmju-color-surface: rgb(255 255 255);
-  --csmju-color-surface-muted: rgb(248 250 252);
-  --csmju-color-surface-inverse: rgb(15 23 42);
+  --csmju-color-surface-muted: rgb(243 244 245);
+  --csmju-color-surface-inverse: rgb(25 28 29);
 
   /* ข้อความ */
-  --csmju-color-text: rgb(13 18 22);
-  --csmju-color-text-body: rgb(38 44 52);
-  --csmju-color-text-muted: rgb(89 96 112);
+  --csmju-color-text: rgb(25 28 29);
+  --csmju-color-text-body: rgb(46 49 56);
+  --csmju-color-text-muted: rgb(67 70 84);
   --csmju-color-text-inverse: rgb(248 250 252);
 
   /* เส้นขอบ */
-  --csmju-color-border: rgb(228 228 235);
-  --csmju-color-border-strong: rgb(205 205 215);
+  --csmju-color-border: rgb(225 227 228);
+  --csmju-color-border-strong: rgb(196 197 215);
 
   /* สถานะ */
   --csmju-color-success-text: rgb(21 128 61);
@@ -50,9 +51,9 @@
   --csmju-color-danger-text: rgb(185 28 28);
   --csmju-color-danger-bg: rgb(254 226 226);
   --csmju-color-danger-border: rgb(252 165 165);
-  --csmju-color-info-text: rgb(88 24 176);
-  --csmju-color-info-bg: rgb(240 233 253);
-  --csmju-color-info-border: rgb(196 181 253);
+  --csmju-color-info-text: rgb(0 60 180);
+  --csmju-color-info-bg: rgb(220 225 255);
+  --csmju-color-info-border: rgb(178 192 250);
 
   /* พาสเทลของไทล์หมวดหมู่ (แบบ Canva) */
   --csmju-pastel-peach: rgb(255 228 214);
@@ -77,7 +78,7 @@
 
   /* Elevation */
   --csmju-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
-  --csmju-shadow-md: 0 4px 20px rgba(64, 37, 140, 0.08);
+  --csmju-shadow-md: 0 4px 20px rgba(0, 60, 180, 0.08);
   --csmju-shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.12);
 
   /* Motion */
@@ -87,10 +88,10 @@
   --csmju-ease-standard: cubic-bezier(0.2, 0, 0, 1);
 
   /* Chart palette — ใช้เป็นสีไอคอนประเภทงานด้วย (ห้ามสลับลำดับ) */
-  --csmju-chart-1: rgb(125 42 232);
-  --csmju-chart-2: rgb(0 196 204);
+  --csmju-chart-1: rgb(33 84 217);
+  --csmju-chart-2: rgb(59 128 242);
   --csmju-chart-3: rgb(20 184 166);
-  --csmju-chart-4: rgb(139 92 246);
+  --csmju-chart-4: rgb(78 93 135);
   --csmju-chart-5: rgb(245 158 11);
   --csmju-chart-6: rgb(100 116 139);
 
@@ -98,60 +99,58 @@
   --csmju-touch-target: 44px;
   --csmju-sidebar-width-collapsed: 72px;
 
-  --csmju-font-body: var(--font-geist), var(--font-noto-thai), system-ui, sans-serif;
-  /* หัวข้อใช้ไทยแบบมีหัว (Noto Sans Thai Looped) ตามภาพบรีฟ Fonts.png */
-  --csmju-font-heading: var(--font-geist), var(--font-thai-looped), var(--font-noto-thai), system-ui, sans-serif;
-  /* โลโก้ CS Canvas ตัวเขียน (Dancing Script) ตามภาพบรีฟ Fonts canvas.png */
-  --csmju-font-logo: var(--font-logo), cursive;
+  /* ฟอนต์ชุดเดียวกับ Core Hub — เนื้อความ Noto Sans Thai · หัวข้อ Plus Jakarta Sans (ไฟล์ OFL อยู่ใน repo) */
+  --csmju-font-body: var(--font-noto-thai), system-ui, sans-serif;
+  --csmju-font-heading: var(--font-jakarta), var(--font-noto-thai), system-ui, sans-serif;
 
-  --csmju-hero-from: rgb(158 226 235);
-  --csmju-hero-mid: rgb(214 226 252);
-  --csmju-hero-to: rgb(196 168 248);
-  --csmju-heading-from: rgb(60 76 230);
-  --csmju-heading-to: rgb(125 42 232);
-  --csmju-logo-from: rgb(0 196 204);
-  --csmju-logo-to: rgb(125 42 232);
+  --csmju-hero-from: rgb(219 230 255);
+  --csmju-hero-mid: rgb(236 242 255);
+  --csmju-hero-to: rgb(203 222 253);
+  --csmju-heading-from: rgb(33 84 217);
+  --csmju-heading-to: rgb(59 128 242);
+  --csmju-logo-from: rgb(255 255 255);
+  --csmju-logo-to: rgb(255 255 255);
   --csmju-search-bg: var(--csmju-color-surface);
-  --csmju-search-border: rgb(221 214 254);
-  --csmju-search-glow: rgba(167, 139, 250, 0.28);
-  --csmju-sidebar-from: var(--csmju-color-canvas);
-  --csmju-sidebar-to: var(--csmju-color-canvas);
+  --csmju-search-border: rgb(196 210 250);
+  --csmju-search-glow: rgba(59, 128, 242, 0.25);
+  --csmju-sidebar-from: rgb(22 38 77);
+  --csmju-sidebar-to: rgb(13 79 168);
 }
 
 /* ธีมมืด (เมนูบัญชี → ธีม) — data-theme="dark" หรือ "system" + ระบบปฏิบัติการตั้งเป็นมืด
    ค่าซ้ำสองชุดโดยเจตนา เพราะ CSS ใช้ตัวเลือกเดียวกันข้าม @media ไม่ได้ */
 :root[data-theme="dark"] {
-  --csmju-hero-from: rgb(14 78 86);
-  --csmju-hero-mid: rgb(30 31 52);
-  --csmju-hero-to: rgb(76 32 132);
-  --csmju-heading-from: rgb(0 222 218);
-  --csmju-heading-to: rgb(98 132 255);
+  --csmju-hero-from: rgb(16 36 78);
+  --csmju-hero-mid: rgb(20 28 48);
+  --csmju-hero-to: rgb(12 50 110);
+  --csmju-heading-from: rgb(112 160 255);
+  --csmju-heading-to: rgb(150 200 255);
   --csmju-logo-from: rgb(255 255 255);
   --csmju-logo-to: rgb(255 255 255);
-  --csmju-search-bg: rgb(22 23 27);
-  --csmju-search-border: rgb(92 62 160);
-  --csmju-search-glow: rgba(124, 58, 237, 0.5);
-  --csmju-sidebar-from: rgb(38 24 58);
-  --csmju-sidebar-to: rgb(22 16 34);
+  --csmju-search-bg: rgb(18 24 38);
+  --csmju-search-border: rgb(50 70 120);
+  --csmju-search-glow: rgba(59, 128, 242, 0.45);
+  --csmju-sidebar-from: rgb(10 18 38);
+  --csmju-sidebar-to: rgb(13 52 120);
 
-  --csmju-color-primary: rgb(139 92 246);
-  --csmju-color-primary-hover: rgb(157 118 248);
-  --csmju-color-primary-active: rgb(171 136 250);
-  --csmju-color-primary-soft: rgb(52 38 84);
-  --csmju-color-primary-soft-hover: rgb(66 48 106);
-  --csmju-color-focus-ring: rgb(167 139 250);
-  --csmju-color-accent-soft: rgb(16 58 64);
-  --csmju-color-canvas: rgb(27 20 40);
-  --csmju-color-stage: rgb(17 18 21);
-  --csmju-color-surface: rgb(24 25 29);
-  --csmju-color-surface-muted: rgb(37 38 44);
-  --csmju-color-surface-inverse: rgb(244 244 248);
-  --csmju-color-text: rgb(244 244 248);
-  --csmju-color-text-body: rgb(214 214 222);
-  --csmju-color-text-muted: rgb(160 160 172);
+  --csmju-color-primary: rgb(59 128 242);
+  --csmju-color-primary-hover: rgb(96 150 246);
+  --csmju-color-primary-active: rgb(130 172 250);
+  --csmju-color-primary-soft: rgb(30 45 80);
+  --csmju-color-primary-soft-hover: rgb(38 56 98);
+  --csmju-color-focus-ring: rgb(112 160 255);
+  --csmju-color-accent-soft: rgb(20 40 72);
+  --csmju-color-canvas: rgb(14 20 33);
+  --csmju-color-stage: rgb(10 14 24);
+  --csmju-color-surface: rgb(22 29 45);
+  --csmju-color-surface-muted: rgb(30 39 60);
+  --csmju-color-surface-inverse: rgb(236 239 244);
+  --csmju-color-text: rgb(236 239 244);
+  --csmju-color-text-body: rgb(208 214 226);
+  --csmju-color-text-muted: rgb(160 170 192);
   --csmju-color-text-inverse: rgb(255 255 255);
-  --csmju-color-border: rgb(52 53 60);
-  --csmju-color-border-strong: rgb(74 75 84);
+  --csmju-color-border: rgb(42 52 76);
+  --csmju-color-border-strong: rgb(62 74 102);
   --csmju-color-success-bg: rgb(16 40 26);
   --csmju-color-success-text: rgb(134 239 172);
   --csmju-color-warning-bg: rgb(44 32 8);
@@ -159,8 +158,8 @@
   --csmju-color-danger-bg: rgb(45 18 19);
   --csmju-color-danger-text: rgb(252 165 165);
   --csmju-color-danger-border: rgb(127 29 29);
-  --csmju-color-info-bg: rgb(52 38 84);
-  --csmju-color-info-text: rgb(196 181 253);
+  --csmju-color-info-bg: rgb(30 45 80);
+  --csmju-color-info-text: rgb(170 196 255);
   --csmju-pastel-peach: rgb(74 46 36);
   --csmju-pastel-pink: rgb(72 36 56);
   --csmju-pastel-lilac: rgb(60 42 86);
@@ -177,37 +176,37 @@
 
 @media (prefers-color-scheme: dark) {
   :root[data-theme="system"] {
-    --csmju-hero-from: rgb(14 78 86);
-    --csmju-hero-mid: rgb(30 31 52);
-    --csmju-hero-to: rgb(76 32 132);
-    --csmju-heading-from: rgb(0 222 218);
-    --csmju-heading-to: rgb(98 132 255);
+    --csmju-hero-from: rgb(16 36 78);
+    --csmju-hero-mid: rgb(20 28 48);
+    --csmju-hero-to: rgb(12 50 110);
+    --csmju-heading-from: rgb(112 160 255);
+    --csmju-heading-to: rgb(150 200 255);
     --csmju-logo-from: rgb(255 255 255);
   --csmju-logo-to: rgb(255 255 255);
-  --csmju-search-bg: rgb(22 23 27);
-  --csmju-search-border: rgb(92 62 160);
-  --csmju-search-glow: rgba(124, 58, 237, 0.5);
-  --csmju-sidebar-from: rgb(38 24 58);
-    --csmju-sidebar-to: rgb(22 16 34);
+  --csmju-search-bg: rgb(18 24 38);
+  --csmju-search-border: rgb(50 70 120);
+  --csmju-search-glow: rgba(59, 128, 242, 0.45);
+  --csmju-sidebar-from: rgb(10 18 38);
+    --csmju-sidebar-to: rgb(13 52 120);
 
-    --csmju-color-primary: rgb(139 92 246);
-    --csmju-color-primary-hover: rgb(157 118 248);
-    --csmju-color-primary-active: rgb(171 136 250);
-    --csmju-color-primary-soft: rgb(52 38 84);
-    --csmju-color-primary-soft-hover: rgb(66 48 106);
-    --csmju-color-focus-ring: rgb(167 139 250);
-    --csmju-color-accent-soft: rgb(16 58 64);
-    --csmju-color-canvas: rgb(27 20 40);
-    --csmju-color-stage: rgb(17 18 21);
-    --csmju-color-surface: rgb(24 25 29);
-    --csmju-color-surface-muted: rgb(37 38 44);
-    --csmju-color-surface-inverse: rgb(244 244 248);
-    --csmju-color-text: rgb(244 244 248);
-    --csmju-color-text-body: rgb(214 214 222);
-    --csmju-color-text-muted: rgb(160 160 172);
+    --csmju-color-primary: rgb(59 128 242);
+    --csmju-color-primary-hover: rgb(96 150 246);
+    --csmju-color-primary-active: rgb(130 172 250);
+    --csmju-color-primary-soft: rgb(30 45 80);
+    --csmju-color-primary-soft-hover: rgb(38 56 98);
+    --csmju-color-focus-ring: rgb(112 160 255);
+    --csmju-color-accent-soft: rgb(20 40 72);
+    --csmju-color-canvas: rgb(14 20 33);
+    --csmju-color-stage: rgb(10 14 24);
+    --csmju-color-surface: rgb(22 29 45);
+    --csmju-color-surface-muted: rgb(30 39 60);
+    --csmju-color-surface-inverse: rgb(236 239 244);
+    --csmju-color-text: rgb(236 239 244);
+    --csmju-color-text-body: rgb(208 214 226);
+    --csmju-color-text-muted: rgb(160 170 192);
     --csmju-color-text-inverse: rgb(255 255 255);
-    --csmju-color-border: rgb(52 53 60);
-    --csmju-color-border-strong: rgb(74 75 84);
+    --csmju-color-border: rgb(42 52 76);
+    --csmju-color-border-strong: rgb(62 74 102);
     --csmju-color-success-bg: rgb(16 40 26);
     --csmju-color-success-text: rgb(134 239 172);
     --csmju-color-warning-bg: rgb(44 32 8);
@@ -215,8 +214,8 @@
     --csmju-color-danger-bg: rgb(45 18 19);
     --csmju-color-danger-text: rgb(252 165 165);
     --csmju-color-danger-border: rgb(127 29 29);
-    --csmju-color-info-bg: rgb(52 38 84);
-    --csmju-color-info-text: rgb(196 181 253);
+    --csmju-color-info-bg: rgb(30 45 80);
+    --csmju-color-info-text: rgb(170 196 255);
     --csmju-pastel-peach: rgb(74 46 36);
     --csmju-pastel-pink: rgb(72 36 56);
     --csmju-pastel-lilac: rgb(60 42 86);
@@ -230,6 +229,23 @@
     --csmju-shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.55);
     color-scheme: dark;
   }
+}
+
+:root {
+  /* สำเนาสีของธีมที่ใช้อยู่ ให้กล่องลอยบนแถบน้ำเงินคืนสีปกติได้ (.csmju-on-surface) */
+  --csmju-root-text: var(--csmju-color-text);
+  --csmju-root-text-body: var(--csmju-color-text-body);
+  --csmju-root-text-muted: var(--csmju-color-text-muted);
+  --csmju-root-primary: var(--csmju-color-primary);
+  --csmju-root-primary-soft: var(--csmju-color-primary-soft);
+  --csmju-root-primary-soft-hover: var(--csmju-color-primary-soft-hover);
+  --csmju-root-surface: var(--csmju-color-surface);
+  --csmju-root-surface-muted: var(--csmju-color-surface-muted);
+  --csmju-root-border: var(--csmju-color-border);
+  --csmju-root-border-strong: var(--csmju-color-border-strong);
+  --csmju-root-canvas: var(--csmju-color-canvas);
+  --csmju-root-focus-ring: var(--csmju-color-focus-ring);
+  --csmju-root-danger-text: var(--csmju-color-danger-text);
 }
 
 /* การตั้งค่า "การเข้าถึง" ของผู้ใช้ (หน้าบัญชี) — ตั้งเป็น attribute บน <html> */
@@ -357,24 +373,75 @@
       linear-gradient(100deg, var(--csmju-hero-from) 0%, var(--csmju-hero-mid) 50%, var(--csmju-hero-to) 100%);
   }
 
-  /* แถบซ้ายและแถบรอง: โหมดสว่างเป็นม่วงอ่อนเรียบ · โหมดมืดไล่ม่วงเข้มแบบ Canva */
-  .csmju-sidebar {
-    background-image: linear-gradient(to bottom, var(--csmju-sidebar-from), var(--csmju-sidebar-to));
+  /* พื้นรอบแผ่นเนื้อหา = แถบเมนูไล่น้ำเงินเข้มแบบ Core Hub ทั้งสองโหมด */
+  /* มือถือไม่มีแถบซ้าย (มีแถบล่างแทน) จึงไล่สีเฉพาะจอ md ขึ้นไป — ไม่ให้เห็นแถบน้ำเงินโผล่ใต้แถบล่าง */
+  @media (min-width: 48rem) {
+    .csmju-sidebar {
+      background-image: linear-gradient(160deg, var(--csmju-sidebar-from), var(--csmju-sidebar-to));
+    }
   }
 
-  /* โลโก้ตัวเขียน: โหมดสว่างไล่ฟ้าอมเขียว → ม่วง · โหมดมืดเป็นสีขาว (ตามภาพบรีฟ) */
+  /* ของที่วางบนแถบน้ำเงิน (แถบซ้าย · แถบรอง) — ตัวอักษรขาว ไฮไลต์ขาวโปร่ง แบบเมนูของ Core Hub
+     สลับ token ในขอบเขตนี้ คอมโพเนนต์ข้างในจึงไม่ต้องรู้ว่าอยู่บนพื้นเข้ม */
+  .csmju-on-brand {
+    --csmju-color-text: rgb(255 255 255);
+    --csmju-color-text-body: rgb(255 255 255 / 0.85);
+    --csmju-color-text-muted: rgb(255 255 255 / 0.65);
+    --csmju-color-primary: rgb(255 255 255);
+    --csmju-color-primary-soft: rgb(255 255 255 / 0.12);
+    --csmju-color-primary-soft-hover: rgb(255 255 255 / 0.18);
+    --csmju-color-surface: rgb(255 255 255 / 0.16);
+    --csmju-color-surface-muted: rgb(255 255 255 / 0.08);
+    --csmju-color-border: rgb(255 255 255 / 0.14);
+    --csmju-color-border-strong: rgb(255 255 255 / 0.22);
+    --csmju-color-canvas: var(--csmju-sidebar-from);
+    --csmju-color-focus-ring: rgb(255 255 255);
+    --csmju-color-danger-text: rgb(252 165 165);
+    color: var(--csmju-color-text-body);
+  }
+
+  /* กล่องลอยที่เปิดจากแถบน้ำเงิน (แจ้งเตือน · บัญชี) คืนสีปกติของธีม — ค่าสำรองตั้งที่ :root
+     (custom property แทนค่า var() ที่ตัวที่ประกาศ จึงได้สีของธีมสว่าง/มืดที่ใช้อยู่จริง) */
+  .csmju-on-brand .csmju-on-surface {
+    --csmju-color-text: var(--csmju-root-text);
+    --csmju-color-text-body: var(--csmju-root-text-body);
+    --csmju-color-text-muted: var(--csmju-root-text-muted);
+    --csmju-color-primary: var(--csmju-root-primary);
+    --csmju-color-primary-soft: var(--csmju-root-primary-soft);
+    --csmju-color-primary-soft-hover: var(--csmju-root-primary-soft-hover);
+    --csmju-color-surface: var(--csmju-root-surface);
+    --csmju-color-surface-muted: var(--csmju-root-surface-muted);
+    --csmju-color-border: var(--csmju-root-border);
+    --csmju-color-border-strong: var(--csmju-root-border-strong);
+    --csmju-color-canvas: var(--csmju-root-canvas);
+    --csmju-color-focus-ring: var(--csmju-root-focus-ring);
+    --csmju-color-danger-text: var(--csmju-root-danger-text);
+    color: var(--csmju-color-text-body);
+  }
+
+  /* วงกลมขาวรองโลโก้สาขา แบบหัวแถบของ Core Hub */
+  .csmju-logo-badge {
+    display: inline-grid;
+    place-items: center;
+    border-radius: 9999px;
+    background: rgb(255 255 255);
+    box-shadow: var(--csmju-shadow-sm);
+  }
+
+  /* ชื่อระบบข้างโลโก้ (เดิมเป็นตัวเขียน Dancing Script) — Plus Jakarta Sans หนาแบบหัวข้อของ Core Hub */
   .csmju-logo {
-    font-family: var(--csmju-font-logo);
-    font-weight: 700;
+    font-family: var(--csmju-font-heading);
+    font-weight: 800;
+    letter-spacing: -0.02em;
     background-image: linear-gradient(90deg, var(--csmju-logo-from), var(--csmju-logo-to));
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
   }
 
-  /* แถบบนของหน้าแก้ไข: ฟ้าอมเขียว → ม่วง */
+  /* แถบบนของหน้าแก้ไข: น้ำเงินเข้มไล่น้ำเงินแบบแถบเมนูของ Core Hub */
   .csmju-brandbar {
-    background-image: linear-gradient(90deg, rgb(0 196 204) 0%, rgb(84 104 236) 55%, rgb(125 42 232) 100%);
+    background-image: linear-gradient(90deg, var(--csmju-sidebar-from) 0%, var(--csmju-sidebar-to) 100%);
   }
 
   /* ตัวอักษรไล่สีของหัวข้อหลัก */
@@ -385,10 +452,10 @@
     color: transparent;
   }
 
-  /* ปุ่มหลักไล่สีแบบปุ่ม "สร้าง" ของ Canva */
+  /* ปุ่มหลักไล่สีแบบ .btn-gradient ของ Core Hub */
   .csmju-gradient-button {
-    background-image: linear-gradient(135deg, rgb(0 196 204) 0%, rgb(125 42 232) 100%);
-    color: var(--csmju-color-text-inverse);
+    background-image: linear-gradient(90deg, rgb(33 84 217) 0%, rgb(59 128 242) 100%);
+    color: rgb(255 255 255);
   }
 
   /* ซ่อนแถบเลื่อนของแถวการ์ดแนวนอน (ยังเลื่อนด้วยนิ้ว/ทัชแพด/ปุ่มลูกศรได้) */

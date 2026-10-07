@@ -69,7 +69,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           aria-hidden={!secondaryOpen}
           inert={!secondaryOpen}
           className={cx(
-            'sticky top-0 hidden h-dvh shrink-0 overflow-hidden transition-all duration-300 ease-out motion-reduce:transition-none lg:block',
+            'csmju-on-brand sticky top-0 hidden h-dvh shrink-0 overflow-hidden transition-all duration-300 ease-out motion-reduce:transition-none lg:block',
             secondaryOpen ? 'w-64 opacity-100' : 'w-0 opacity-0',
           )}
         >
@@ -79,8 +79,13 @@ export function AppShell({ children }: { children: ReactNode }) {
               secondaryOpen ? 'translate-x-0' : '-translate-x-6',
             )}
           >
-            <Link href="/" className="csmju-logo mb-4 px-3 text-csmju-h1 leading-tight">
-              CS Canvas
+            <Link href="/" className="mb-4 flex items-center gap-2.5 px-2">
+              {/* โลโก้สาขาชุดเดียวกับ Core Hub ในวงกลมขาว */}
+              <span className="csmju-logo-badge size-10 shrink-0 p-0.5">
+                {/* eslint-disable-next-line @next/next/no-img-element -- ไฟล์เล็กใน public ไม่ต้องผ่านตัวย่อรูป */}
+                <img src="/csmju-mark.png" alt="" width={36} height={36} className="size-9 rounded-full object-contain" />
+              </span>
+              <span className="csmju-logo text-csmju-h2 leading-tight">CS Canvas</span>
             </Link>
             {secondary === 'projects' ? (
               <ProjectsNav />
@@ -124,7 +129,11 @@ function Rail({ open, onToggleSecondary }: { open: boolean; onToggleSecondary: (
   // z-40: ป๊อปโอเวอร์บัญชี/แจ้งเตือนลอยออกจากแถบนี้ ต้องอยู่เหนือแถบรองและแผ่นเนื้อหา
   // ไม่งั้นมองเห็นแต่กดไม่ได้ (แถบรองกับ <main> อยู่ทีหลังใน DOM จึงทับอยู่)
   return (
-    <nav aria-label="เมนูหลัก" className="sticky top-0 z-40 hidden h-dvh w-20 shrink-0 flex-col items-center gap-1 py-3 md:flex">
+    <nav aria-label="เมนูหลัก" className="csmju-on-brand sticky top-0 z-40 hidden h-dvh w-20 shrink-0 flex-col items-center gap-1 py-3 md:flex">
+      <Link href="/" aria-label="CS Canvas หน้าแรก" className="csmju-logo-badge mb-2 size-11 p-0.5">
+        {/* eslint-disable-next-line @next/next/no-img-element -- ไฟล์เล็กใน public ไม่ต้องผ่านตัวย่อรูป */}
+        <img src="/csmju-mark.png" alt="" width={40} height={40} className="size-10 rounded-full object-contain" />
+      </Link>
       {/* ปุ่มเปิด/ปิดแถบรอง + tooltip สีเข้มใต้ปุ่มแบบ Canva ("ปิดเมนู" / "เปิดเมนู") */}
       <div className="group relative mb-2">
         <button
@@ -147,7 +156,7 @@ function Rail({ open, onToggleSecondary }: { open: boolean; onToggleSecondary: (
         </span>
       </div>
       <button type="button" onClick={() => openCreate()} className="group mb-3 flex w-16 flex-col items-center gap-1 text-csmju-caption text-ink">
-        <span className="flex size-10 items-center justify-center rounded-full bg-primary text-on-inverse shadow-csmju-md ">
+        <span className="csmju-gradient-button flex size-10 items-center justify-center rounded-full shadow-csmju-md ring-2 ring-white/70">
           <Plus aria-hidden className="csmju-wiggle size-6" strokeWidth={2.5} />
         </span>
         สร้าง
@@ -253,7 +262,7 @@ function NotificationsPopover() {
         )}
       </button>
       {open && (
-        <div role="dialog" aria-label="การแจ้งเตือน" className="csmju-pop absolute bottom-0 left-14 z-50 flex max-h-popover w-96 flex-col rounded-2xl border border-line bg-surface shadow-csmju-lg">
+        <div role="dialog" aria-label="การแจ้งเตือน" className="csmju-pop csmju-on-surface absolute bottom-0 left-14 z-50 flex max-h-popover w-96 flex-col rounded-2xl border border-line bg-surface shadow-csmju-lg">
           <div className="flex items-center justify-between border-b border-line px-4 py-3">
             <h2 className="text-csmju-body font-semibold text-ink">การแจ้งเตือน</h2>
             <button type="button" onClick={() => markAll.mutate()} className="min-h-11 px-2 text-csmju-caption font-semibold text-ink hover:text-primary">

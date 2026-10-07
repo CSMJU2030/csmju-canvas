@@ -79,7 +79,7 @@ export function AccountPopover() {
       </button>
 
       {open && (
-        <div role="menu" aria-label="บัญชี" className="absolute bottom-0 left-14 z-50 w-80 origin-bottom-left csmju-pop rounded-2xl border border-line bg-surface py-2 shadow-csmju-lg">
+        <div role="menu" aria-label="บัญชี" className="csmju-on-surface absolute bottom-0 left-14 z-50 w-80 origin-bottom-left csmju-pop rounded-2xl border border-line bg-surface py-2 shadow-csmju-lg">
           <p className="px-4 py-1 text-csmju-caption font-semibold text-muted">บัญชี</p>
           <Link href="/account" onClick={closeAll} className="mx-2 flex items-center gap-3 rounded-xl bg-surface-muted px-3 py-3 hover:bg-primary-soft">
             <Avatar email={me.email} size="lg" />
@@ -161,7 +161,7 @@ function SubmenuButton({ icon, active, onClick, children }: { icon: ReactNode; a
 /// เมนูย่อยลอยออกทางขวาของเมนูบัญชี
 function Flyout({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div role="menu" aria-label={label} className="absolute bottom-16 left-full z-50 ml-2 w-72 csmju-pop rounded-2xl border border-line bg-surface py-2 shadow-csmju-lg">
+    <div role="menu" aria-label={label} className="csmju-on-surface absolute bottom-16 left-full z-50 ml-2 w-72 csmju-pop rounded-2xl border border-line bg-surface py-2 shadow-csmju-lg">
       {children}
     </div>
   );
