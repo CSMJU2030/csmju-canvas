@@ -77,6 +77,8 @@ docker compose down
 - **ไฟล์ที่ผู้ใช้อัปโหลด** (รูป วิดีโอ เสียง ฟอนต์) เก็บในฐานข้อมูลของระบบเอง (ตาราง `asset_contents`) ไฟล์ละไม่เกิน 10 MB ·
   โควตาเริ่มต้น 500 MB ต่อคน (ผู้ดูแลปรับได้ถึง 5 GB) — ขนาดรวมของฐานจึงโตตามจำนวนผู้ใช้ ต้องตกลงเพดานรวมกับ DevOps (deployment.md ข้อ 4.3)
 - **ครั้งแรกหลังขึ้น server** สั่ง `node dist/scripts/seed-templates.js` ใน container ของ api หนึ่งครั้ง เพื่อใส่เทมเพลตตั้งต้นของทีม (ไม่ได้รันเองตอนสตาร์ต)
-- งานตั้งเวลา: ลบงานที่ผู้ใช้ลบถาวรเกิน 30 วันทุกวันตี 3 (`Asia/Bangkok`) · ไม่มี WebSocket · ไม่เรียกบริการภายนอกนอกจาก Core Hub
+- งานตั้งเวลา: ลบงานที่ผู้ใช้ลบถาวรเกิน 30 วันทุกวันตี 3 (`Asia/Bangkok`) · ไม่เรียกบริการภายนอกนอกจาก Core Hub
+- **ผู้ร่วมงานแบบสด** (เคอร์เซอร์พร้อมชื่อ): socket.io ที่ path `/realtime` — web rewrite ไป api เหมือน `/api/*` จึงใช้ได้ทันทีแบบ long-polling ผ่าน HTTP ·
+  ถ้าต้องการ WebSocket จริง (เร็วกว่า) ให้ reverse proxy ส่ง `Upgrade` ของ `/realtime` ไปที่ container api:4000 · สถานะอยู่ในหน่วยความจำ ใช้กับ api instance เดียว
 - migration ไม่มี `CREATE EXTENSION` (ใช้ได้กับ role ที่ไม่ใช่ superuser)
 
