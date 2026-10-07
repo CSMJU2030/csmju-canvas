@@ -1,0 +1,32 @@
+# ฐานข้อมูลของ csmju-canvas เท่านั้น (Database-per-Subsystem · ARC-01)
+#
+#   pnpm --filter backend db:up     เปิดและรอจนพร้อมรับ connection
+#   pnpm --filter backend db:down   ปิด (ข้อมูลยังอยู่ใน volume)
+#
+# พอร์ต 55207 ไม่ใช่ 5432 เพราะเครื่องพัฒนามักมี Postgres ตัวอื่นอยู่แล้ว
+# ชื่อโปรเจกต์ของ compose ต้องไม่ซ้ำระบบอื่น — ถ้าปล่อยให้ใช้ชื่อโฟลเดอร์ (backend)
+# จะไปแทนที่คอนเทนเนอร์ของระบบอื่นที่อยู่ในโฟลเดอร์ชื่อ backend เหมือนกัน
+name: csmju-canvas
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: csmju_canvas
+      # ฐานข้อมูลสำหรับเครื่องพัฒนาเท่านั้น: ผูกพอร์ตกับ 127.0.0.1 แล้วไม่ใช้รหัสผ่าน
+      # DATABASE_URL จึงไม่มีรหัสผ่านให้หลุดเข้า repo (SEC-01 สแกนไฟล์ .env ในเครื่องด้วย)
+      # production ต้องใช้ฐานข้อมูลที่ PM จัดให้พร้อมรหัสผ่านจริง ไม่ใช่ไฟล์นี้
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - '127.0.0.1:${DB_PORT:-55207}:5432'
+    volumes:
+      - cscanvas-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d csmju_canvas']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  cscanvas-pgdata:

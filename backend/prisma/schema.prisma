@@ -1,0 +1,420 @@
+// CS Canvas (csmju-canvas) — ฐานข้อมูลของระบบย่อยนี้เท่านั้น (ARC-01)
+//
+// กฎที่ schema นี้ยึด (csmju2030-standards 1.8.4):
+//   1. ไม่มีตาราง users — อ้างผู้ใช้ด้วย `coreUserId` (ค่า `sub` จาก token) เท่านั้น (DD-01)
+//   2. ไม่เก็บ core role อีเมล หรือชื่อจริง — อ่านจาก token ที่ตรวจแล้วทุก request
+//      (audit_logs เก็บ role ของผู้กระทำ ณ เวลาที่เกิดเหตุ แบบเดียวกับ csmju-nexus — ไม่ใช้ตัดสินสิทธิ์)
+//   3. ตาราง/คอลัมน์เป็น snake_case ผ่าน @map/@@map · ฟิลด์ใน Prisma เป็น camelCase (DD-03)
+//   4. วันเวลาเป็น timestamptz ทั้งหมด
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  // Prisma 7: connection URL อยู่ใน prisma.config.ts และส่ง adapter ให้ PrismaClient
+}
+
+/// สิทธิ์ในระบบนี้ (Layer 2) — แปลงสดจาก core role ทุก request ไม่เก็บลงฐาน
+/// อยู่ใน schema เพื่อให้ type ของ enum มาจากที่เดียวกับส่วนอื่น
+enum Layer2Role {
+  CREATOR
+  EDITOR
+  ADMIN
+}
+
+/// ธีมของหน้าจอ (เมนูบัญชี → ธีม)
+enum ThemeMode {
+  LIGHT
+  DARK
+  SYSTEM
+}
+
+/// การแชร์ดีไซน์ด้วยลิงก์ — ผู้รับต้องเข้าสู่ระบบ CSMJU2030 ก่อนเสมอ (ไม่มีลิงก์สาธารณะ)
+enum LinkAccess {
+  NONE
+  VIEW
+  COMMENT
+  EDIT
+}
+
+enum FeedbackKind {
+  SUGGESTION
+  REPORT
+}
+
+enum NotificationKind {
+  DESIGN_TRASHED
+  TEMPLATE_USED
+  COMMENT_ADDED
+  /// ผู้ดูแลจัดการเรื่องที่คุณรายงานแล้ว (จัดการแล้ว หรือปัดตก)
+  REPORT_UPDATED
+  /// ผู้ดูแลซ่อนเทมเพลต ปิดลิงก์แชร์ หรือลบความคิดเห็นของคุณจากเรื่องร้องเรียน
+  CONTENT_MODERATED
+  /// ผู้ดูแลกู้งานที่คุณลบถาวรกลับไปไว้ในถังขยะ
+  DESIGN_RESTORED
+}
+
+/// สิ่งที่ถูกรายงาน (แผงผู้ดูแล → เรื่องร้องเรียน)
+enum ReportTargetKind {
+  DESIGN
+  TEMPLATE
+  COMMENT
+  OTHER
+}
+
+/// เหตุผลที่รายงาน: ละเมิดลิขสิทธิ์ · ไม่เหมาะสม · สแปม · ข้อมูลส่วนบุคคล · อื่น ๆ
+enum ReportReason {
+  COPYRIGHT
+  INAPPROPRIATE
+  SPAM
+  PERSONAL_DATA
+  OTHER
+}
+
+enum ReportStatus {
+  OPEN
+  RESOLVED
+  REJECTED
+}
+
+/// สิ่งที่ผู้ดูแลทำกับเป้าหมายตอนปิดเรื่อง — HIDE_TARGET = ซ่อนเทมเพลต · ปิดลิงก์แชร์ของงาน · ลบความคิดเห็น
+enum ReportAction {
+  HIDE_TARGET
+}
+
+/// โฟลเดอร์ในหน้า "โปรเจกต์" ของผู้ใช้แต่ละคน
+model Folder {
+  id         String   @id @default(uuid()) @db.Uuid
+  coreUserId String   @map("core_user_id")
+  name       String   @db.VarChar(80)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  designs Design[] @relation("FolderDesigns")
+
+  @@index([coreUserId])
+  @@map("folders")
+}
+
+/// งานออกแบบหนึ่งชิ้น — `document` คือ JSON state ของผืนผ้าใบ (ดู docs/design-document.md)
+/// ที่ CMS นำไป render สดได้
+model Design {
+  id               String     @id @default(uuid()) @db.Uuid
+  coreUserId       String     @map("core_user_id")
+  title            String     @db.VarChar(120)
+  /// key ของประเภทงาน เช่น presentation, poster, certificate (frontend/src/lib/design-types.ts)
+  designType       String     @map("design_type") @db.VarChar(40)
+  width            Int
+  height           Int
+  document         Json
+  /// ภาพย่อ JPEG แบบ data URL ขนาดเล็ก (≤ 200 KB) สร้างฝั่ง client ตอนบันทึก
+  thumbnail        String?
+  folderId         String?    @map("folder_id") @db.Uuid
+  sourceTemplateId String?    @map("source_template_id") @db.Uuid
+  /// แท็กที่ผู้ใช้ตั้งเอง (แผงรายละเอียด)
+  tags             String[]   @default([])
+  linkAccess       LinkAccess @default(NONE) @map("link_access")
+  /// เจ้าของติดดาวไว้ (เมนูไฟล์ → ติดดาว)
+  starredAt        DateTime?  @map("starred_at") @db.Timestamptz(3)
+  trashedAt        DateTime?  @map("trashed_at") @db.Timestamptz(3)
+  /// เจ้าของลบถาวรแล้ว — หายจากทุกหน้าของผู้ใช้ แต่ผู้ดูแลยังเห็นอีก 30 วันก่อนระบบลบจริง (มีค่าเมื่อ trashedAt มีค่าเสมอ)
+  purgedAt         DateTime?  @map("purged_at") @db.Timestamptz(3)
+  createdAt        DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  folder         Folder?       @relation("FolderDesigns", fields: [folderId], references: [id], onDelete: SetNull)
+  sourceTemplate Template?     @relation("TemplateDesigns", fields: [sourceTemplateId], references: [id], onDelete: SetNull)
+  visits         DesignVisit[]   @relation("DesignVisits")
+  versions       DesignVersion[] @relation("DesignVersions")
+  comments       DesignComment[] @relation("DesignComments")
+
+  @@index([coreUserId, trashedAt, updatedAt])
+  @@index([purgedAt])
+  @@map("designs")
+}
+
+/// เทมเพลตที่ทุกคนเห็น — เผยแพร่ได้เฉพาะ EDITOR/ADMIN
+/// `createdByCoreUserId` เป็น null = เทมเพลตตั้งต้นที่ทีม CS Canvas ออกแบบไว้ (seed)
+model Template {
+  id                  String   @id @default(uuid()) @db.Uuid
+  createdByCoreUserId String?  @map("created_by_core_user_id")
+  title               String   @db.VarChar(120)
+  description         String   @default("") @db.VarChar(300)
+  designType          String   @map("design_type") @db.VarChar(40)
+  category            String   @db.VarChar(40)
+  width               Int
+  height              Int
+  document            Json
+  thumbnail           String?
+  usageCount          Int      @default(0) @map("usage_count")
+  /// กลุ่มสีที่ใช้ในเทมเพลต (red · blue · …) คำนวณจาก document ตอนบันทึก — ตัวกรอง "สี" ในหน้าแก้ไข
+  colorTags           String[] @default([]) @map("color_tags")
+  /// ภาษาของข้อความในเทมเพลต (th · en) — ตัวกรอง "ภาษา"
+  languageTags        String[] @default([]) @map("language_tags")
+  /// ผู้ดูแลซ่อนจากเรื่องร้องเรียน — ไม่ขึ้นในรายการและใช้สร้างงานไม่ได้ (ผู้เผยแพร่และผู้ดูแลยังเปิดดูได้)
+  hiddenAt            DateTime? @map("hidden_at") @db.Timestamptz(3)
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  designs   Design[]           @relation("TemplateDesigns")
+  favorites TemplateFavorite[] @relation("TemplateFavorites")
+
+  @@index([designType])
+  @@index([usageCount])
+  @@map("templates")
+}
+
+/// ไฟล์ที่ผู้ใช้อัปโหลดมาใช้ในงาน (รูป วิดีโอ เสียง ฟอนต์) — ตัวไฟล์อยู่ในตาราง asset_contents
+/// (standards deployment.md ข้อ 4.3: ระบบไฟล์ของ container อ่านอย่างเดียว · ไม่ใช้บริการรูปสาธารณะของ Core Hub)
+model Asset {
+  id          String    @id @default(uuid()) @db.Uuid
+  coreUserId  String    @map("core_user_id")
+  fileName    String    @map("file_name") @db.VarChar(200)
+  mimeType    String    @map("mime_type") @db.VarChar(60)
+  sizeBytes   Int       @map("size_bytes")
+  /// ที่อยู่ไฟล์บนดิสก์ของรุ่นก่อนย้ายเข้าฐาน (ใช้กับสคริปต์ย้ายไฟล์เท่านั้น) · null = ไฟล์อยู่ใน asset_contents
+  storagePath String?   @map("storage_path") @db.VarChar(200)
+  /// sha256 ของไฟล์ต้นฉบับ (hex) — ใช้เป็น ETag และพิสูจน์ว่าไฟล์ไม่ถูกแก้
+  sha256      String?   @db.Char(64)
+  folderId    String?   @map("folder_id") @db.Uuid
+  trashedAt   DateTime? @map("trashed_at") @db.Timestamptz(3)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  /// หน้าเว็บ/ลิงก์รูปต้นฉบับเมื่อคัดลอกหรือลากรูปมาจากเว็บอื่น (เก็บเป็นข้อความ ระบบไม่เปิดลิงก์นี้)
+  sourceUrl   String?   @map("source_url") @db.VarChar(500)
+  /// แหล่งที่มา: unsplash pexels pixabay openverse wikimedia nasa pinterest google other · null = ไฟล์จากเครื่อง
+  sourceSite  String?   @map("source_site") @db.VarChar(60)
+
+  folder  AssetFolder?  @relation("AssetFolderAssets", fields: [folderId], references: [id], onDelete: SetNull)
+  content AssetContent? @relation("AssetContentFile")
+
+  @@index([coreUserId, trashedAt])
+  @@index([coreUserId, sourceSite])
+  @@index([folderId])
+  @@map("assets")
+}
+
+/// ไบต์ของไฟล์ที่อัปโหลด แยกจากตาราง assets เพื่อให้ query รายการไม่ลากไฟล์มาด้วย (deployment.md ข้อ 4.3)
+/// เก็บตามที่อัปโหลด ไม่ย่อ ไม่แปลง · ไม่เกิน 10 MB ต่อไฟล์
+model AssetContent {
+  assetId String @id @map("asset_id") @db.Uuid
+  content Bytes
+
+  asset Asset @relation("AssetContentFile", fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@map("asset_contents")
+}
+
+/// โฟลเดอร์จัดระเบียบรูปที่อัปโหลด (แผงอัปโหลด → แท็บโฟลเดอร์) — ลบโฟลเดอร์แล้วรูปยังอยู่
+model AssetFolder {
+  id         String   @id @default(uuid()) @db.Uuid
+  coreUserId String   @map("core_user_id")
+  name       String   @db.VarChar(80)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  assets Asset[] @relation("AssetFolderAssets")
+
+  @@index([coreUserId])
+  @@map("asset_folders")
+}
+
+/// ผู้ใช้คนอื่นเปิดงานที่แชร์ด้วยลิงก์ (ใช้ทำ "แชร์กับคุณ") — เก็บแค่ core_user_id กับเวลาเปิดล่าสุด
+model DesignVisit {
+  id         String   @id @default(uuid()) @db.Uuid
+  designId   String   @map("design_id") @db.Uuid
+  coreUserId String   @map("core_user_id")
+  visitedAt  DateTime @default(now()) @map("visited_at") @db.Timestamptz(3)
+  /// จำนวนครั้งที่เปิด (สถิติในหน้าต่างการวิเคราะห์)
+  viewCount  Int      @default(1) @map("view_count")
+
+  design Design @relation("DesignVisits", fields: [designId], references: [id], onDelete: Cascade)
+
+  @@unique([designId, coreUserId])
+  @@index([coreUserId, visitedAt])
+  @@map("design_visits")
+}
+
+/// ประวัติเวอร์ชันของงาน — เก็บอัตโนมัติไม่บ่อยกว่าทุก 10 นาทีที่มีการแก้ และเมื่อกด "บันทึก" ในเมนูไฟล์
+model DesignVersion {
+  id         String   @id @default(uuid()) @db.Uuid
+  designId   String   @map("design_id") @db.Uuid
+  /// คนที่แก้จนเกิดเวอร์ชันนี้ (เจ้าของ หรือคนที่ได้ลิงก์แก้ไขได้)
+  coreUserId String   @map("core_user_id")
+  document   Json
+  width      Int
+  height     Int
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  design Design @relation("DesignVersions", fields: [designId], references: [id], onDelete: Cascade)
+
+  @@index([designId, createdAt])
+  @@map("design_versions")
+}
+
+/// ความคิดเห็นบนงาน (ปุ่มความคิดเห็นบนแถบบน) — ปักกับหน้าหรือชิ้นงาน · ตอบกลับได้หนึ่งชั้น
+model DesignComment {
+  id         String    @id @default(uuid()) @db.Uuid
+  designId   String    @map("design_id") @db.Uuid
+  coreUserId String    @map("core_user_id")
+  /// id ของหน้าใน JSON state
+  pageId     String    @map("page_id") @db.VarChar(80)
+  /// id ของชิ้นงาน · null = ทั้งหน้า
+  elementId  String?   @map("element_id") @db.VarChar(80)
+  parentId   String?   @map("parent_id") @db.Uuid
+  body       String    @db.VarChar(2000)
+  /// { "👍": ["core_user_id", …] }
+  reactions  Json      @default("{}")
+  resolvedAt DateTime? @map("resolved_at") @db.Timestamptz(3)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  design  Design          @relation("DesignComments", fields: [designId], references: [id], onDelete: Cascade)
+  parent  DesignComment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies DesignComment[] @relation("CommentReplies")
+
+  @@index([designId, createdAt])
+  @@map("design_comments")
+}
+
+model Notification {
+  id         String           @id @default(uuid()) @db.Uuid
+  coreUserId String           @map("core_user_id")
+  kind       NotificationKind
+  title      String           @db.VarChar(160)
+  link       String?          @db.VarChar(200)
+  readAt     DateTime?        @map("read_at") @db.Timestamptz(3)
+  createdAt  DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([coreUserId, createdAt])
+  @@map("notifications")
+}
+
+/// การตั้งค่าของผู้ใช้ในระบบนี้ (ไม่ใช่ข้อมูลบัญชี — บัญชีเป็นของ Core Hub)
+model Preference {
+  id                 String    @id @default(uuid()) @db.Uuid
+  coreUserId         String    @unique @map("core_user_id")
+  aboutMe            String    @default("") @map("about_me") @db.VarChar(300)
+  reduceMotion       Boolean   @default(false) @map("reduce_motion")
+  highContrast       Boolean   @default(false) @map("high_contrast")
+  largeText          Boolean   @default(false) @map("large_text")
+  notifyTemplateUsed Boolean   @default(true) @map("notify_template_used")
+  notifyTrash        Boolean   @default(true) @map("notify_trash")
+  theme              ThemeMode @default(SYSTEM)
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("preferences")
+}
+
+/// ข้อเสนอแนะและการรายงานเนื้อหา (เมนูบัญชี → ความช่วยเหลือและฟีดแบ็ก) — ผู้ดูแลระบบอ่านได้
+model Feedback {
+  id         String       @id @default(uuid()) @db.Uuid
+  coreUserId String       @map("core_user_id")
+  kind       FeedbackKind
+  message    String       @db.VarChar(2000)
+  /// หน้าหรือเทมเพลตที่เกี่ยวข้อง (path ภายในระบบ)
+  link       String?      @db.VarChar(300)
+  createdAt  DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([createdAt])
+  @@map("feedbacks")
+}
+
+/// เรื่องร้องเรียนเนื้อหา (ปุ่ม "รายงาน" ในหน้าแก้ไข การ์ดเทมเพลต และความคิดเห็น) — ผู้ดูแลจัดการในแผงผู้ดูแล
+///
+/// `targetExcerpt` คัดชื่อหรือข้อความของสิ่งที่ถูกรายงานไว้ตอนแจ้ง ผู้ดูแลจึงยังเห็นหลักฐานแม้เจ้าของลบไปแล้ว
+model Report {
+  id                   String           @id @default(uuid()) @db.Uuid
+  reporterCoreUserId   String           @map("reporter_core_user_id")
+  targetKind           ReportTargetKind @map("target_kind")
+  /// id ของงาน เทมเพลต หรือความคิดเห็น · null เมื่อ targetKind = OTHER
+  targetId             String?          @map("target_id") @db.Uuid
+  targetExcerpt        String?          @map("target_excerpt") @db.VarChar(300)
+  /// หน้าที่เกี่ยวข้อง (path ภายในระบบ)
+  link                 String?          @db.VarChar(300)
+  reason               ReportReason
+  details              String           @default("") @db.VarChar(2000)
+  status               ReportStatus     @default(OPEN)
+  resolvedByCoreUserId String?          @map("resolved_by_core_user_id")
+  resolutionNote       String?          @map("resolution_note") @db.VarChar(1000)
+  actionTaken          ReportAction?    @map("action_taken")
+  resolvedAt           DateTime?        @map("resolved_at") @db.Timestamptz(3)
+  createdAt            DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([status, createdAt])
+  @@index([targetKind, targetId])
+  @@index([reporterCoreUserId])
+  @@map("reports")
+}
+
+/// เทมเพลตที่ผู้ใช้ติดดาวไว้ (แถบรองของเทมเพลต → คอนเทนต์ติดดาว)
+model TemplateFavorite {
+  id         String   @id @default(uuid()) @db.Uuid
+  coreUserId String   @map("core_user_id")
+  templateId String   @map("template_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  template Template @relation("TemplateFavorites", fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([coreUserId, templateId])
+  @@map("template_favorites")
+}
+
+/// บันทึกการกระทำสำคัญที่ผู้ดูแลตรวจย้อนหลังได้ (แผงผู้ดูแล → Audit log)
+///
+/// `action` เป็นคำแบบ `<สิ่งของ>.<กริยา>` เช่น design.purge · report.resolved · member.quota_change
+/// `metadata` เก็บบริบทตอนเกิดเหตุ (เช่นเจ้าของของที่ถูกลบ) — ห้ามเก็บชื่อจริง อีเมล หรือ token
+model AuditLog {
+  id              String   @id @default(uuid()) @db.Uuid
+  actorCoreUserId String   @map("actor_core_user_id")
+  actorCoreRole   String   @map("actor_core_role") @db.VarChar(20)
+  action          String   @db.VarChar(60)
+  targetKind      String   @map("target_kind") @db.VarChar(30)
+  targetId        String?  @map("target_id") @db.VarChar(100)
+  metadata        Json?
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([createdAt])
+  @@index([action, createdAt])
+  @@index([actorCoreUserId, createdAt])
+  @@map("audit_logs")
+}
+
+/// สมาชิกของ CS Canvas (แผงผู้ดูแล → สมาชิกและพื้นที่)
+///
+/// แถวเกิดเมื่อผู้ใช้เปิดแอป (GET /api/v1/subsystem-members/me) หรือเมื่อผู้ดูแลตั้งโควตาให้ล่วงหน้า
+/// เก็บแค่ `core_user_id` — ไม่เก็บชื่อจริงหรืออีเมล (เป็นของ Core Hub)
+/// ไม่เก็บ core role (data-dictionary: อ่านจาก token เท่านั้น) — แผงผู้ดูแลจึงไม่แสดงบทบาทของแต่ละคน
+model SubsystemMember {
+  id                String    @id @default(uuid()) @db.Uuid
+  coreUserId        String    @unique @map("core_user_id")
+  /// โควตาที่ผู้ดูแลตั้งให้ (ไบต์) · null = ค่าเริ่มต้น QUOTA_BYTES_PER_USER
+  storageQuotaBytes BigInt?   @map("storage_quota_bytes")
+  /// null = ยังไม่เคยเปิดแอปหลังมีตารางนี้ (เช่นแถวที่ผู้ดูแลตั้งโควตาไว้ล่วงหน้า)
+  lastSeenAt        DateTime? @map("last_seen_at") @db.Timestamptz(3)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([lastSeenAt])
+  @@map("subsystem_members")
+}
+
+/// ชุดแบรนด์ของผู้ใช้ (สี ฟอนต์ โลโก้) — แผง "แบรนด์" ในหน้าแก้ไข · คนละไม่เกิน 10 ชุด
+model BrandKit {
+  id           String   @id @default(uuid()) @db.Uuid
+  coreUserId   String   @map("core_user_id")
+  name         String   @db.VarChar(80)
+  /// สีแบรนด์ (ข้อความสี CSS) ไม่เกิน 24 สี เรียงตามที่ผู้ใช้จัด
+  colors       String[] @default([])
+  headingFont  String?  @map("heading_font") @db.VarChar(120)
+  bodyFont     String?  @map("body_font") @db.VarChar(120)
+  /// asset ของเจ้าของที่ใช้เป็นโลโก้ (ไม่เกิน 12) · asset ที่ถูกลบภายหลังไม่แสดง
+  logoAssetIds String[] @default([]) @map("logo_asset_ids") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([coreUserId])
+  @@map("brand_kits")
+}
