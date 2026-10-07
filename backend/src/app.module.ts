@@ -6,6 +6,7 @@ import { PrismaModule } from './common/prisma/prisma.module.js';
 import { HealthModule } from './health/health.module.js';
 import { AssetsModule } from './modules/assets/assets.module.js';
 import { BrandKitsModule } from './modules/brand-kits/brand-kits.js';
+import { PresenceModule } from './modules/presence/presence.gateway.js';
 import { AdminStatsModule } from './modules/admin-stats/admin-stats.module.js';
 import { AuditLogsModule } from './modules/audit/audit-logs.js';
 import { AuditModule } from './modules/audit/audit.js';
@@ -39,6 +40,7 @@ import { TemplatesModule } from './modules/templates/templates.module.js';
     AssetsModule,
     FoldersModule,
     BrandKitsModule,
+    PresenceModule,
     AssetFoldersModule,
     PreferencesModule,
     QuotasModule,

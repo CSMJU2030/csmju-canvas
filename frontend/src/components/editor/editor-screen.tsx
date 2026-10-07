@@ -32,6 +32,7 @@ import { ImportHintBar } from './image-sources-panel';
 import { useShortcuts } from './use-shortcuts';
 import { ActionToasts, ShortcutSheet } from './action-toasts';
 import { ToolsHub, VisionFilters } from './tools-hub';
+import { SavedBanner, useLivePresence } from './presence-ui';
 import { SourcesLayer } from './sources-window';
 
 export function EditorScreen({ id }: { id: string }) {
@@ -146,6 +147,7 @@ function EditorLayout({ needsThumbnail }: { needsThumbnail: boolean }) {
   const { status, retry } = useAutosave(needsThumbnail && !readOnly);
 
   useShortcuts();
+  useLivePresence();
   usePasteAndDropImport();
 
   return (
@@ -204,6 +206,7 @@ function EditorLayout({ needsThumbnail }: { needsThumbnail: boolean }) {
       <VersionHistory />
       <ShortcutSheet />
       <ToolsHub />
+      <SavedBanner />
       <VisionFilters />
       <ActionToasts />
       <ContextMenu />

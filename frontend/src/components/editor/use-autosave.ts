@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/csmju/api';
 import { notifyAction } from '@/lib/editor/action-toast';
+import { announceSaved } from '@/lib/editor/presence';
 import { thumbnailOf } from '@/lib/editor/export';
 import { useEditor } from '@/lib/editor/store';
 
@@ -46,6 +47,7 @@ export function useAutosave(needsThumbnail = false) {
           ...(thumbnail ? { thumbnail } : {}),
         });
         savedRevision.current = revision;
+        announceSaved();
         setStatus(useEditor.getState().revision === revision ? 'saved' : 'pending');
       } catch {
         setStatus('error');

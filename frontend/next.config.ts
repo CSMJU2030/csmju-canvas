@@ -26,6 +26,8 @@ const nextConfig: NextConfig = {
       { source: "/auth/login", destination: `${BACKEND_URL}/auth/login` },
       { source: "/auth/callback", destination: `${BACKEND_URL}/auth/callback` },
       { source: "/auth/logout", destination: `${BACKEND_URL}/auth/logout` },
+      // ผู้ร่วมงานแบบสด (socket.io long-polling ผ่าน HTTP) — โดเมนเดียวกับหน้าเว็บ คุกกี้ session จึงติดไปเอง
+      { source: "/realtime", destination: `${BACKEND_URL}/realtime` },
     ];
   },
 

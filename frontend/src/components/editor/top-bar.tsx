@@ -26,6 +26,7 @@ import { renderPageToCanvas } from '@/lib/editor/render';
 import { canEditDoc, useEditor } from '@/lib/editor/store';
 import { pageSizeOf } from '@/lib/editor/types';
 import { useEditorUi } from '@/lib/editor/ui-store';
+import { PresenceAvatars } from './presence-ui';
 import type { Design } from '@/lib/types';
 import { PageThumb } from './page-strip';
 import { PresentButton, presentFromCurrent } from './presenter';
@@ -81,6 +82,7 @@ export function TopBar({ status, onRetry, onPublish }: { status: SaveStatus; onR
             <BarChart3 aria-hidden className="size-5" />
           </BarIcon>
         )}
+        <PresenceAvatars />
         <BarIcon label="ความคิดเห็น" active={commentsOpen} onClick={() => ui().set({ commentsOpen: !commentsOpen })}>
           <MessageCircle aria-hidden className="size-5" />
         </BarIcon>

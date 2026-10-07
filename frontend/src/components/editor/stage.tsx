@@ -41,6 +41,7 @@ import {
 } from '@/lib/editor/page-layout';
 import { previewLength, previewMotion } from '@/lib/editor/animation';
 import { gifRedrawDelay, withGifClock } from '@/lib/editor/gif-player';
+import { CURSOR_IDLE_MS, sendCursor, usePresence } from '@/lib/editor/presence';
 import { brushStyle, drawFrameEditGhost, drawPage, getImage, pageGifSources, strokeFreehand, subscribeImageReady } from '@/lib/editor/render';
 import { snapRect, type Guide } from '@/lib/editor/snapping';
 import { tableCellAt, tableCellCorners } from '@/lib/editor/table-render';
@@ -449,6 +450,60 @@ export function Stage() {
       outline(ctx, corners(el).map(toScreen), primary, el.locked ? [4, 4] : []);
     }
 
+    // ผู้ร่วมงานแบบสด: กรอบของชิ้นที่แต่ละคนเลือก (เส้นประสีของคนนั้น) และเคอร์เซอร์พร้อมป้ายชื่อ
+    const live = usePresence.getState();
+
+    if (live.status === 'live') {
+      const font = cssVar('--csmju-font-body', 'system-ui, sans-serif');
+      const now = Date.now();
+
+      for (const [peerId, ids] of Object.entries(live.selections)) {
+        const peer = live.peers[peerId];
+
+        if (!peer || ids.length === 0) continue;
+
+        for (const el of page.elements) {
+          if (ids.includes(el.id)) outline(ctx, corners(el).map(toScreen), peer.color, [6, 4], 2);
+        }
+      }
+
+      for (const [peerId, cur] of Object.entries(live.cursors)) {
+        const peer = live.peers[peerId];
+
+        if (!peer || now - cur.at > CURSOR_IDLE_MS || !layout.rects[cur.pageIndex] || (!multi && cur.pageIndex !== activeIndex) || (multi && !visible.includes(cur.pageIndex))) continue;
+
+        const base = screenOf(cur.pageIndex);
+        const sx = base.x + cur.x * zoom;
+        const sy = base.y + cur.y * zoom;
+        const name = peer.nickname ? `${peer.nickname}` : peer.label;
+
+        ctx.save();
+        ctx.translate(sx, sy);
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(0, 17);
+        ctx.lineTo(4.5, 13);
+        ctx.lineTo(11.5, 13);
+        ctx.closePath();
+        ctx.fillStyle = peer.color;
+        ctx.strokeStyle = 'rgb(255 255 255)';
+        ctx.lineWidth = 1.5;
+        ctx.fill();
+        ctx.stroke();
+        ctx.font = `600 13px ${font}`;
+
+        const w = ctx.measureText(name).width + 14;
+
+        ctx.beginPath();
+        ctx.roundRect(10, 16, w, 22, 11);
+        ctx.fill();
+        ctx.fillStyle = 'rgb(255 255 255)';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(name, 17, 27.5);
+        ctx.restore();
+      }
+    }
+
     // เส้นทางเคลื่อนที่ของชิ้นที่เลือก: เส้นประจากกึ่งกลาง + จุดปลายทาง (ระหว่างเล่นตัวอย่างไม่แสดง)
     if (!playing) {
       for (const el of selected) {
@@ -698,6 +753,10 @@ export function Stage() {
     syncCamera();
 
     const unsubscribeImages = subscribeImageReady(requestDraw);
+    // เคอร์เซอร์/ชิ้นที่ผู้ร่วมงานเลือกเปลี่ยน
+    const unsubscribePresence = usePresence.subscribe((st, prev) => {
+      if (st.cursors !== prev.cursors || st.selections !== prev.selections || st.peers !== prev.peers) requestDraw();
+    });
 
     const unsubscribeUi = useEditorUi.subscribe((ui, prev) => {
       if (ui.pagesLayout !== prev.pagesLayout) {
@@ -754,6 +813,7 @@ export function Stage() {
       unsubscribeUi();
       unsubscribeTable();
       unsubscribeImages();
+      unsubscribePresence();
       if (activateTimer.current !== null) window.clearTimeout(activateTimer.current);
     };
   }, [requestDraw, getLayout, activeOrigin, revealPage, autoActivate]);
@@ -1356,6 +1416,9 @@ export function Stage() {
       pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
     }
 
+    // เคอร์เซอร์ของเราให้ผู้ร่วมงานแบบสดเห็น (เมาส์/ปากกาเท่านั้น นิ้วไม่มีเคอร์เซอร์)
+    if (event.pointerType !== 'touch') sendCursor(toPage(event.clientX, event.clientY), useEditor.getState().pageIndex);
+
     const g = gesture.current;
     const state = useEditor.getState();
 
@@ -1895,6 +1958,7 @@ export function Stage() {
         onPointerCancel={onPointerUp}
         onPointerLeave={() => {
           hover.current = null;
+          sendCursor(null, useEditor.getState().pageIndex);
           if (useEditor.getState().tool.brush === 'eraser' || useEditorUi.getState().imageErase) requestDraw();
         }}
         onDoubleClick={onDoubleClick}
