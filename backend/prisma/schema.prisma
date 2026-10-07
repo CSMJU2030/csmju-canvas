@@ -1,6 +1,6 @@
 // CS Canvas (csmju-canvas) — ฐานข้อมูลของระบบย่อยนี้เท่านั้น (ARC-01)
 //
-// กฎที่ schema นี้ยึด (csmju2030-standards 1.8.2):
+// กฎที่ schema นี้ยึด (csmju2030-standards 1.8.4):
 //   1. ไม่มีตาราง users — อ้างผู้ใช้ด้วย `coreUserId` (ค่า `sub` จาก token) เท่านั้น (DD-01)
 //   2. ไม่เก็บ core role อีเมล หรือชื่อจริง — อ่านจาก token ที่ตรวจแล้วทุก request
 //      (audit_logs เก็บ role ของผู้กระทำ ณ เวลาที่เกิดเหตุ แบบเดียวกับ csmju-nexus — ไม่ใช้ตัดสินสิทธิ์)

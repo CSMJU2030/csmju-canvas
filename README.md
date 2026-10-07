@@ -3,7 +3,7 @@
 ระบบสร้างสื่อและกราฟิกบนเว็บของสาขาวิทยาการคอมพิวเตอร์ (ระบบย่อยของ CSMJU2030)
 ใช้ทำสไลด์ ปกรายงาน โปสเตอร์ เกียรติบัตร อินโฟกราฟิก และ Resume แล้วบันทึกงานเป็น JSON state ที่ CMS ของคณะนำไป render ได้
 
-- มาตรฐาน: `standards/` (submodule) · เวอร์ชันอยู่ใน `.standards-version` (1.8.2)
+- มาตรฐาน: `standards/` (submodule) · เวอร์ชันอยู่ใน `.standards-version` (1.8.4)
 - เข้าสู่ระบบด้วย SSO 1.1 ของ Core Hub (`https://csmju2030.jowave.com`) · ระบบนี้ไม่มีหน้า login ของตัวเอง
 - พอร์ต: frontend **3207** · backend **4207** · PostgreSQL ในเครื่อง **55207**
 
