@@ -197,7 +197,8 @@ const PAD_HEIGHT = 240;
 function DrawSignature({ initial }: { initial?: SavedSignature['draw'] }) {
   const page = usePage();
   const canvas = useRef<HTMLCanvasElement>(null);
-  const [strokes, setStrokes] = useState<number[][]>(() => initial?.strokes ?? []);
+  // กรองเส้นเสียที่อาจถูกบันทึกไว้ในเครื่องก่อนแก้บั๊ก (null) — ไม่งั้นเปิดแผงแล้วพังทันที
+  const [strokes, setStrokes] = useState<number[][]>(() => (initial?.strokes ?? []).filter((stroke) => Array.isArray(stroke) && stroke.length >= 2));
   const [weight, setWeight] = useState(initial?.weight ?? 2);
   const [color, setColor] = useState(initial?.color ?? BLACK);
   const [keep, setKeep] = useState(true);
@@ -243,16 +244,24 @@ function DrawSignature({ initial }: { initial?: SavedSignature['draw'] }) {
         aria-label="แผ่นสำหรับเซ็นชื่อ — ลากเมาส์หรือนิ้วเพื่อเขียน"
         onPointerDown={(event) => {
           event.currentTarget.setPointerCapture(event.pointerId);
-          drawing.current = point(event);
-          setStrokes((prev) => [...prev, drawing.current!]);
+
+          // จับเส้นไว้ในตัวแปรก่อน — updater ของ setState อาจรันหลังปล่อยนิ้ว (ref เป็น null แล้ว)
+          // ถ้าอ่าน ref ในนั้น เส้น null จะหลุดเข้ารายการ แล้วพังตอนวาด ("Cannot read properties of null")
+          const stroke = point(event);
+
+          drawing.current = stroke;
+          setStrokes((prev) => [...prev, stroke]);
         }}
         onPointerMove={(event) => {
-          if (!drawing.current) return;
+          const current = drawing.current;
+
+          if (!current) return;
 
           const [x, y] = point(event);
+          const stroke = [...current, Math.round(x * 10) / 10, Math.round(y * 10) / 10];
 
-          drawing.current = [...drawing.current, Math.round(x * 10) / 10, Math.round(y * 10) / 10];
-          setStrokes((prev) => [...prev.slice(0, -1), drawing.current!]);
+          drawing.current = stroke;
+          setStrokes((prev) => [...prev.slice(0, -1), stroke]);
         }}
         onPointerUp={() => (drawing.current = null)}
         onPointerCancel={() => (drawing.current = null)}
