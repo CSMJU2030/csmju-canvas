@@ -10,14 +10,26 @@ import type { ImageElement } from '@/lib/editor/types';
 import { useEditorUi } from '@/lib/editor/ui-store';
 import type { Asset } from '@/lib/types';
 import { PanelHeader, RangeField } from './controls';
+import { pixelsAt, SmartCutoutView, type SmartCutoutHandle } from './smart-cutout-view';
 
-/// แผง "ลบพื้นหลัง" — ลบพื้นหลังด้วยสี (ไม่ใช้ AI · ประมวลผลในเครื่อง) ดูผลสดก่อนกดใช้
+/// แผง "ลบพื้นหลัง" — ประมวลผลในเครื่องทั้งหมด (ไม่ใช้ AI · ไม่ส่งรูปไปไหน) ดูผลสดก่อนกดใช้
+///
+///   อัจฉริยะ                 แยกวัตถุด้วย GrabCut (smart-cutout) · เลือกเก็บ/ตัดทีละชิ้น · ตีกรอบ · แปรงเก็บ/ลบ
+///   ติดขอบรูป · สีนี้ทั้งรูป   ลบตามสีพื้นหลัง (bg-remove) — เร็ว เหมาะกับพื้นสีเรียบและโลโก้
 ///
 /// กด "ลบพื้นหลัง" = สร้างรูป PNG โปร่งใสแล้วอัปโหลดเป็นไฟล์ใหม่ของผู้ใช้ · รูปเดิมยังอยู่ (คืนพื้นหลังได้ทุกเมื่อ)
 
 /// ขนาดตัวอย่างในแผง (ด้านยาว) และขนาดสูงสุดของรูปผลลัพธ์
 const PREVIEW_MAX = 360;
 const OUTPUT_MAX = 2000;
+/// โหมดอัจฉริยะทำขอบละเอียดบนรูปจริงทั้งรูป — จำกัดขนาดไม่ให้กินหน่วยความจำเกินบนมือถือ
+const SMART_OUTPUT_MAX = 1600;
+
+const MODES: [BgRemoveMode, string][] = [
+  ['smart', 'อัจฉริยะ'],
+  ['edges', 'ติดขอบรูป'],
+  ['color', 'สีนี้ทั้งรูป'],
+];
 
 function close() {
   useEditorUi.getState().setPanel(null);
@@ -59,6 +71,8 @@ function pixelsOf(img: HTMLImageElement, max: number) {
   return { canvas, ctx, image: ctx.getImageData(0, 0, canvas.width, canvas.height) };
 }
 
+const READ_ERROR = 'อ่านพิกเซลของรูปนี้ไม่ได้ — ลองอัปโหลดรูปนี้ใหม่จากเครื่องแล้วลบพื้นหลังอีกครั้ง';
+
 export function BgRemovePanel() {
   const el = useSelectedImage();
 
@@ -83,45 +97,60 @@ function BgRemoveBody({ el }: { el: ImageElement }) {
   const [busy, setBusy] = useState(false);
   const [ratio, setRatio] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [image, setImage] = useState<HTMLImageElement | null>(null);
+  const [objects, setObjects] = useState<number | null>(null);
+  const smartRef = useRef<SmartCutoutHandle | null>(null);
   const previewRef = useRef<HTMLCanvasElement>(null);
   const sourceRef = useRef<ImageData | null>(null);
   const editable = useEditor((s) => canEditDoc(s));
+  const smart = options.mode === 'smart';
 
-  // ตัวอย่างสด: คำนวณบนรูปย่อ (เร็ว) ทุกครั้งที่ปรับค่า · หน่วงนิดหน่อยระหว่างลากแถบเลื่อน
+  // รูปต้นฉบับ (โหมดอัจฉริยะใช้ตัวรูปตรง ๆ) · ลองอ่านพิกเซลก่อน — รูปข้ามโดเมนจะ throw ตรงนี้
   useEffect(() => {
     let cancelled = false;
-    const timer = window.setTimeout(() => {
-      void loadImage(original)
-        .then((img) => {
-          if (cancelled) return;
 
-          const { image } = pixelsOf(img, PREVIEW_MAX);
-
-          sourceRef.current = new ImageData(new Uint8ClampedArray(image.data), image.width, image.height);
-
-          const { alpha, background } = backgroundMask(image, options);
-
-          applyMask(image, alpha, background);
-
-          const canvas = previewRef.current;
-
-          if (!canvas) return;
-          canvas.width = image.width;
-          canvas.height = image.height;
-          canvas.getContext('2d')!.putImageData(image, 0, 0);
-          setRatio(removedRatio(alpha));
-          setError(null);
-        })
-        .catch(() => {
-          if (!cancelled) setError('อ่านพิกเซลของรูปนี้ไม่ได้ — ลองอัปโหลดรูปนี้ใหม่จากเครื่องแล้วลบพื้นหลังอีกครั้ง');
-        });
-    }, 120);
+    void loadImage(original)
+      .then((img) => {
+        pixelsAt(img, 4);
+        if (!cancelled) setImage(img);
+      })
+      .catch(() => {
+        if (!cancelled) setError(READ_ERROR);
+      });
 
     return () => {
       cancelled = true;
-      window.clearTimeout(timer);
     };
-  }, [original, options]);
+  }, [original]);
+
+  // ตัวอย่างสดของโหมดตามสี: คำนวณบนรูปย่อ (เร็ว) ทุกครั้งที่ปรับค่า · หน่วงนิดหน่อยระหว่างลากแถบเลื่อน
+  useEffect(() => {
+    if (smart || !image) return;
+
+    const timer = window.setTimeout(() => {
+      try {
+        const { image: px } = pixelsOf(image, PREVIEW_MAX);
+
+        sourceRef.current = new ImageData(new Uint8ClampedArray(px.data), px.width, px.height);
+
+        const { alpha, background } = backgroundMask(px, options);
+
+        applyMask(px, alpha, background);
+
+        const canvas = previewRef.current;
+
+        if (!canvas) return;
+        canvas.width = px.width;
+        canvas.height = px.height;
+        canvas.getContext('2d')!.putImageData(px, 0, 0);
+        setRatio(removedRatio(alpha));
+      } catch {
+        setError(READ_ERROR);
+      }
+    }, 120);
+
+    return () => window.clearTimeout(timer);
+  }, [image, options, smart]);
 
   const set = (patch: Partial<BgRemoveOptions>) => setOptions((o) => ({ ...o, ...patch }));
 
@@ -144,11 +173,28 @@ function BgRemoveBody({ el }: { el: ImageElement }) {
 
     try {
       const img = await loadImage(original);
-      const { canvas, ctx, image } = pixelsOf(img, OUTPUT_MAX);
-      const { alpha, background } = backgroundMask(image, options);
+      let canvas: HTMLCanvasElement;
 
-      applyMask(image, alpha, background);
-      ctx.putImageData(image, 0, 0);
+      if (smart) {
+        // ปล่อยให้ปุ่มขึ้น "กำลังลบพื้นหลัง…" ก่อน งานขอบละเอียดบนรูปจริงใช้เวลาราวครึ่งวินาที
+        await new Promise((resolve) => window.setTimeout(resolve, 30));
+
+        const out = smartRef.current?.render(pixelsAt(img, SMART_OUTPUT_MAX));
+
+        if (!out) throw new Error('ยังไม่พบวัตถุ — ตีกรอบรอบวัตถุหรือทาแปรงเก็บก่อน');
+
+        canvas = document.createElement('canvas');
+        canvas.width = out.width;
+        canvas.height = out.height;
+        canvas.getContext('2d')!.putImageData(new ImageData(new Uint8ClampedArray(out.data), out.width, out.height), 0, 0);
+      } else {
+        const picked = pixelsOf(img, OUTPUT_MAX);
+        const { alpha, background } = backgroundMask(picked.image, options);
+
+        applyMask(picked.image, alpha, background);
+        picked.ctx.putImageData(picked.image, 0, 0);
+        canvas = picked.canvas;
+      }
 
       const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
 
@@ -187,32 +233,14 @@ function BgRemoveBody({ el }: { el: ImageElement }) {
     toast('คืนพื้นหลังเดิมแล้ว');
   };
 
-  const warn = ratio === null ? null : ratio < 0.02 ? 'แทบไม่พบพื้นหลัง — ลองเพิ่มความไว หรือจิ้มเลือกสีพื้นหลังเอง' : ratio > 0.95 ? 'ลบไปเกือบทั้งรูป — ลองลดความไว' : null;
+  const warn = smart || ratio === null ? null : ratio < 0.02 ? 'แทบไม่พบพื้นหลัง — ลองเพิ่มความไว หรือจิ้มเลือกสีพื้นหลังเอง' : ratio > 0.95 ? 'ลบไปเกือบทั้งรูป — ลองลดความไว' : null;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <PanelHeader title="ลบพื้นหลัง" onClose={close} />
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6">
-        <div className={cx('csmju-checker relative overflow-hidden rounded-xl border border-line', picking && 'ring-2 ring-primary')}>
-          <canvas
-            ref={previewRef}
-            onClick={pickColor}
-            aria-label={picking ? 'คลิกที่พื้นหลังในรูปเพื่อเลือกสี' : 'ตัวอย่างรูปหลังลบพื้นหลัง'}
-            className={cx('mx-auto block max-h-72 w-auto max-w-full', picking ? 'cursor-crosshair' : 'cursor-default')}
-          />
-        </div>
-        {error && <p className="mt-2 text-csmju-caption text-danger">{error}</p>}
-        {warn && !error && <p className="mt-2 text-csmju-caption text-warning">{warn}</p>}
-        {ratio !== null && !error && !warn && <p className="mt-2 text-csmju-caption text-muted">ลบพื้นหลังราว {Math.round(ratio * 100)}% ของรูป</p>}
-
-        <p className="mt-4 mb-2 text-csmju-caption font-semibold text-ink">ลบส่วนไหน</p>
-        <div role="radiogroup" aria-label="วิธีลบพื้นหลัง" className="grid grid-cols-2 rounded-xl bg-surface-muted p-1">
-          {(
-            [
-              ['edges', 'พื้นที่ติดขอบรูป'],
-              ['color', 'สีนี้ทั้งรูป'],
-            ] as [BgRemoveMode, string][]
-          ).map(([key, label]) => (
+        <div role="radiogroup" aria-label="วิธีลบพื้นหลัง" className="mb-3 grid grid-cols-3 rounded-xl bg-surface-muted p-1">
+          {MODES.map(([key, label]) => (
             <button
               key={key}
               type="button"
@@ -225,45 +253,76 @@ function BgRemoveBody({ el }: { el: ImageElement }) {
             </button>
           ))}
         </div>
-        <p className="mt-1 text-csmju-caption text-muted">
-          {options.mode === 'edges' ? 'ลบพื้นหลังที่ต่อกับขอบรูป ส่วนในตัวแบบที่สีคล้ายพื้นยังอยู่' : 'ลบทุกจุดที่สีใกล้พื้นหลัง รวมช่องในตัวอักษรหรือโลโก้'}
-        </p>
 
-        <div className="mt-4 flex items-center gap-2">
-          <button
-            type="button"
-            aria-pressed={picking}
-            onClick={() => setPicking((v) => !v)}
-            className={cx(
-              'inline-flex min-h-10 items-center gap-2 rounded-lg border px-3 text-csmju-caption font-semibold',
-              picking ? 'border-primary bg-primary-soft text-primary' : 'border-line-strong text-ink hover:bg-surface-muted',
+        {error && <p className="mb-2 text-csmju-caption text-danger">{error}</p>}
+
+        {smart ? (
+          <>
+            <p className="mb-3 text-csmju-caption text-muted">ระบบหาวัตถุในรูปให้เอง แยกเป็นชิ้น แล้วตัดขอบตามเส้นในรูปจริง — ชี้แก้ได้ทุกจุดด้านล่าง</p>
+            {image && !error && (
+              <SmartCutoutView
+                image={image}
+                previewMax={PREVIEW_MAX}
+                softness={options.softness}
+                onSoftness={(v) => set({ softness: v })}
+                handleRef={smartRef}
+                onStatus={setObjects}
+              />
             )}
-          >
-            <Pipette aria-hidden className="size-4" /> {picking ? 'คลิกที่พื้นหลังในรูป' : 'เลือกสีพื้นหลังเอง'}
-          </button>
-          {options.sample && (
-            <>
-              <span aria-label="สีพื้นหลังที่เลือก" className="size-8 rounded-full border border-line-strong" style={{ background: `rgb(${options.sample.join(' ')})` }} />
-              <button type="button" onClick={() => set({ sample: null })} className="min-h-10 px-2 text-csmju-caption font-semibold text-primary">
-                หาจากขอบรูป
+          </>
+        ) : (
+          <>
+            <div className={cx('csmju-checker relative overflow-hidden rounded-xl border border-line', picking && 'ring-2 ring-primary')}>
+              <canvas
+                ref={previewRef}
+                onClick={pickColor}
+                aria-label={picking ? 'คลิกที่พื้นหลังในรูปเพื่อเลือกสี' : 'ตัวอย่างรูปหลังลบพื้นหลัง'}
+                className={cx('mx-auto block max-h-72 w-auto max-w-full', picking ? 'cursor-crosshair' : 'cursor-default')}
+              />
+            </div>
+            {warn && !error && <p className="mt-2 text-csmju-caption text-warning">{warn}</p>}
+            {ratio !== null && !error && !warn && <p className="mt-2 text-csmju-caption text-muted">ลบพื้นหลังราว {Math.round(ratio * 100)}% ของรูป</p>}
+            <p className="mt-2 text-csmju-caption text-muted">
+              {options.mode === 'edges' ? 'ลบพื้นหลังที่ต่อกับขอบรูป ส่วนในตัวแบบที่สีคล้ายพื้นยังอยู่' : 'ลบทุกจุดที่สีใกล้พื้นหลัง รวมช่องในตัวอักษรหรือโลโก้'}
+            </p>
+
+            <div className="mt-4 flex items-center gap-2">
+              <button
+                type="button"
+                aria-pressed={picking}
+                onClick={() => setPicking((v) => !v)}
+                className={cx(
+                  'inline-flex min-h-10 items-center gap-2 rounded-lg border px-3 text-csmju-caption font-semibold',
+                  picking ? 'border-primary bg-primary-soft text-primary' : 'border-line-strong text-ink hover:bg-surface-muted',
+                )}
+              >
+                <Pipette aria-hidden className="size-4" /> {picking ? 'คลิกที่พื้นหลังในรูป' : 'เลือกสีพื้นหลังเอง'}
               </button>
-            </>
-          )}
-        </div>
+              {options.sample && (
+                <>
+                  <span aria-label="สีพื้นหลังที่เลือก" className="size-8 rounded-full border border-line-strong" style={{ background: `rgb(${options.sample.join(' ')})` }} />
+                  <button type="button" onClick={() => set({ sample: null })} className="min-h-10 px-2 text-csmju-caption font-semibold text-primary">
+                    หาจากขอบรูป
+                  </button>
+                </>
+              )}
+            </div>
 
-        <div className="mt-4 flex flex-col gap-4">
-          <RangeField label="ความไวต่อสี" value={options.tolerance} min={0} max={100} onChange={(v) => set({ tolerance: v })} />
-          <RangeField label="ขอบนุ่ม" value={options.softness} min={0} max={10} onChange={(v) => set({ softness: v })} />
-        </div>
+            <div className="mt-4 flex flex-col gap-4">
+              <RangeField label="ความไวต่อสี" value={options.tolerance} min={0} max={100} onChange={(v) => set({ tolerance: v })} />
+              <RangeField label="ขอบนุ่ม" value={options.softness} min={0} max={10} onChange={(v) => set({ softness: v })} />
+            </div>
 
-        <p className="mt-4 rounded-xl bg-surface-muted px-3 py-2 text-csmju-caption text-muted">
-          ได้ผลดีกับพื้นหลังสีเรียบ เช่น รูปสินค้าบนพื้นขาว โลโก้ หรือภาพบนฉากสีเดียว · พื้นหลังที่มีลวดลายมากให้เก็บส่วนที่เหลือด้วยยางลบพิกเซล
-        </p>
+            <p className="mt-4 rounded-xl bg-surface-muted px-3 py-2 text-csmju-caption text-muted">
+              ได้ผลดีกับพื้นหลังสีเรียบ เช่น รูปสินค้าบนพื้นขาว โลโก้ หรือภาพบนฉากสีเดียว · พื้นหลังที่มีลวดลายใช้โหมด “อัจฉริยะ”
+            </p>
+          </>
+        )}
       </div>
       <div className="flex shrink-0 flex-col gap-2 border-t border-line p-3">
         <button
           type="button"
-          disabled={busy || !editable || el.locked || Boolean(error)}
+          disabled={busy || !editable || el.locked || Boolean(error) || (smart && !objects)}
           onClick={() => void apply()}
           className="inline-flex min-h-12 items-center justify-center rounded-xl bg-primary text-csmju-body font-semibold text-on-inverse hover:bg-primary-hover disabled:opacity-50"
         >

@@ -1,4 +1,4 @@
-/// ลบพื้นหลังรูปด้วยสี (ไม่ใช้ AI · ทำในเครื่องผู้ใช้ ไม่ส่งรูปไปไหน)
+/// ลบพื้นหลังรูปด้วยสี (โหมด "ติดขอบรูป" · "สีนี้ทั้งรูป" — โหมดอัจฉริยะอยู่ที่ smart-cutout.ts) · ทำในเครื่องผู้ใช้ ไม่ส่งรูปไปไหน
 ///
 /// 1. หาสีพื้นหลังจากขอบรูป (จัดกลุ่มสีที่ขอบด้วย k-means ไม่เกิน 3 กลุ่ม) หรือใช้สีที่ผู้ใช้จิ้มเอง
 /// 2. วัดความต่างของสีแบบที่ตาคนเห็น (ΔE ใน CIELAB)
@@ -8,7 +8,8 @@
 ///
 /// ได้ผลดีกับพื้นหลังสีเรียบหรือไล่สีอ่อน ๆ (รูปสินค้าบนพื้นขาว โลโก้ ภาพบนฉาก) · พื้นหลังซับซ้อนต้องเก็บต่อด้วยยางลบ
 
-export type BgRemoveMode = 'edges' | 'color';
+/// `smart` = แยกวัตถุด้วย GrabCut (lib/editor/smart-cutout) · `edges`/`color` = ตามสีในไฟล์นี้
+export type BgRemoveMode = 'smart' | 'edges' | 'color';
 
 export interface BgRemoveOptions {
   mode: BgRemoveMode;
@@ -20,7 +21,7 @@ export interface BgRemoveOptions {
   sample?: [number, number, number] | null;
 }
 
-export const DEFAULT_BG_OPTIONS: BgRemoveOptions = { mode: 'edges', tolerance: 40, softness: 2, sample: null };
+export const DEFAULT_BG_OPTIONS: BgRemoveOptions = { mode: 'smart', tolerance: 40, softness: 2, sample: null };
 
 interface Pixels {
   data: Uint8ClampedArray;

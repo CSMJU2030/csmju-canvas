@@ -239,7 +239,7 @@ function ThemeRow() {
       </div>
       <select
         id="theme-select"
-        value={query.data?.theme ?? 'SYSTEM'}
+        value={query.data?.theme ?? 'LIGHT'}
         disabled={!query.data || save.isPending}
         onChange={(e) => {
           const theme = e.target.value as Preference['theme'];

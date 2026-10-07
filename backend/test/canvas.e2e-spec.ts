@@ -441,7 +441,11 @@ describe('CS Canvas API (e2e)', () => {
     expect(found.body.data.map((a: { fileName: string }) => a.fileName)).toContain('โลโก้ใหม่.png');
   });
 
-  it('ธีมเก็บในการตั้งค่า', async () => {
+  it('ธีมเก็บในการตั้งค่า · ผู้ใช้ใหม่เริ่มที่โหมดสว่างแบบ Core Hub', async () => {
+    const fresh = await http().get('/api/v1/preferences').set('Authorization', bearer('theme-newcomer', 'student')).expect(200);
+
+    expect(fresh.body.data.theme).toBe('LIGHT');
+
     const res = await http().patch('/api/v1/preferences').set('Authorization', bearer(student, 'student')).send({ theme: 'DARK' }).expect(200);
 
     expect(res.body.data.theme).toBe('DARK');
