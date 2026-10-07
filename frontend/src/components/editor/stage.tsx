@@ -1292,6 +1292,14 @@ export function Stage() {
 
       dx += lock === 'vertical' ? 0 : snap.dx;
       dy += lock === 'horizontal' ? 0 : snap.dy;
+
+      // ล็อกลงกริด: แกนที่ไม่ได้ดูดกับชิ้นงาน/เส้นไกด์ ปัดมุมซ้ายบนลงเส้นกริดที่ใกล้ที่สุด
+      const grid = ui.gridSnap;
+
+      if (grid && cross === null && strip === null && !(input.ctrlKey || input.metaKey)) {
+        if (lock !== 'vertical' && !snap.guides.some((gd) => gd.axis === 'x')) dx = Math.round((g.box.x + dx) / grid) * grid - g.box.x;
+        if (lock !== 'horizontal' && !snap.guides.some((gd) => gd.axis === 'y')) dy = Math.round((g.box.y + dy) / grid) * grid - g.box.y;
+      }
       state.setGuides(snap.guides.filter((gd) => (lock === 'horizontal' ? gd.axis === 'x' : lock === 'vertical' ? gd.axis === 'y' : true)));
       state.updateElements([...g.origin.keys()], (el) => {
         const o = g.origin.get(el.id)!;
@@ -1464,6 +1472,18 @@ export function Stage() {
 
     if (g.kind === 'draw') {
       const p = toPage(event.clientX, event.clientY);
+
+      // Shift ค้าง = เส้นตรงจากจุดเริ่ม ล็อกทุก 45° (แนวนอน · แนวตั้ง · ทแยง) แบบ Canva
+      if (event.shiftKey) {
+        const [sx = p.x, sy = p.y] = g.points;
+        const length = Math.hypot(p.x - sx, p.y - sy);
+        const angle = Math.round(Math.atan2(p.y - sy, p.x - sx) / (Math.PI / 4)) * (Math.PI / 4);
+
+        g.points = [sx, sy, Math.round((sx + Math.cos(angle) * length) * 100) / 100, Math.round((sy + Math.sin(angle) * length) * 100) / 100];
+        requestDraw();
+        return;
+      }
+
       const lastX = g.points[g.points.length - 2];
       const lastY = g.points[g.points.length - 1];
 

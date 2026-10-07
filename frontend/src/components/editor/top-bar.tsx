@@ -282,6 +282,13 @@ function FileMenu({ onPublish }: { onPublish: () => void }) {
         { label: 'แสดงไม้บรรทัดและเส้นไกด์', icon: <span />, shortcut: 'Shift+R', checked: ui.rulers, onSelect: () => ui.toggleRulers() },
         { label: 'ลบเส้นไกด์ทั้งหมด', icon: <span />, onSelect: () => useEditorUi.setState({ guideLines: [] }) },
         { label: 'แสดงขอบหน้ากระดาษ', icon: <span />, checked: ui.margins, onSelect: () => ui.set({ margins: !ui.margins }) },
+        // ล็อกลงกริด — ลากแล้วชิ้นงานดูดลงช่องตาราง (Ctrl/⌘ ค้าง = ปิดชั่วคราว)
+        ...[8, 16, 24, 48].map((size) => ({
+          label: `ล็อกลงกริด ${size} px`,
+          icon: <span />,
+          checked: ui.gridSnap === size,
+          onSelect: () => ui.set({ gridSnap: ui.gridSnap === size ? null : size }),
+        })),
         { label: 'แสดงระยะตัดตกสำหรับงานพิมพ์', icon: <span />, checked: ui.bleed, onSelect: () => ui.set({ bleed: !ui.bleed }) },
         { label: 'เล่น GIF เคลื่อนไหวขณะแก้ไข', icon: <span />, checked: ui.gifPlaying, onSelect: () => ui.set({ gifPlaying: !ui.gifPlaying }) },
       ],

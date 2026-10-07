@@ -23,6 +23,7 @@ export function Rulers() {
   const rulers = useEditorUi((s) => s.rulers);
   const margins = useEditorUi((s) => s.margins);
   const bleed = useEditorUi((s) => s.bleed);
+  const grid = useEditorUi((s) => s.gridSnap);
   const guides = useEditorUi((s) => s.guideLines);
   const zoom = useEditor((s) => s.zoom);
   const pan = useEditor((s) => s.pan);
@@ -31,7 +32,7 @@ export function Rulers() {
   const wrap = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState<{ index: number; axis: 'x' | 'y' } | null>(null);
 
-  if (!rulers && !margins && !bleed) return null;
+  if (!rulers && !margins && !bleed && !grid) return null;
 
   const toPage = (clientX: number, clientY: number) => {
     const rect = wrap.current!.getBoundingClientRect();
@@ -83,6 +84,23 @@ export function Rulers() {
       }}
       style={{ pointerEvents: dragging ? 'auto' : 'none' }}
     >
+      {grid && (
+        // ตารางกริดบนหน้า (โหมดล็อกลงกริด) — เส้นจาง ๆ ไม่บังงาน
+        <div
+          aria-hidden
+          className="absolute"
+          style={{
+            left: pan.x,
+            top: pan.y,
+            width: width * zoom,
+            height: height * zoom,
+            backgroundImage:
+              'linear-gradient(to right, var(--csmju-color-focus-ring) 1px, transparent 1px), linear-gradient(to bottom, var(--csmju-color-focus-ring) 1px, transparent 1px)',
+            backgroundSize: `${grid * zoom}px ${grid * zoom}px`,
+            opacity: 0.35,
+          }}
+        />
+      )}
       {margins && (
         <div
           aria-hidden
