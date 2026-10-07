@@ -6,7 +6,7 @@ import type { PagesLayout } from './page-layout';
 /// แยกจาก store ของงานเพื่อไม่ให้การเปิด/ปิดแผงไปอยู่ในประวัติ undo หรือทำให้บันทึกอัตโนมัติ
 
 export type RailPanel = 'templates' | 'elements' | 'text' | 'uploads' | 'projects' | 'starred' | 'background';
-export type ContextPanel = 'position' | 'color' | 'effects' | 'animate' | 'font' | 'image-edit' | 'crop' | 'replace' | 'chart-data' | 'bg-remove';
+export type ContextPanel = 'position' | 'color' | 'effects' | 'animate' | 'font' | 'image-edit' | 'crop' | 'replace' | 'chart-data' | 'bg-remove' | 'magic-layers';
 export type UtilityPanel = 'signature' | 'layers' | 'pages' | 'notes' | 'brand' | 'styles' | 'qr' | 'generators';
 
 /// จำลองการมองเห็นสีของผู้ที่ตาบอดสี (กรองเฉพาะภาพบนจอ ไม่เปลี่ยนงาน)
@@ -42,6 +42,8 @@ interface EditorUi {
   /// ภาพย่อหน้าที่ชิ้นงานกำลังถูกลากมาทับ (ปล่อยแล้วย้ายชิ้นงานไปหน้านั้น) — แถบภาพย่อใช้เน้นกรอบ
   pageDropTarget: number | null;
   rulers: boolean;
+  /// ล็อกลงกริด: ขนาดช่อง (px ของหน้า) · null = ปิด — ลากชิ้นงานแล้วดูดลงเส้นกริด และแสดงตารางบนหน้า
+  gridSnap: number | null;
   /// เล่น GIF เคลื่อนไหวบนผืนผ้าใบ (ปิด = แสดงเฟรมแรก) · เริ่มต้นปิดเมื่อระบบตั้งให้ลดการเคลื่อนไหว
   gifPlaying: boolean;
   /// เส้นไกด์ที่ลากออกจากไม้บรรทัด (พิกัดหน้า) — ไม่บันทึกลงงาน
@@ -75,7 +77,7 @@ interface EditorUi {
   toggleRulers(): void;
   addGuide(guide: { axis: 'x' | 'y'; at: number }): void;
   moveGuide(index: number, at: number | null): void;
-  set(patch: Partial<Pick<EditorUi, 'margins' | 'bleed' | 'commentsOpen' | 'commentPins' | 'overlay' | 'stripOpen' | 'imageErase' | 'frameCell' | 'frameEdit' | 'pageDropTarget' | 'gifPlaying' | 'visionSim' | 'animateTab'>>): void;
+  set(patch: Partial<Pick<EditorUi, 'margins' | 'bleed' | 'commentsOpen' | 'commentPins' | 'overlay' | 'stripOpen' | 'imageErase' | 'frameCell' | 'frameEdit' | 'pageDropTarget' | 'gifPlaying' | 'visionSim' | 'animateTab' | 'gridSnap'>>): void;
 }
 
 export const useEditorUi = create<EditorUi>((set, get) => ({
@@ -92,6 +94,7 @@ export const useEditorUi = create<EditorUi>((set, get) => ({
   animateTab: 'entry',
   gifPlaying: typeof window === 'undefined' || typeof window.matchMedia !== 'function' || !window.matchMedia('(prefers-reduced-motion: reduce)').matches,
   rulers: false,
+  gridSnap: null,
   guideLines: [],
   margins: false,
   bleed: false,

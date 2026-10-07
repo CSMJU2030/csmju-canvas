@@ -115,7 +115,7 @@ function ColorButton({ label, value, target }: { label: string; value: string | 
 }
 
 /// ปุ่มคำที่เปิดแผงด้านซ้าย
-function PanelButton({ panel, label }: { panel: 'effects' | 'animate' | 'position' | 'image-edit' | 'crop' | 'replace' | 'bg-remove'; label: string }) {
+function PanelButton({ panel, label }: { panel: 'effects' | 'animate' | 'position' | 'image-edit' | 'crop' | 'replace' | 'bg-remove' | 'magic-layers'; label: string }) {
   const current = useEditorUi((s) => s.panel);
 
   return (
@@ -553,6 +553,7 @@ function ImageTools({ el }: { el: ImageElement }) {
       <PanelButton panel="image-edit" label="แก้ไข" />
       <PanelButton panel="replace" label="แทนที่" />
       <PanelButton panel="bg-remove" label="ลบพื้นหลัง" />
+      <PanelButton panel="magic-layers" label="แยกเลเยอร์" />
       {canCredit(el.origin?.site) && (
         <ToolbarButton label={`ใส่เครดิตภาพจาก ${SITE_LABELS[el.origin!.site]} ใต้รูป`} wide disabled={el.locked} onClick={() => insertCreditFor(el)}>
           <Quote aria-hidden className="size-5" /> ใส่เครดิตภาพ

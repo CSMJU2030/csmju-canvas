@@ -49,6 +49,9 @@ interface PresentState {
   container: HTMLElement | null;
   /// เพิ่มขึ้นเมื่อฟอนต์ในหน้าต่างผู้พรีเซนต์โหลดเสร็จ ให้สไลด์วาดใหม่
   fontTick: number;
+  /// fill = เต็มจอไม่มีขอบ (ขยายจนเต็ม ขอบที่เกินถูกตัด) · contain = เห็นทั้งหน้า ขอบว่างเป็นสีพื้นของหน้า
+  fit: 'fill' | 'contain';
+  setFit(fit: 'fill' | 'contain'): void;
   start(mode: PresentMode, slide: number): void;
   stop(): void;
   go(slide: number): void;
@@ -86,6 +89,10 @@ export const usePresent = create<PresentState>((set, get) => ({
   popup: null,
   container: null,
   fontTick: 0,
+  fit: 'fill',
+  setFit(fit) {
+    set({ fit });
+  },
   start(mode, slide) {
     let popup = get().popup;
     let container = get().container;
@@ -275,7 +282,26 @@ function PresenterInner({ mode }: { mode: PresentMode }) {
   const container = usePresent((s) => s.container);
   const [isFull, setIsFull] = useState(false);
   const [toastVisible, setToastVisible] = useState(true);
+  const fit = usePresent((s) => s.fit);
+  const [chromeVisible, setChromeVisible] = useState(true);
+  const hideTimer = useRef<number | null>(null);
   const page = pages[slide];
+
+  /// แถบควบคุมโผล่เมื่อขยับเมาส์/แตะ แล้วซ่อนเองหลัง 2.5 วินาที
+  const showChrome = useCallback(() => {
+    setChromeVisible(true);
+    if (hideTimer.current) window.clearTimeout(hideTimer.current);
+    hideTimer.current = window.setTimeout(() => setChromeVisible(false), 2500);
+  }, []);
+
+  // เริ่มพรีเซนต์: แถบควบคุมเห็นอยู่แล้ว (ค่าเริ่ม true) — ตั้งเวลาซ่อนครั้งแรก
+  useEffect(() => {
+    hideTimer.current = window.setTimeout(() => setChromeVisible(false), 2500);
+
+    return () => {
+      if (hideTimer.current) window.clearTimeout(hideTimer.current);
+    };
+  }, [showChrome]);
 
   usePresentKeys(typeof window === 'undefined' ? null : window, pages.length);
   usePresentKeys(popup, pages.length);
@@ -326,9 +352,22 @@ function PresenterInner({ mode }: { mode: PresentMode }) {
 
   return (
     <>
-      <div ref={rootRef} className="csmju-stage fixed inset-0 z-50 flex flex-col bg-inverse">
-        <SlideView page={page} interactive className="min-h-0 flex-1" />
-        <PresentControls total={pages.length} isFull={isFull} />
+      <div
+        ref={rootRef}
+        className="csmju-stage fixed inset-0 z-50 bg-inverse"
+        onPointerMove={showChrome}
+        style={{ cursor: chromeVisible ? undefined : 'none' }}
+      >
+        {/* สไลด์เต็มพื้นที่ทั้งจอ แถบควบคุมลอยทับและซ่อนเองเมื่อเมาส์นิ่ง — ไม่กินที่ ไม่มีช่องว่าง */}
+        <SlideView page={page} interactive fit={fit} className="absolute inset-0" />
+        <div
+          className={cx(
+            'absolute inset-x-0 bottom-0 transition-opacity duration-300 focus-within:opacity-100',
+            chromeVisible ? 'opacity-100' : 'pointer-events-none opacity-0',
+          )}
+        >
+          <PresentControls total={pages.length} isFull={isFull} />
+        </div>
         {toastVisible && mode !== 'presenter' && (
           <p role="status" className="csmju-fade-in absolute top-4 left-1/2 -translate-x-1/2 rounded-lg bg-inverse/90 px-3 py-2 text-csmju-caption text-on-inverse">
             กด Esc เพื่อออกจากโหมดพรีเซนต์
@@ -341,7 +380,7 @@ function PresenterInner({ mode }: { mode: PresentMode }) {
 }
 
 /// สไลด์หนึ่งหน้า: วาดเต็มพื้นที่แบบคงสัดส่วน + แอนิเมชันตอนเข้า + หมึกวาด + เอฟเฟกต์ Magic
-function SlideView({ page, interactive = false, className }: { page: Page; interactive?: boolean; className?: string }) {
+function SlideView({ page, interactive = false, className, fit = 'contain' }: { page: Page; interactive?: boolean; className?: string; fit?: 'fill' | 'contain' }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const baseWidth = useEditor((s) => s.baseWidth);
@@ -379,7 +418,8 @@ function SlideView({ page, interactive = false, className }: { page: Page; inter
     return () => observer.disconnect();
   }, []);
 
-  const scale = box.width && box.height ? Math.min(box.width / size.width, box.height / size.height) : 0;
+  // fill = ขยายจนไม่มีช่องว่างรอบสไลด์ (ส่วนที่ล้นจอถูกตัดเท่ากันทุกด้าน) · contain = เห็นทั้งหน้า
+  const scale = box.width && box.height ? (fit === 'fill' ? Math.max : Math.min)(box.width / size.width, box.height / size.height) : 0;
 
   const paint = useCallback(() => {
     raf.current = null;
@@ -483,7 +523,12 @@ function SlideView({ page, interactive = false, className }: { page: Page; inter
   };
 
   return (
-    <div ref={wrapRef} className={cx('relative flex items-center justify-center overflow-hidden', className)}>
+    <div
+      ref={wrapRef}
+      className={cx('relative flex items-center justify-center overflow-hidden', className)}
+      // เห็นทั้งหน้า: ขอบว่างรอบสไลด์ใช้สีพื้นของหน้าเดียวกัน ดูต่อเนื่องไม่เป็นแถบดำ
+      style={interactive && fit === 'contain' ? { background: page.background ?? 'rgb(255 255 255)' } : undefined}
+    >
       <canvas
         ref={canvasRef}
         role="img"
@@ -629,12 +674,13 @@ function PresentControls({ total, isFull }: { total: number; isFull: boolean }) 
   const tool = usePresent((s) => s.tool);
   const playing = usePresent((s) => s.playing);
   const mode = usePresent((s) => s.mode);
+  const fit = usePresent((s) => s.fit);
   const { open: magicOpen, setOpen: setMagicOpen, anchorRef: magicAnchor, menuRef: magicMenu } = useAnchoredMenu('end');
   const { open: moreOpen, setOpen: setMoreOpen, anchorRef: moreAnchor, menuRef: moreMenu } = useAnchoredMenu('end');
   const p = usePresent.getState;
 
   return (
-    <div className="flex shrink-0 items-center justify-between gap-2 bg-inverse px-4 py-2 text-on-inverse">
+    <div className="flex shrink-0 items-center justify-between gap-2 bg-inverse/85 px-4 py-2 text-on-inverse backdrop-blur">
       <div className="flex items-center gap-1">
         <DarkButton label="สไลด์ก่อนหน้า (←)" disabled={slide === 0} onClick={() => p().go(slide - 1)}>
           <ChevronLeft aria-hidden className="size-5" />
@@ -690,6 +736,18 @@ function PresentControls({ total, isFull }: { total: number; isFull: boolean }) 
           </button>
           <button type="button" role="menuitem" onClick={() => { p().go(0); setMoreOpen(false); }} className="flex min-h-10 w-full items-center gap-2 px-3 text-left text-csmju-caption text-ink hover:bg-surface-muted">
             <RotateCcw aria-hidden className="size-4" /> กลับไปสไลด์แรก
+          </button>
+          <button
+            type="button"
+            role="menuitemcheckbox"
+            aria-checked={fit === 'fill'}
+            onClick={() => {
+              p().setFit(fit === 'fill' ? 'contain' : 'fill');
+              setMoreOpen(false);
+            }}
+            className="flex min-h-10 w-full items-center gap-2 px-3 text-left text-csmju-caption text-ink hover:bg-surface-muted"
+          >
+            <Maximize aria-hidden className="size-4" /> {fit === 'fill' ? 'เห็นทั้งหน้า (มีขอบสีพื้นหลัง)' : 'เต็มจอไม่มีขอบ'}
           </button>
         </FloatingPanel>
         {mode !== 'presenter' && (

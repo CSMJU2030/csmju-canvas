@@ -73,13 +73,16 @@ export function AccountPopover() {
           setOpen((v) => !v);
           setSubmenu(null);
         }}
-        className="rounded-full ring-offset-2 ring-offset-canvas hover:ring-2 hover:ring-primary-soft-hover"
+        className="csmju-rail-item"
       >
-        <Avatar email={me.email} />
+        <span className="-ml-1 shrink-0 rounded-full ring-2 ring-white/60">
+          <Avatar email={me.email} />
+        </span>
+        <span className="csmju-rail-label truncate">บัญชีของคุณ</span>
       </button>
 
       {open && (
-        <div role="menu" aria-label="บัญชี" className="csmju-on-surface absolute bottom-0 left-14 z-50 w-80 origin-bottom-left csmju-pop rounded-2xl border border-line bg-surface py-2 shadow-csmju-lg">
+        <div role="menu" aria-label="บัญชี" className="csmju-on-surface absolute bottom-0 left-full z-50 ml-3 w-80 origin-bottom-left csmju-pop rounded-2xl border border-line bg-surface py-2 shadow-csmju-lg">
           <p className="px-4 py-1 text-csmju-caption font-semibold text-muted">บัญชี</p>
           <Link href="/account" onClick={closeAll} className="mx-2 flex items-center gap-3 rounded-xl bg-surface-muted px-3 py-3 hover:bg-primary-soft">
             <Avatar email={me.email} size="lg" />

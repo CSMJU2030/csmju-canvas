@@ -125,83 +125,69 @@ function Rail({ open, onToggleSecondary }: { open: boolean; onToggleSecondary: (
   const pathname = usePathname();
   const openCreate = useOpenCreate();
   const me = useMe();
+  const items = [...NAV, ...(pathname.startsWith('/templates') ? [{ href: '/templates', label: 'เทมเพลต', icon: LayoutTemplate }] : [])];
+  const onAdmin = pathname.startsWith('/admin');
 
-  // z-40: ป๊อปโอเวอร์บัญชี/แจ้งเตือนลอยออกจากแถบนี้ ต้องอยู่เหนือแถบรองและแผ่นเนื้อหา
-  // ไม่งั้นมองเห็นแต่กดไม่ได้ (แถบรองกับ <main> อยู่ทีหลังใน DOM จึงทับอยู่)
+  // แถบซ้ายแบบเดียวกับ CS Nexus: แคบ 72px เห็นแต่ไอคอน · ชี้ (หรือเปิดเมนูอยู่) แล้วขยายพร้อมชื่อเมนูลอยทับเนื้อหา
+  // กล่องนอกจองที่ 72px ในเลย์เอาต์ · z-40: ป๊อปโอเวอร์บัญชี/แจ้งเตือนต้องอยู่เหนือแถบรองและแผ่นเนื้อหา
   return (
-    <nav aria-label="เมนูหลัก" className="csmju-on-brand sticky top-0 z-40 hidden h-dvh w-20 shrink-0 flex-col items-center gap-1 py-3 md:flex">
-      <Link href="/" aria-label="CS Canvas หน้าแรก" className="csmju-logo-badge mb-2 size-11 p-0.5">
-        {/* eslint-disable-next-line @next/next/no-img-element -- ไฟล์เล็กใน public ไม่ต้องผ่านตัวย่อรูป */}
-        <img src="/csmju-mark.png" alt="" width={40} height={40} className="size-10 rounded-full object-contain" />
-      </Link>
-      {/* ปุ่มเปิด/ปิดแถบรอง + tooltip สีเข้มใต้ปุ่มแบบ Canva ("ปิดเมนู" / "เปิดเมนู") */}
-      <div className="group relative mb-2">
+    <div className="sticky top-0 z-40 hidden h-dvh w-[4.5rem] shrink-0 md:block">
+      <nav aria-label="เมนูหลัก" className="csmju-on-brand csmju-rail absolute inset-y-0 left-0 flex flex-col gap-1 px-3">
+        <Link href="/" aria-label="CS Canvas หน้าแรก" className="csmju-rail-item csmju-rail-brand">
+          <span className="csmju-logo-badge size-9 shrink-0 p-0.5">
+            {/* eslint-disable-next-line @next/next/no-img-element -- ไฟล์เล็กใน public ไม่ต้องผ่านตัวย่อรูป */}
+            <img src="/csmju-mark.png" alt="" width={32} height={32} className="size-8 rounded-full object-contain" />
+          </span>
+          <span className="csmju-rail-label csmju-logo text-xl leading-none">CS Canvas</span>
+        </Link>
+
         <button
           type="button"
           onClick={onToggleSecondary}
-          aria-label={open ? 'ปิดเมนู' : 'เปิดเมนู'}
-          aria-expanded={open}
-          className={cx(
-            'inline-flex size-11 items-center justify-center rounded-xl text-body hover:bg-primary-soft',
-            open && 'bg-primary-soft text-primary',
-          )}
+          aria-label={open ? 'ปิดเมนูรอง' : 'เปิดเมนูรอง'}
+          aria-pressed={open}
+          data-active={open}
+          className="csmju-rail-item"
         >
-          <PanelLeft aria-hidden className="size-5" />
+          <PanelLeft aria-hidden className="size-6 shrink-0" strokeWidth={1.9} />
+          <span className="csmju-rail-label">{open ? 'ปิดเมนูรอง' : 'เปิดเมนูรอง'}</span>
         </button>
-        <span
-          role="tooltip"
-          className="pointer-events-none absolute top-full left-1/2 z-50 mt-1 -translate-x-1/2 rounded-lg bg-inverse px-2.5 py-1 text-csmju-caption whitespace-nowrap text-on-inverse opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100"
-        >
-          {open ? 'ปิดเมนู' : 'เปิดเมนู'}
-        </span>
-      </div>
-      <button type="button" onClick={() => openCreate()} className="group mb-3 flex w-16 flex-col items-center gap-1 text-csmju-caption text-ink">
-        <span className="csmju-gradient-button flex size-10 items-center justify-center rounded-full shadow-csmju-md ring-2 ring-white/70">
-          <Plus aria-hidden className="csmju-wiggle size-6" strokeWidth={2.5} />
-        </span>
-        สร้าง
-      </button>
-      {/* ไอคอน "เทมเพลต" โผล่ต่อท้ายพร้อมเส้นคั่นเมื่อเปิดแท็บเทมเพลต (ภาพบรีฟ "เมื่อกด เทมเพลต") */}
-      {[...NAV, ...(pathname.startsWith('/templates') ? [{ href: '/templates', label: 'เทมเพลต', icon: LayoutTemplate }] : [])].map((item, index) => {
-        const active = isActive(pathname, item.href);
 
-        return (
-          <div key={item.href} className={cx('flex flex-col items-center', index === NAV.length && 'csmju-pop')}>
-          {index === NAV.length && <span aria-hidden className="my-2 h-px w-8 bg-line-strong" />}
-          <Link href={item.href} aria-current={active ? 'page' : undefined} className="group flex w-16 flex-col items-center gap-1 py-1 text-csmju-caption text-ink">
-            <span
-              className={cx(
-                'flex size-10 items-center justify-center rounded-xl transition-colors',
-                active ? 'bg-surface text-primary shadow-csmju-sm' : 'text-body group-hover:bg-surface/70',
-              )}
-            >
-              <item.icon aria-hidden className="csmju-wiggle size-5" fill={active ? 'currentColor' : 'none'} fillOpacity={active ? 0.15 : 0} />
-            </span>
-            <span className={cx(active && 'font-semibold text-primary')}>{item.label}</span>
-          </Link>
-          </div>
-        );
-      })}
-      <div className="mt-auto flex flex-col items-center gap-3">
-        {isAdminRole(me.coreRole) && (
-          <Link href="/admin" aria-current={pathname.startsWith('/admin') ? 'page' : undefined} className="group flex w-16 flex-col items-center gap-1 text-csmju-caption text-ink">
-            <span className={cx('flex size-10 items-center justify-center rounded-xl', pathname.startsWith('/admin') ? 'bg-surface text-primary shadow-csmju-sm' : 'text-body group-hover:bg-surface/70')}>
-              <ShieldCheck aria-hidden className="csmju-wiggle size-5" />
-            </span>
-            <span className={cx(pathname.startsWith('/admin') && 'font-semibold text-primary')}>ผู้ดูแล</span>
-          </Link>
-        )}
-        {/* ปุ่มกลับพอร์ทัลกลาง (ui-design-system.md ข้อ 5.1) — ไปอีก origin จึงใช้ <a> ไม่ใช่ Link */}
-        <a href={CORE_HUB_WEB_URL} aria-label="กลับ CSMJU Portal" title="กลับ CSMJU Portal" className="group flex w-16 flex-col items-center gap-1 text-csmju-caption text-ink">
-          <span className="flex size-10 items-center justify-center rounded-xl text-body group-hover:bg-surface/70">
-            <ArrowLeft aria-hidden className="size-5" />
+        <button type="button" onClick={() => openCreate()} aria-label="สร้าง" className="csmju-rail-item">
+          <span className="csmju-gradient-button flex size-8 shrink-0 items-center justify-center rounded-full ring-2 ring-white/70 -ml-1">
+            <Plus aria-hidden className="csmju-wiggle size-5" strokeWidth={2.5} />
           </span>
-          Portal
-        </a>
-        <NotificationsPopover />
-        <AccountPopover />
-      </div>
-    </nav>
+          <span className="csmju-rail-label font-semibold">สร้างดีไซน์</span>
+        </button>
+
+        {items.map((item) => {
+          const active = isActive(pathname, item.href);
+
+          return (
+            <Link key={item.href} href={item.href} aria-label={item.label} aria-current={active ? 'page' : undefined} data-active={active} className="csmju-rail-item">
+              <item.icon aria-hidden className="csmju-wiggle size-6 shrink-0" strokeWidth={active ? 2.4 : 1.9} />
+              <span className="csmju-rail-label">{item.label}</span>
+            </Link>
+          );
+        })}
+
+        <div className="mt-auto flex flex-col gap-1 pb-3">
+          {isAdminRole(me.coreRole) && (
+            <Link href="/admin" aria-label="ผู้ดูแล" aria-current={onAdmin ? 'page' : undefined} data-active={onAdmin} className="csmju-rail-item">
+              <ShieldCheck aria-hidden className="csmju-wiggle size-6 shrink-0" strokeWidth={onAdmin ? 2.4 : 1.9} />
+              <span className="csmju-rail-label">ผู้ดูแล</span>
+            </Link>
+          )}
+          <NotificationsPopover />
+          {/* ปุ่มกลับพอร์ทัลกลาง (ui-design-system.md ข้อ 5.1) — ไปอีก origin จึงใช้ <a> ไม่ใช่ Link */}
+          <a href={CORE_HUB_WEB_URL} aria-label="กลับ CSMJU Portal" className="csmju-rail-item">
+            <ArrowLeft aria-hidden className="size-6 shrink-0" strokeWidth={1.9} />
+            <span className="csmju-rail-label">ระบบอื่นใน CSMJU2030</span>
+          </a>
+          <AccountPopover />
+        </div>
+      </nav>
+    </div>
   );
 }
 
@@ -252,17 +238,19 @@ function NotificationsPopover() {
         title="การแจ้งเตือน"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className={cx('relative inline-flex size-11 items-center justify-center rounded-xl text-body hover:bg-surface/70', open && 'bg-primary-soft text-primary')}
+        data-active={open}
+        className="csmju-rail-item"
       >
-        <Bell aria-hidden className="size-5" />
+        <Bell aria-hidden className="size-6 shrink-0" strokeWidth={1.9} />
         {unread > 0 && (
-          <span className="csmju-pop absolute top-1 right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-danger px-1 text-csmju-caption leading-none font-bold text-on-inverse ring-2 ring-canvas tabular-nums">
+          <span className="csmju-pop absolute top-1 left-7 flex h-5 min-w-5 items-center justify-center rounded-full bg-danger px-1 text-csmju-caption leading-none font-bold text-on-inverse ring-2 ring-canvas tabular-nums">
             {unread > 9 ? '9+' : unread}
           </span>
         )}
+        <span className="csmju-rail-label">การแจ้งเตือน</span>
       </button>
       {open && (
-        <div role="dialog" aria-label="การแจ้งเตือน" className="csmju-pop csmju-on-surface absolute bottom-0 left-14 z-50 flex max-h-popover w-96 flex-col rounded-2xl border border-line bg-surface shadow-csmju-lg">
+        <div role="dialog" aria-label="การแจ้งเตือน" className="csmju-pop csmju-on-surface absolute bottom-0 left-full z-50 ml-3 flex max-h-popover w-96 flex-col rounded-2xl border border-line bg-surface shadow-csmju-lg">
           <div className="flex items-center justify-between border-b border-line px-4 py-3">
             <h2 className="text-csmju-body font-semibold text-ink">การแจ้งเตือน</h2>
             <button type="button" onClick={() => markAll.mutate()} className="min-h-11 px-2 text-csmju-caption font-semibold text-ink hover:text-primary">

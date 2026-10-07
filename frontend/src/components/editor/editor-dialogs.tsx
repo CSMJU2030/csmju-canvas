@@ -1,11 +1,10 @@
 'use client';
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, CheckCircle2, Download, Eye, Folder as FolderIcon, MessageCircle, History, Search, Users } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Download, Eye, Folder as FolderIcon, MessageCircle, History, Users } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { Button, Dialog, Spinner, cx, errorMessage, inputClass, useToast } from '@/components/csmju/primitives';
+import { Button, Dialog, Spinner, errorMessage, inputClass, useToast } from '@/components/csmju/primitives';
 import { api } from '@/lib/csmju/api';
-import { DESIGN_GROUPS, DESIGN_TYPES } from '@/lib/design-types';
 import { toInputColor } from '@/lib/editor/color';
 import { download, safeFileName } from '@/lib/editor/export';
 import { layerLabel } from '@/lib/editor/factory';
@@ -14,6 +13,7 @@ import { useEditor } from '@/lib/editor/store';
 import type { CanvasElement } from '@/lib/editor/types';
 import { useEditorUi } from '@/lib/editor/ui-store';
 import type { Folder } from '@/lib/types';
+import { MagicSwitch } from './magic-switch';
 
 /// หน้าต่างของเมนูไฟล์/แถบบน — เปิดตาม `overlay` ใน ui-store
 export function EditorDialogs() {
@@ -22,113 +22,12 @@ export function EditorDialogs() {
 
   return (
     <>
-      {overlay === 'resize' && <ResizeDialog onClose={close} />}
+      {overlay === 'resize' && <MagicSwitch onClose={close} />}
       {overlay === 'analytics' && <AnalyticsDialog onClose={close} />}
       {overlay === 'move' && <MoveFolderDialog onClose={close} />}
       {overlay === 'find' && <FindReplaceDialog onClose={close} />}
       {overlay === 'accessibility' && <AccessibilityDialog onClose={close} />}
     </>
-  );
-}
-
-// ── ปรับขนาด ───────────────────────────────────────────────────────
-
-function ResizeDialog({ onClose }: { onClose: () => void }) {
-  const baseWidth = useEditor((s) => s.baseWidth);
-  const baseHeight = useEditor((s) => s.baseHeight);
-  const [w, setW] = useState(String(baseWidth));
-  const [h, setH] = useState(String(baseHeight));
-  const [scaleContent, setScaleContent] = useState(true);
-  const [q, setQ] = useState('');
-  const toast = useToast();
-  const width = Math.round(Number(w));
-  const height = Math.round(Number(h));
-  const valid = width >= 16 && height >= 16 && width <= 8000 && height <= 8000;
-  const groups = DESIGN_GROUPS.filter((g) => g.available);
-  const types = DESIGN_TYPES.filter((t) => !q.trim() || t.label.includes(q.trim()));
-
-  return (
-    <Dialog
-      open
-      onClose={onClose}
-      title="ปรับขนาดดีไซน์"
-      size="lg"
-      footer={
-        <>
-          <Button onClick={onClose}>ยกเลิก</Button>
-          <Button
-            variant="primary"
-            disabled={!valid}
-            onClick={() => {
-              useEditor.getState().resizeDesign(width, height, scaleContent);
-              toast(`ปรับขนาดเป็น ${width} × ${height} px แล้ว (ย้อนกลับได้ด้วย Ctrl+Z)`);
-              onClose();
-            }}
-          >
-            ปรับขนาด
-          </Button>
-        </>
-      }
-    >
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="flex flex-col gap-1 text-csmju-caption text-ink">
-            กว้าง (px)
-            <input type="number" value={w} onChange={(e) => setW(e.target.value)} className={cx(inputClass, 'w-32')} />
-          </label>
-          <label className="flex flex-col gap-1 text-csmju-caption text-ink">
-            สูง (px)
-            <input type="number" value={h} onChange={(e) => setH(e.target.value)} className={cx(inputClass, 'w-32')} />
-          </label>
-          <label className="flex min-h-11 items-center gap-2 text-csmju-caption text-ink">
-            <input type="checkbox" checked={scaleContent} onChange={(e) => setScaleContent(e.target.checked)} className="size-5 accent-primary" />
-            ย่อ/ขยายชิ้นงานให้พอดีขนาดใหม่
-          </label>
-        </div>
-        {!valid && <p className="text-csmju-caption text-danger">ขนาดต้องอยู่ระหว่าง 16–8000 พิกเซล</p>}
-        <div className="relative">
-          <Search aria-hidden className="pointer-events-none absolute top-1/2 left-3 size-5 -translate-y-1/2 text-muted" />
-          <label htmlFor="resize-search" className="sr-only">ค้นหาขนาด</label>
-          <input id="resize-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="ค้นหาขนาด เช่น โปสเตอร์ สตอรี่" className={cx(inputClass, 'pl-10')} />
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2">
-          {groups.map((group) => {
-            const list = types.filter((t) => t.group === group.key);
-
-            if (list.length === 0) return null;
-
-            return (
-              <section key={group.key}>
-                <h3 className="mb-1 text-csmju-caption font-bold text-ink">{group.label}</h3>
-                <ul>
-                  {list.map((t) => (
-                    <li key={t.key}>
-                      <button
-                        type="button"
-                        aria-pressed={width === t.width && height === t.height}
-                        onClick={() => {
-                          setW(String(t.width));
-                          setH(String(t.height));
-                        }}
-                        className={cx(
-                          'flex min-h-10 w-full items-center justify-between rounded-lg px-2 text-left text-csmju-caption hover:bg-surface-muted',
-                          width === t.width && height === t.height ? 'bg-primary-soft font-semibold text-primary' : 'text-ink',
-                        )}
-                      >
-                        {t.label}
-                        <span className="text-muted tabular-nums">
-                          {t.width}×{t.height}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            );
-          })}
-        </div>
-      </div>
-    </Dialog>
   );
 }
 
