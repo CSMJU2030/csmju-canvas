@@ -340,7 +340,7 @@ export interface ImageOrigin {
 export interface BgRemoved {
   originalSrc: string;
   originalAssetId: string | null;
-  options: { mode: 'edges' | 'color'; tolerance: number; softness: number; sample?: [number, number, number] | null };
+  options: { mode: 'smart' | 'edges' | 'color'; tolerance: number; softness: number; sample?: [number, number, number] | null };
 }
 
 export interface SvgElement extends BaseElement {

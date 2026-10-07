@@ -230,7 +230,7 @@ export const TOOLS: ToolDef[] = [
   { id: 'flip-h', label: 'พลิกแนวนอน', group: 'รูปภาพ', icon: FlipHorizontal2, edits: true, blocked: needImage, run: (c) => ed().updateElements(ids(c.images), (el) => ({ flipX: !(el as ImageElement).flipX })) },
   { id: 'flip-v', label: 'พลิกแนวตั้ง', group: 'รูปภาพ', icon: FlipVertical2, edits: true, blocked: needImage, run: (c) => ed().updateElements(ids(c.images), (el) => ({ flipY: !(el as ImageElement).flipY })) },
   { id: 'crop', label: 'ครอปภาพ', group: 'รูปภาพ', icon: Crop, edits: true, blocked: needOneImage, run: panel('crop') },
-  { id: 'bg-remove', label: 'ลบพื้นหลัง', group: 'รูปภาพ', icon: WandSparkles, keywords: 'background remove', edits: true, blocked: needOneImage, run: panel('bg-remove') },
+  { id: 'bg-remove', label: 'ลบพื้นหลัง', group: 'รูปภาพ', icon: WandSparkles, keywords: 'background remove ตัดวัตถุ แยกวัตถุ อัจฉริยะ cutout', edits: true, blocked: needOneImage, run: panel('bg-remove') },
   { id: 'image-edit', label: 'แก้ไขรูป (ฟิลเตอร์ ปรับแสง)', group: 'รูปภาพ', icon: ImageIcon, keywords: 'filter adjust photoshop', edits: true, blocked: needOneImage, run: panel('image-edit') },
   { id: 'replace-image', label: 'แทนที่รูป', group: 'รูปภาพ', icon: Replace, edits: true, blocked: needOneImage, run: panel('replace') },
   {
